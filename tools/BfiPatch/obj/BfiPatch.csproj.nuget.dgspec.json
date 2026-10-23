@@ -1,0 +1,78 @@
+{
+  "format": 1,
+  "restore": {
+    "E:\\sts2_port\\ci_bundle\\tools\\BfiPatch\\BfiPatch.csproj": {}
+  },
+  "projects": {
+    "E:\\sts2_port\\ci_bundle\\tools\\BfiPatch\\BfiPatch.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "E:\\sts2_port\\ci_bundle\\tools\\BfiPatch\\BfiPatch.csproj",
+        "projectName": "BfiPatch",
+        "projectPath": "E:\\sts2_port\\ci_bundle\\tools\\BfiPatch\\BfiPatch.csproj",
+        "packagesPath": "C:\\Users\\pc\\.nuget\\packages\\",
+        "outputPath": "E:\\sts2_port\\ci_bundle\\tools\\BfiPatch\\obj\\",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "E:\\sts2_port\\ci_bundle\\NuGet.Config",
+          "E:\\sts2_port\\NuGet.Config",
+          "C:\\Users\\pc\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "E:\\sts2_port\\ci_bundle\\nuget_local": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "framework": "net9.0",
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "10.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "framework": "net9.0",
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Mono.Cecil": {
+              "target": "Package",
+              "version": "[0.11.6, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.301/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

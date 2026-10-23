@@ -1,0 +1,72 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <RootNamespace>MegaCrit.Sts2</RootNamespace>
+    <AssemblyName>sts2</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>CS8632;CS0618;CS0672;CS0809;CS0169;CS0414;CS0649;CS0108;CS0114;CS1591;CS0162</NoWarn>
+    <DisableImplicitGodotGeneratorReferences>true</DisableImplicitGodotGeneratorReferences>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src/**/*.cs" />
+    <Compile Include="addons/**/*.cs" />
+    <Compile Include="RiderTestRunner/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Sentry"><HintPath>libs/Sentry.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Steamworks.NET"><HintPath>libs/Steamworks.NET.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>libs/0Harmony.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="SmartFormat"><HintPath>libs/SmartFormat.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="SmartFormat.ZString"><HintPath>libs/SmartFormat.ZString.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="System.IO.Hashing"><HintPath>libs/System.IO.Hashing.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Vortice.DXGI"><HintPath>libs/Vortice.DXGI.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="SharpGen.Runtime"><HintPath>libs/SharpGen.Runtime.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="SharpGen.Runtime.COM"><HintPath>libs/SharpGen.Runtime.COM.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="MonoMod.Backports"><HintPath>libs/MonoMod.Backports.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="MonoMod.ILHelpers"><HintPath>libs/MonoMod.ILHelpers.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="JetBrains.Annotations"><HintPath>libs/JetBrains.Annotations.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+
+  <!--
+    ilspy 把「静态字段初始化器」还原成显式 static 构造器，重新编译后类型失去
+    beforefieldinit，导致 ModelDb.Init() 期间 Darv 的 cctor 提前触发、要求
+    Astrolabe 已注册，抛 KeyNotFoundException: 'RELIC.ASTROLABE'。
+
+    这里在 ILC 编译之前把 7 个类型的 BeforeFieldInit 标志打回去。
+    iOS 走 NativeAOT，所以必须挂在 IlcCompile 之前；桌面 Debug 构建挂 AfterTargets=Build。
+  -->
+  <PropertyGroup>
+    <BfiToolProject>$(MSBuildThisFileDirectory)tools/BfiPatch/BfiPatch.csproj</BfiToolProject>
+    <BfiTypeList>$(MSBuildThisFileDirectory)bfi_types.txt</BfiTypeList>
+    <BfiToolDll>$(MSBuildThisFileDirectory)tools/BfiPatch/bin/Release/net9.0/BfiPatch.dll</BfiToolDll>
+  </PropertyGroup>
+
+  <Target Name="BuildBfiTool" Condition="Exists('$(BfiToolProject)')">
+    <Exec Command="dotnet build &quot;$(BfiToolProject)&quot; -c Release --nologo -v q"
+          StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="ApplyBeforeFieldInitPatch"
+          DependsOnTargets="BuildBfiTool"
+          AfterTargets="Build;CoreCompile"
+          BeforeTargets="IlcCompile"
+          Condition="Exists('$(BfiTypeList)') and Exists('$(TargetPath)')">
+    <PropertyGroup>
+      <BfiTmp>$(TargetDir)$(TargetName)_bfi.dll</BfiTmp>
+    </PropertyGroup>
+    <Exec Command="dotnet &quot;$(BfiToolDll)&quot; &quot;$(TargetPath)&quot; &quot;$(BfiTypeList)&quot; &quot;$(BfiTmp)&quot;"
+          IgnoreExitCode="false" />
+    <Copy SourceFiles="$(BfiTmp)" DestinationFiles="$(TargetPath)" />
+    <Delete Files="$(BfiTmp)" />
+    <Message Importance="high" Text="BfiPatch: BeforeFieldInit 已回填到 $(TargetName).dll" />
+  </Target>
+</Project>

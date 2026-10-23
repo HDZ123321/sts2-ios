@@ -1,0 +1,143 @@
+name: Build iOS IPA
+
+# 在 GitHub 的 macOS runner 上完成 NativeAOT 链接 + Xcode 打包，
+# 产出未签名 IPA（用 Sideloadly / AltStore / TrollStore 侧载到 iPhone/iPad）。
+#
+# 仓库根目录需要包含：
+#   sts2.csproj  sts2.sln  src/  addons/  RiderTestRunner/  libs/
+#   tools/BfiPatch/  tools/patch_pbxproj.py  bfi_types.txt  nuget.config  nuget_local/
+#   sts2.xcodeproj/  sts2/  PrivacyInfo.xcprivacy  sts2.pck
+#
+# sts2.pck 约 1.5 GB，请用 Git LFS 或 Release 资产挂载（见 README）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: 'Bundle Identifier'
+        required: false
+        default: 'com.placeholder.sts2'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    env:
+      BUNDLE_ID: ${{ github.event.inputs.bundle_id || 'com.placeholder.sts2' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Show environment
+        run: |
+          xcodebuild -version
+          dotnet --info
+          sw_vers
+          df -h /
+
+      - name: Verify PCK present
+        run: |
+          ls -lh sts2.pck
+          python3 - <<'PY'
+          import struct
+          with open('sts2.pck', 'rb') as f:
+              head = f.read(112)
+          assert head[:4] == b'GDPC', 'sts2.pck 不是 Godot PCK: %r' % head[:4]
+          file_base = struct.unpack_from('<Q', head, 24)[0]
+          dir_off = struct.unpack_from('<Q', head, 32)[0]
+          print('PCK ok: file_base=%d dir_off=%d' % (file_base, dir_off))
+          PY
+
+      - name: Build BfiPatch tool
+        run: dotnet build tools/BfiPatch/BfiPatch.csproj -c Release --nologo
+
+      - name: NativeAOT publish (ios-arm64)
+        run: |
+          dotnet publish sts2.csproj \
+            -c Release \
+            -r ios-arm64 \
+            -p:GodotTargetPlatform=ios \
+            -p:PublishAot=true \
+            -p:StripSymbols=false \
+            -p:TrimmerSingleWarn=false \
+            -o "$PWD/out-ios-arm64"
+
+      - name: Verify AOT output
+        run: |
+          ls -la out-ios-arm64/sts2.dylib
+          file out-ios-arm64/sts2.dylib
+          lipo -info out-ios-arm64/sts2.dylib
+
+      - name: Create xcframework
+        run: |
+          rm -rf sts2_aot.xcframework
+          xcodebuild -create-xcframework \
+            -library "$PWD/out-ios-arm64/sts2.dylib" \
+            -output "$PWD/sts2_aot.xcframework"
+          find sts2_aot.xcframework -maxdepth 3 | head -20
+
+      - name: Link AOT framework into pbxproj
+        run: python3 tools/patch_pbxproj.py sts2.xcodeproj/project.pbxproj
+
+      - name: Archive (unsigned)
+        run: |
+          rm -rf build/sts2.xcarchive
+          xcodebuild archive \
+            -project sts2.xcodeproj \
+            -scheme sts2 \
+            -configuration Release \
+            -sdk iphoneos \
+            -arch arm64 \
+            -archivePath "$PWD/build/sts2.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            -quiet
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/sts2.xcarchive/Products/Applications/sts2.app build/Payload/
+          cd build
+          rm -f sts2-unsigned.ipa
+          zip -qry sts2-unsigned.ipa Payload
+          ls -lh sts2-unsigned.ipa
+          unzip -l sts2-unsigned.ipa | head -20
+
+      - name: Sanity check IPA
+        run: |
+          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Frameworks/)' || true
+          test -f build/Payload/sts2.app/sts2
+          test -f build/Payload/sts2.app/sts2.pck
+          du -sh build/Payload/sts2.app
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: sts2-unsigned-ipa
+          path: build/sts2-unsigned.ipa
+          retention-days: 14
+          compression-level: 0
+
+      - name: Upload dSYM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sts2-dsym
+          path: build/sts2.xcarchive/dSYMs/
+          if-no-files-found: ignore
+          retention-days: 7
