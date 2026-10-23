@@ -206,10 +206,15 @@ public class NReactionWheel : Control
 
 	public override void _Input(InputEvent inputEvent)
 	{
+		NReactionContainer reactionContainer = NGame.Instance?.ReactionContainer;
+		if (reactionContainer == null)
+		{
+			return;
+		}
 		Control control = GetViewport().GuiGetFocusOwner();
 		bool flag = ((control is TextEdit || control is LineEdit) ? true : false);
 		bool flag2 = flag;
-		if (!NGame.Instance.ReactionContainer.InMultiplayer)
+		if (!reactionContainer.InMultiplayer)
 		{
 			if (base.Visible)
 			{

@@ -93,9 +93,9 @@ public class NBackgroundModeHandler : Node
 		{
 			Log.Info("BackgroundMode: duplicate FocusOut (already backgrounded)");
 		}
-		else if (SaveManager.Instance.SettingsSave.LimitFpsInBackground)
+		else if (SaveManager.Instance?.SettingsSave?.LimitFpsInBackground == true)
 		{
-			INetGameService netService = RunManager.Instance.NetService;
+			INetGameService netService = RunManager.Instance?.NetService;
 			if (netService == null || !netService.Type.IsMultiplayer())
 			{
 				_isBackgrounded = true;

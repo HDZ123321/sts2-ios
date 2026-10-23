@@ -183,11 +183,12 @@ public class NControllerManager : Node
 	{
 		get
 		{
-			if (NGame.Instance == null)
+			NInputManager inputManager = NGame.Instance?.InputManager;
+			if (inputManager == null)
 			{
 				return null;
 			}
-			return NGame.Instance.InputManager.ControllerManager;
+			return inputManager.ControllerManager;
 		}
 	}
 

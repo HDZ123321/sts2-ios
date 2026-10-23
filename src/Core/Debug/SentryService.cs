@@ -109,6 +109,11 @@ public static class SentryService
 		}
 		SampleForNonSteamBranches = flag2 || isForcedOn;
 		IsForcedOn = isForcedOn;
+		if (OS.HasFeature("mobile"))
+		{
+			Log.Info("[Sentry.NET] Disabled on mobile: native sentry library is not shipped in this build");
+			return;
+		}
 		string dsn = GetDsn();
 		if (string.IsNullOrEmpty(dsn))
 		{
@@ -118,43 +123,59 @@ public static class SentryService
 		ReleaseInfo releaseInfo = ReleaseInfoManager.Instance.ReleaseInfo;
 		string environment = "development";
 		string release = releaseInfo?.Version ?? "dev";
-		_sentryInstance = SentrySdk.Init(delegate(SentryOptions options)
+		try
 		{
-			options.Dsn = dsn;
-			options.Environment = environment;
-			options.Release = release;
-			options.Debug = isForcedOn;
-			options.AutoSessionTracking = true;
-			options.IsGlobalModeEnabled = true;
-			options.SendDefaultPii = false;
-			options.SetBeforeSend(delegate(SentryEvent sentryEvent, SentryHint hint)
+			_sentryInstance = SentrySdk.Init(delegate(SentryOptions options)
 			{
-				if (sentryEvent.Exception is AutoSlayTimeoutException)
+				options.Dsn = dsn;
+				options.Environment = environment;
+				options.Release = release;
+				options.Debug = isForcedOn;
+				options.AutoSessionTracking = true;
+				options.IsGlobalModeEnabled = true;
+				options.SendDefaultPii = false;
+				options.SetBeforeSend(delegate(SentryEvent sentryEvent, SentryHint hint)
 				{
-					return (SentryEvent?)null;
-				}
-				return (!ShouldSampleEvent()) ? null : sentryEvent;
+					if (sentryEvent.Exception is AutoSlayTimeoutException)
+					{
+						return (SentryEvent?)null;
+					}
+					return (!ShouldSampleEvent()) ? null : sentryEvent;
+				});
 			});
-		});
-		IsEnabled = SentrySdk.IsEnabled;
+			IsEnabled = SentrySdk.IsEnabled;
+		}
+		catch (Exception ex)
+		{
+			IsEnabled = false;
+			Log.Warn("[Sentry.NET] Disabled: native SDK unavailable (" + ex.GetType().Name + ": " + ex.Message + ")");
+			return;
+		}
 		if (!IsEnabled)
 		{
 			Log.Warn("[Sentry.NET] SDK initialization failed");
 			return;
 		}
-		SentrySdk.ConfigureScope(delegate(Scope scope)
+		try
 		{
-			scope.SetTag("sdk", "dotnet");
-			scope.SetTag("session_id", _sessionId);
-			scope.SetExtra("assembly.main_hash", AssemblyHasher.GetMainAssemblyHash());
-			if (releaseInfo != null)
+			SentrySdk.ConfigureScope(delegate(Scope scope)
 			{
-				scope.SetTag("branch", releaseInfo.Branch);
-				scope.SetExtra("build.commit", releaseInfo.Commit);
-				scope.SetExtra("build.main_hash", releaseInfo.MainAssemblyHash);
-				scope.SetExtra("build.date", releaseInfo.Date.ToString("o"));
-			}
-		});
+				scope.SetTag("sdk", "dotnet");
+				scope.SetTag("session_id", _sessionId);
+				scope.SetExtra("assembly.main_hash", AssemblyHasher.GetMainAssemblyHash());
+				if (releaseInfo != null)
+				{
+					scope.SetTag("branch", releaseInfo.Branch);
+					scope.SetExtra("build.commit", releaseInfo.Commit);
+					scope.SetExtra("build.main_hash", releaseInfo.MainAssemblyHash);
+					scope.SetExtra("build.date", releaseInfo.Date.ToString("o"));
+				}
+			});
+		}
+		catch (Exception ex2)
+		{
+			Log.Warn("[Sentry.NET] Scope configuration failed: " + ex2.Message);
+		}
 		Log.LogCallback += OnLogCallback;
 		Log.Info("[Sentry.NET] Initialized: env=" + environment + ", release=" + release);
 	}
