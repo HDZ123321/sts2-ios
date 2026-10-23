@@ -4,9 +4,9 @@
 
 | 项目 | 值 |
 |---|---|
-| 文件 | `sts2-unsigned.ipa` |
-| 大小 | 850,446,961 字节（811 MB） |
-| SHA256 | `375b2548c18ed209cb29144f2142957d6e6aa58417d97422031933a5676d37ee` |
+| 文件 | `sts2-unsigned.ipa`（v2 修复版） |
+| 大小 | 852,156,450 字节（813 MB） |
+| SHA256 | `966bf4d54e3570d360145d14b74744f2d58ac42935ea9e1e96513a9bdf2788b6` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机） |
@@ -17,7 +17,7 @@
 
 ```
 Payload/sts2.app/sts2                      68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib    199,195,584   NativeAOT 编译出的游戏逻辑
+Payload/sts2.app/Frameworks/sts2.dylib    199,195,616   NativeAOT 编译出的游戏逻辑
 Payload/sts2.app/sts2.pck               1,581,255,304   全部游戏资源
 Payload/sts2.app/Info.plist                     1,547
 ```
@@ -102,3 +102,66 @@ Spine 的影响范围：174 个场景文件引用 Spine 类型，主要是角色
 GitHub Actions 在 `macos-14` runner 上完整跑通：`dotnet publish -r ios-arm64`（NativeAOT）→ `xcodebuild -create-xcframework` → 注入 pbxproj → `xcodebuild archive`（无签名）→ 手工组 Payload → zip。
 
 仓库：https://github.com/HDZ123321/sts2-ios
+
+---
+
+## 黑屏修复版（v2）说明
+
+### 这一版修了什么
+
+| # | 问题 | 表现 | 修法 |
+|---|---|---|---|
+| 1 | 非编辑器构建强制初始化 Steam | Steam 失败 → 弹 `STEAM_INIT_ERROR` 模态框 → 主菜单永远不出现 = 黑屏 | `NGame.InitializePlatform()` 把 `OS.HasFeature("mobile")` 与 `editor` 等同处理，iOS 上跳过 Steam |
+| 2 | 导出包缺 14 个 `.tpsheet` | `AtlasManager: tpsheet not found` → `GetMissingTexture()` 空指针 → `Fatal error. 0xC0000005` | `export_presets.cfg` 的 `include_filter` 加上 `*.tpsheet, *.atlas, *.skel, *.spine` |
+| 3 | 打包时缺 785 个 `.import`/artifact | 字体、光标图、GDScript remap 全部找不到 | `inject_pck2.py` 把 418 个 `.import` + 367 个 artifact（316.5 MB）注入 PCK |
+| 4 | 手机上拿不到日志 | 只能看黑屏，没法诊断 | 开 `debug/file_logging/enable_file_logging=true` + `user_data/accessible_from_files_app=true` |
+
+### 拿日志（黑屏时第一步做这个）
+
+1. 装好后先跑一次游戏，让它黑屏/闪退
+2. 打开 iOS「文件」App → 「我的 iPhone」→ 找到 **Slay the Spire 2**（或 `sts2`）
+3. 进去 → `logs/` → `godot.log`，长按 → 共享 → 存到「文件」或发给自己
+4. 里面关键几行：
+
+```
+.NET: hostfxr initialized              ← hostfxr 起来了
+.NET: GodotPlugins initialized          ← AOT dylib 被 dlopen 且拿到 godotsharp_game_main_init
+Steam initialization skipped            ← 修复 1 生效
+AtlasManager: tpsheet not found: ...    ← 修复 2 没生效
+[Startup] Time to main menu: 4,788ms    ← 真的到主菜单了
+```
+
+如果 `.NET: GodotPlugins initialized` 没出现，说明 `Frameworks/sts2.dylib` 没被加载 —— 那就去查签名：
+
+```bash
+codesign -dvvv Payload/sts2.app/Frameworks/sts2.dylib
+codesign --verify --deep --strict --verbose=2 Payload/sts2.app
+```
+
+**最常见的签名错误**：只签了 `.app` 外壳，没签 `Frameworks/sts2.dylib`。iOS 上 `dlopen` 一个未签名/签名不匹配的 dylib 会被内核直接拒掉，Godot 侧只看到 `open_dynamic_library` 失败，表现就是黑屏。
+
+正确签法（自签 p12）：
+
+```bash
+# 1. 先签内嵌的 dylib
+codesign -f -s "iPhone Distribution: Your Name (TEAMID)" \
+  --entitlements sts2/sts2.entitlements \
+  Payload/sts2.app/Frameworks/sts2.dylib
+
+# 2. 再签整个 app（--deep 会覆盖剩下的）
+codesign -f -s "iPhone Distribution: Your Name (TEAMID)" \
+  --entitlements sts2/sts2.entitlements \
+  Payload/sts2.app
+
+# 3. 验证
+codesign --verify --deep --strict --verbose=2 Payload/sts2.app
+
+# 4. 重新打包
+zip -qry sts2-signed.ipa Payload
+```
+
+### 已知仍缺失（不影响启动）
+
+- **FMOD** → 完全没声音。`FmodManager` autoload 已移除，C# 侧零 FMOD 依赖，不会崩
+- **Spine** → 骨骼动画变占位节点（174 个场景）。角色选择/商人/休息点/Boss 背景会缺动画，但节点树完整，不崩
+- **Sentry** → 崩溃上报没了
