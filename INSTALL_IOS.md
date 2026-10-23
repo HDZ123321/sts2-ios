@@ -65,11 +65,11 @@ Bundle ID 是 `com.placeholder.sts2`，AltStore 会自动重签，不用改。
 |---|---|
 | **FMOD** | **完全没声音**。所有音效、BGM 静音。 |
 | **Spine** | **骨骼动画变成占位节点**。角色立绘、背景动画、部分 VFX 不动（静态图正常）。 |
-| **Sentry** | 崩溃上报没了（无所谓） |
+| **Sentry** | 崩溃上报没了（v3 起在 mobile 上主动关闭，避免它把启动流程打断） |
 
 Spine 的影响范围：174 个场景文件引用 Spine 类型，主要是角色选择、商人、休息点、宝珠、Boss 背景、部分 VFX。战斗逻辑、卡牌、UI、地图全部正常。
 
-本地实测（Windows 上模拟 iOS 配置，三个扩展全关）：**能跑到主菜单，5.1 秒**，卡牌图集 875 sprites、遗物 341、能力 264、意图 310 全部加载成功。Spine/Fmod 报 `Cannot get class` 是预期的，游戏用占位节点继续跑。
+本地实测（Windows 上模拟 iOS 配置，三个扩展全关 + 强制走 mobile 分支）：**能跑到主菜单，4.8 秒**，卡牌图集 875 sprites、遗物 341、能力 264、意图 310 全部加载成功，`.tpsheet not found` 计数 0，无 `Fatal error`。Spine/Fmod 报 `Cannot get class` 是预期的，游戏用占位节点继续跑。
 
 ## 想补回音频 / 动画怎么办
 
@@ -106,60 +106,67 @@ GitHub Actions 在 `macos-14` runner 上完整跑通：`dotnet publish -r ios-ar
 
 ---
 
-## 黑屏修复版（v2）说明
+## 黑屏修复版（v3）说明
 
-### 这一版修了什么
+### v3 修的是真凶
+
+v2 修的三条（Steam 强制初始化、缺 `.tpsheet`、缺 785 个 `.import`）都是真问题，但都不是你那次黑屏的原因。真凶在日志里躺着：
+
+```
+ERROR: System.DllNotFoundException: Unable to load shared library 'sentry-native'
+   at Sentry.Native.C.sentry_options_new()
+   at Sentry.SentrySdk.Init(Action`1)
+   at MegaCrit.Sts2.Core.Debug.SentryService.Initialize()
+   at MegaCrit.Sts2.Core.Nodes.NGame._EnterTree()
+```
+
+`NGame._EnterTree()` 第一件事就是 `SentryService.Initialize()`，而 iOS 包里没有 `sentry-native.dylib`。这个异常没人接，从 `_EnterTree()` 直接抛出去，后面 20 多个 `GetNode<>` 一个都没跑，`TaskHelper.RunSafely(GameStartupWrapper())` 永远没被调度 —— 所以主菜单从未开始构建，就是纯黑屏。
+
+日志里 85 条 `NullReferenceException` 全是它的连锁反应：`NReactionWheel._Input()`（82 次，每次触摸都报）、`NBackgroundModeHandler.EnterBackgroundMode()`（2 次）、`NControllerManager.Instance`（2 次）。
+
+**注意 `Registered 11 migrations` 是假线索**：那是 `NMuteInBackgroundHandler` 收到 `NOTIFICATION_APPLICATION_FOCUS_OUT` 后调 `Mute()` 触发 `SaveManager.Instance` 懒加载顺带打出来的，不代表启动流程走到那一步。
 
 | # | 问题 | 表现 | 修法 |
 |---|---|---|---|
-| 1 | 非编辑器构建强制初始化 Steam | Steam 失败 → 弹 `STEAM_INIT_ERROR` 模态框 → 主菜单永远不出现 = 黑屏 | `NGame.InitializePlatform()` 把 `OS.HasFeature("mobile")` 与 `editor` 等同处理，iOS 上跳过 Steam |
-| 2 | 导出包缺 14 个 `.tpsheet` | `AtlasManager: tpsheet not found` → `GetMissingTexture()` 空指针 → `Fatal error. 0xC0000005` | `export_presets.cfg` 的 `include_filter` 加上 `*.tpsheet, *.atlas, *.skel, *.spine` |
-| 3 | 打包时缺 785 个 `.import`/artifact | 字体、光标图、GDScript remap 全部找不到 | `inject_pck2.py` 把 418 个 `.import` + 367 个 artifact（316.5 MB）注入 PCK |
-| 4 | 手机上拿不到日志 | 只能看黑屏，没法诊断 | 开 `debug/file_logging/enable_file_logging=true` + `user_data/accessible_from_files_app=true` |
+| 1 | Sentry 初始化抛 `DllNotFoundException` 中断 `_EnterTree` | 纯黑屏，无闪退 | `SentryService.Initialize()` 在 `OS.HasFeature("mobile")` 时提前返回；`NGame._EnterTree()` 里再兜一层 try-catch |
+| 2 | 半初始化的 `NGame` 被下游当非空用 | 85 条 `NullReferenceException` | `NReactionWheel._Input` / `NBackgroundModeHandler.EnterBackgroundMode` / `NControllerManager.Instance` 加空值保护 |
+| 3 | 非编辑器构建强制初始化 Steam | Steam 失败 → `STEAM_INIT_ERROR` 模态框挡住主菜单 | `NGame.InitializePlatform()` 把 `OS.HasFeature("mobile")` 与 `editor` 等同处理 |
+| 4 | 导出包缺 14 个 `.tpsheet` | `GetMissingTexture()` 空指针 → `Fatal error. 0xC0000005` | `export_presets.cfg` 的 `include_filter` 加 `*.tpsheet, *.atlas, *.skel, *.spine` |
+| 5 | 打包时缺 785 个 `.import`/artifact | 字体、光标图、GDScript remap 全找不到 | `inject_pck2.py` 注入 418 个 `.import` + 367 个 artifact（316.5 MB） |
+| 6 | 手机上拿不到日志 | 只能看黑屏，没法诊断 | `debug/file_logging/enable_file_logging=true` + `user_data/accessible_from_files_app=true` |
 
 ### 拿日志（黑屏时第一步做这个）
 
 1. 装好后先跑一次游戏，让它黑屏/闪退
 2. 打开 iOS「文件」App → 「我的 iPhone」→ 找到 **Slay the Spire 2**（或 `sts2`）
 3. 进去 → `logs/` → `godot.log`，长按 → 共享 → 存到「文件」或发给自己
-4. 里面关键几行：
+
+关键判据（按出现顺序）：
 
 ```
-.NET: hostfxr initialized              ← hostfxr 起来了
-.NET: GodotPlugins initialized          ← AOT dylib 被 dlopen 且拿到 godotsharp_game_main_init
-Steam initialization skipped            ← 修复 1 生效
-AtlasManager: tpsheet not found: ...    ← 修复 2 没生效
-[Startup] Time to main menu: 4,788ms    ← 真的到主菜单了
+Godot Engine v4.5.1.stable.mono.official
+Metal 3.1 - Forward Mobile - Using Device #0: Apple ...   ← 渲染起来了
+[INFO] [Sentry.NET] Disabled on mobile ...                ← 修复 1 生效（v3 新增）
+[INFO] Steam initialization skipped ...                   ← 修复 3 生效
+[INFO] AtlasManager: Loaded ui_atlas with 102 sprites     ← 资源起来了
+[INFO] [Startup] Time to main menu: N,NNNms               ← 真的到主菜单了
 ```
 
-如果 `.NET: GodotPlugins initialized` 没出现，说明 `Frameworks/sts2.dylib` 没被加载 —— 那就去查签名：
+**别再靠 `.NET: GodotPlugins initialized` 判断 AOT 是否加载**：`GDMono` 的这些输出走的是原生 stdout，不进 `godot.log`。iOS 上的判据是看崩溃栈里有没有 `at sts2!<BaseAddress>+0x...` —— 有就说明 AOT dylib 已被 `dlopen` 且托管代码在跑。
+
+### 签名（自签 p12 用仓库里的 SIGN_IOS.sh）
+
+顺序不能错：**先签 `Frameworks/sts2.dylib`，再签 `.app` 外壳**。iOS 内核对 `dlopen` 未签名/签名不匹配的 dylib 直接拒绝，Godot 侧只看到 `open_dynamic_library` 失败，表现就是黑屏。
 
 ```bash
-codesign -dvvv Payload/sts2.app/Frameworks/sts2.dylib
-codesign --verify --deep --strict --verbose=2 Payload/sts2.app
+unzip -q sts2-v3.ipa -d work
+codesign -f -s "你的 identity" --entitlements work/Payload/sts2.app/sts2.entitlements   work/Payload/sts2.app/Frameworks/sts2.dylib
+codesign -f -s "你的 identity" --entitlements work/Payload/sts2.app/sts2.entitlements   work/Payload/sts2.app
+codesign --verify --deep --strict --verbose=2 work/Payload/sts2.app
+( cd work && zip -qry ../sts2-signed.ipa Payload )
 ```
 
-**最常见的签名错误**：只签了 `.app` 外壳，没签 `Frameworks/sts2.dylib`。iOS 上 `dlopen` 一个未签名/签名不匹配的 dylib 会被内核直接拒掉，Godot 侧只看到 `open_dynamic_library` 失败，表现就是黑屏。
-
-正确签法（自签 p12）：
-
-```bash
-# 1. 先签内嵌的 dylib
-codesign -f -s "iPhone Distribution: Your Name (TEAMID)" \
-  --entitlements sts2/sts2.entitlements \
-  Payload/sts2.app/Frameworks/sts2.dylib
-
-# 2. 再签整个 app（--deep 会覆盖剩下的）
-codesign -f -s "iPhone Distribution: Your Name (TEAMID)" \
-  --entitlements sts2/sts2.entitlements \
-  Payload/sts2.app
-
-# 3. 验证
-codesign --verify --deep --strict --verbose=2 Payload/sts2.app
-
-# 4. 重新打包
-zip -qry sts2-signed.ipa Payload
-```
+仓库根目录的 `SIGN_IOS.sh` 就是这套流程，用法 `./SIGN_IOS.sh "你的 identity" sts2-v3.ipa`。
 
 ### 已知仍缺失（不影响启动）
 
