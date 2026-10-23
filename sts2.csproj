@@ -29,6 +29,8 @@
     <Reference Include="SmartFormat.ZString"><HintPath>libs/SmartFormat.ZString.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="System.IO.Hashing"><HintPath>libs/System.IO.Hashing.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="Vortice.DXGI"><HintPath>libs/Vortice.DXGI.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Vortice.DirectX"><HintPath>libs/Vortice.DirectX.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Vortice.Mathematics"><HintPath>libs/Vortice.Mathematics.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="SharpGen.Runtime"><HintPath>libs/SharpGen.Runtime.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="SharpGen.Runtime.COM"><HintPath>libs/SharpGen.Runtime.COM.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="MonoMod.Backports"><HintPath>libs/MonoMod.Backports.dll</HintPath><Private>true</Private></Reference>
