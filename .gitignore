@@ -1,0 +1,8 @@
+.godot/
+obj/
+bin/
+out-ios-arm64/
+build/
+*.user
+sts2.pck
+sts2_aot.xcframework/
