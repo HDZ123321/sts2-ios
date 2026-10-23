@@ -4,21 +4,22 @@
 
 | 项目 | 值 |
 |---|---|
-| 文件 | `sts2-unsigned.ipa`（v2 修复版） |
-| 大小 | 852,156,450 字节（813 MB） |
-| SHA256 | `966bf4d54e3570d360145d14b74744f2d58ac42935ea9e1e96513a9bdf2788b6` |
+| 文件名 | `sts2-v3.ipa` |
+| 大小 | 850,505,978 字节（约 811 MB） |
+| SHA256 | `71c5591e42397be523a0b9b105dd0f9835fbca3f23a2a6455cbfd9a868984dad` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
-| 架构 | arm64（真机） |
-| 签名 | **未签名**，必须自己签 |
-| 版本 | 0.107.1（对应 PC 版 v0.107.1） |
+| 架构 | arm64（真机；模拟器不支持） |
+| 签名 | **未签名**，需自行签名 |
+| 游戏版本 | 0.107.1 |
+| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-v3.ipa |
 
 包内结构：
 
 ```
 Payload/sts2.app/sts2                      68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib    199,195,616   NativeAOT 编译出的游戏逻辑
-Payload/sts2.app/sts2.pck               1,581,255,304   全部游戏资源
+Payload/sts2.app/Frameworks/sts2.dylib    199,196,712   NativeAOT 编译出的游戏逻辑
+Payload/sts2.app/sts2.pck               1,582,287,648   全部游戏资源
 Payload/sts2.app/Info.plist                     1,547
 ```
 
