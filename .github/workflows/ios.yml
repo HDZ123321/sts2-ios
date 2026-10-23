@@ -18,7 +18,7 @@ on:
         required: false
         default: 'com.placeholder.sts2'
   push:
-    branches: [main]
+    branches: [main, master]
     paths-ignore:
       - '**.md'
 
@@ -29,6 +29,9 @@ jobs:
 
     env:
       BUNDLE_ID: ${{ github.event.inputs.bundle_id || 'com.placeholder.sts2' }}
+      PCK_TAG: v0.107.1-ios
+      PCK_ASSET: sts2.pck
+      FW_ASSET: sts2-frameworks.zip
 
     steps:
       - name: Checkout
@@ -47,6 +50,36 @@ jobs:
           dotnet --info
           sw_vers
           df -h /
+
+      - name: Fetch sts2.pck from release
+        run: |
+          if [ -f sts2.pck ]; then
+            echo "sts2.pck already in checkout (LFS), skipping download"
+            ls -lh sts2.pck
+            exit 0
+          fi
+          URL="https://github.com/${{ github.repository }}/releases/download/${PCK_TAG}/${PCK_ASSET}"
+          echo "downloading $URL"
+          curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
+               -o sts2.pck "$URL"
+          ls -lh sts2.pck
+
+      - name: Fetch engine xcframeworks from release
+        run: |
+          if [ -d sts2.xcframework ] && [ -d MoltenVK.xcframework ]; then
+            echo "xcframeworks already in checkout, skipping download"
+            exit 0
+          fi
+          URL="https://github.com/${{ github.repository }}/releases/download/${PCK_TAG}/${FW_ASSET}"
+          echo "downloading $URL"
+          curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
+               -o "$FW_ASSET" "$URL"
+          ls -lh "$FW_ASSET"
+          unzip -q "$FW_ASSET" -d .
+          rm -f "$FW_ASSET"
+          test -f sts2.xcframework/Info.plist
+          test -f MoltenVK.xcframework/Info.plist
+          echo "xcframeworks ready"
 
       - name: Verify PCK present
         run: |
