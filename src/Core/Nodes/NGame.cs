@@ -1341,7 +1341,7 @@ public class NGame : Control
 	{
 		bool flag = CommandLineHelper.HasArg("force-steam");
 		string text = CommandLineHelper.GetValue("force-steam") ?? "";
-		if (!text.Equals("on", StringComparison.OrdinalIgnoreCase) && (!flag || !(text == string.Empty)) && (text.Equals("off", StringComparison.OrdinalIgnoreCase) || OS.HasFeature("editor")))
+		if (!text.Equals("on", StringComparison.OrdinalIgnoreCase) && (!flag || !(text == string.Empty)) && (text.Equals("off", StringComparison.OrdinalIgnoreCase) || OS.HasFeature("editor") || OS.HasFeature("mobile")))
 		{
 			Log.Info("Steam initialization skipped (editor mode). Use --force-steam to enable.");
 			return true;

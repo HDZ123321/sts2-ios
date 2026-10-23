@@ -6,3 +6,7 @@ build/
 *.user
 sts2.pck
 sts2_aot.xcframework/
+
+# build leftovers
+tools/**/obj/
+tools/**/bin/
