@@ -179,6 +179,27 @@ jobs:
           python3 tools/ordinal_dump.py "$APP/sts2" | sed -n '1,10p'
           echo "fmod no longer loaded by dyld; Godot will dlopen it at runtime"
 
+      - name: Verify orientation and privacy keys survived packaging
+        run: |
+          set -euo pipefail
+          APP="build/sts2.xcarchive/Products/Applications/sts2.app"
+          python3 - "$APP/Info.plist" <<'PY'
+          import plistlib, sys
+          d = plistlib.load(open(sys.argv[1], 'rb'))
+          for key in ('UISupportedInterfaceOrientations', 'UISupportedInterfaceOrientations~ipad'):
+              v = d.get(key) or []
+              need = {'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight'}
+              if not need.issubset(set(v)):
+                  sys.exit('::error::%s = %r, expected both landscape directions' % (key, v))
+              print('%s = %r' % (key, v))
+          if 'NSCameraUsageDescription' in d or 'NSPhotoLibraryUsageDescription' in d:
+              sys.exit('::error::empty camera/photo usage strings are still present')
+          mic = d.get('NSMicrophoneUsageDescription')
+          if not mic or not mic.strip():
+              sys.exit('::error::NSMicrophoneUsageDescription must not be empty')
+          print('NSMicrophoneUsageDescription = %r' % mic)
+          PY
+
       - name: Verify fmod flat-namespace imports are weak
         run: |
           set -euo pipefail
