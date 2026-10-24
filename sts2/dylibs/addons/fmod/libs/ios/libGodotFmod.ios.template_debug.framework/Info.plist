@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleExecutable</key>
-	<string>libGodotFmod.ios.template_debug</string>
+	<string>libGodotFmod</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.placeholder.sts2.framework.libGodotFmod-ios-template-debug</string>
 	<key>CFBundleInfoDictionaryVersion</key>
