@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 850,749,793 字节（约 811 MB） |
-| SHA256 | `85b440a78e7d033294c4e2ecbfa191d3edc58f7087df7e061bbde87e104f4a88` |
+| 大小 | 851,164,588 字节（约 812 MB） |
+| SHA256 | `e51821c9e1e28bdff92e4c650ca77f165fb19ba3dbb80410253958b4249bbbc7` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机，模拟器不支持） |
@@ -19,11 +19,17 @@
 ```
 Payload/sts2.app/sts2                         68,111,632   主程序（libgodot 链接产物）
 Payload/sts2.app/Frameworks/sts2.dylib       199,447,816   NativeAOT 产物（游戏逻辑）
-Payload/sts2.app/sts2.pck                  1,582,287,648   全部游戏资源
+Payload/sts2.app/Frameworks/libspine_godot.ios.template_release
+                                              1,273,248   spine-godot（骨骼动画，iOS arm64）
+Payload/sts2.app/sts2.pck                  1,582,409,436   全部游戏资源
 Payload/sts2.app/Info.plist                        1,547
 ```
 
 `sts2.dylib` 导出 `_godotsharp_game_main_init`，`sts2` 主程序通过 `@rpath/sts2.dylib` 链接它 —— 两者必须一起签通，否则启动时找不到托管入口。
+
+`libspine_godot.ios.template_release` 导出 `_spine_godot_library_init`，主程序的 `LC_LOAD_DYLIB` 里有
+`@rpath/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release`
+—— 它和 `sts2.dylib` 一样必须签通，漏签会在点「单人游戏」时崩。
 
 ## 安装（三条路，按你手头条件选）
 
@@ -59,23 +65,20 @@ Bundle ID 是 `com.placeholder.sts2`，AltStore 会自动重签，不用改。
 
 ## 已知功能缺失（必须提前知道）
 
-这个包剔除了三个原生扩展，因为它们没有 iOS 二进制：
+这个包剔除了两个原生扩展，因为它们没有 iOS 二进制：
 
 | 扩展 | 后果 |
 |---|---|
 | **FMOD** | **完全没声音**。所有音效、BGM 静音。 |
-| **Spine** | **骨骼动画变成占位节点**。角色立绘、背景动画、部分 VFX 不动（静态图正常）。 |
 | **Sentry** | 崩溃上报没了（v3 起在 mobile 上主动关闭，避免它把启动流程打断） |
 
-Spine 的影响范围：174 个场景文件引用 Spine 类型，主要是角色选择、商人、休息点、宝珠、Boss 背景、部分 VFX。战斗逻辑、卡牌、UI、地图全部正常。
+**Spine（骨骼动画）从 v6 起已经补回**，不再是缺失项 —— 见下面的 v6 说明。
 
-本地实测（Windows 上模拟 iOS 配置，三个扩展全关 + 强制走 mobile 分支）：**能跑到主菜单，4.8 秒**，卡牌图集 875 sprites、遗物 341、能力 264、意图 310 全部加载成功，`.tpsheet not found` 计数 0，无 `Fatal error`。Spine/Fmod 报 `Cannot get class` 是预期的，游戏用占位节点继续跑。
+## 想补回音频怎么办
 
-## 想补回音频 / 动画怎么办
+`NAudioManager` 只通过 `_audioNode.Call(...)` 调 GDScript 的 `audio_manager_proxy.gd`，C# 侧零 FMOD 依赖（`grep FmodServer src/ --include=*.cs` = 0 命中）。改法：写一个 C# 版 `AudioManagerProxy`，用 `AudioStreamPlayer` + 从 `banks/` 解出的音频资源，把 `_audioNode` 指向它。工作量中等，但要重做音频资源管线。
 
-**音频**：`NAudioManager` 只通过 `_audioNode.Call(...)` 调 GDScript 的 `audio_manager_proxy.gd`，C# 侧零 FMOD 依赖（`grep FmodServer src/ --include=*.cs` = 0 命中）。改法：写一个 C# 版 `AudioManagerProxy`，用 `AudioStreamPlayer` + 从 `banks/` 解出的音频资源，把 `_audioNode` 指向它。工作量中等，但要重做音频资源管线。
-
-**动画**：spine-godot 官方有 iOS 目标（`SConstruct` 里 `env["platform"] == "ios"` 分支，产出 `libspine_godot.ios.template_{debug,release}.framework`）。需要 macOS + Xcode + SCons + godot-cpp 4.5 编译。有 Mac 的话可以自己出，然后放进 `addons/spine/ios/` 并恢复 `spine_godot_extension.gdextension`。
+FMOD 本身也有 iOS 目标（`fmod.gdextension` 里声明了 `ios.debug`/`ios.release` 指向 `libs/ios/libGodotFmod.ios.template_*.xcframework`），但需要 Firelight 授权账号才能拿到 iOS 二进制。
 
 ## 触摸操作
 
@@ -94,15 +97,109 @@ Spine 的影响范围：174 个场景文件引用 Spine 类型，主要是角色
 | 现象 | 原因 |
 |---|---|
 | 闪退在启动画面 | 证书没签进 `Frameworks/sts2.dylib`。Sideloadly 勾上 "Advanced → Inject dylibs" 或确保重签整个 Payload |
+| 进主菜单但点单人游戏闪退 | `Frameworks/libspine_godot.ios.template_release.framework` 没签。v6 起主程序 `LC_LOAD_DYLIB` 直接引用它，必须跟 `sts2.dylib` 一起签 |
 | 卡在黑屏 | PCK 没被找到。确认 `sts2.pck` 与 `sts2` 在同一个 `sts2.app/` 目录下 |
 | 提示 "Unable to install" | Bundle ID 冲突，改一个（Sideloadly 里可以改） |
 | 提示未受信任的开发者 | 设置 → 通用 → VPN与设备管理 → 信任 |
 
 ## 构建来源
 
-GitHub Actions 在 `macos-14` runner 上完整跑通：`dotnet publish -r ios-arm64`（NativeAOT）→ `xcodebuild -create-xcframework` → 注入 pbxproj → `xcodebuild archive`（无签名）→ 手工组 Payload → zip。
+GitHub Actions 在 `macos-14` runner 上完整跑通两条线：
+
+**游戏本体**（`.github/workflows/ios.yml`）：`dotnet publish -r ios-arm64`（NativeAOT）→ `xcodebuild -create-xcframework` → 注入 pbxproj → `xcodebuild archive`（无签名）→ 手工组 Payload → zip。
+
+**Spine 扩展**（`.github/workflows/spine-ios.yml`）：`git clone spine-runtimes@4.2` + `godot-cpp@4.5` → `scons platform=ios target=template_release arch=arm64` → 校验 `_spine_godot_library_init` 与 7 个导出类 → zip 发布到 tag `spine-godot-ios`。
 
 仓库：https://github.com/HDZ123321/sts2-ios
+
+---
+
+## 当前版本（v6）：补回 Spine，单人游戏不再崩
+
+v5 已经能进主菜单，但点「单人游戏」会崩：
+
+```
+ERROR: Cannot get class 'SpineSprite'.  at: _instantiate_internal (core/object/class_db.cpp:546)
+ERROR: System.InvalidCastException: Specified cast is not valid.
+   at MegaCrit.Sts2.Core.Nodes.Screens.Map.NBossMapPoint._Ready() + 0x148
+C# backtrace:
+   [6] GodotTreeExtensions.AddChildSafely(Node, Node)
+   [7] NMapScreen.SetMap(ActMap, uint, bool)
+   [8] RunManager+<GenerateMap>d__177.MoveNext()
+
+[ERROR] Exception starting singleplayer run : System.NullReferenceException
+   at MegaCrit.Sts2.Core.Nodes.Screens.Map.NBossMapPoint.RefreshColorInstantly() + 0xa0
+   at NMapScreen.RefreshAllPointVisuals() + 0xb8
+   at RunManager.<SetActInternal>d__197.MoveNext() + 0x10c
+   at NGame.<StartRun>d__155.MoveNext() + 0x230
+```
+
+### 为什么
+
+`NBossMapPoint.cs:178`：
+
+```csharp
+_spineSprite = GetNode<Node2D>("%SpineSprite");
+```
+
+场景里这个节点是 `type="SpineSprite"`。v5 包剔除了 spine gdextension，Godot 在 `class_db.cpp:546` 找不到类，就**创建一个普通 `Node` 当占位符**，于是 `GetNode<Node2D>()` 转型失败 → `_Ready()` 中途中断 → `_placeholderImage` 没赋值 → 后面 `RefreshColorInstantly()` 空引用。
+
+同样的模式遍布全项目：`scenes/` 里 `SpineSprite 197 / SpineMesh2D 240 / SpineBoneNode 119 / SpineSlotNode 106`，39 处 `GetNode<T>` 会因为占位 Node 而转型失败。
+
+### v6 的改法
+
+用 GitHub Actions 自己编了 spine-godot 的 iOS framework（官方 `EsotericSoftware/spine-runtimes` **不发预编译二进制**，只能自编）：
+
+- `spine-runtimes` **4.2 分支** —— 游戏 `.spskel` 文件头是 `4.2.03`，与 `spine-cpp/include/spine/Version.h` 的 `SPINE_VERSION_STRING "4.2"` 对齐
+- `godot-cpp` **4.5 分支** —— 与引擎 Godot 4.5.1 对齐
+- `macos-14` runner + `scons platform=ios target=template_release arch=arm64`
+- 产物 `libspine_godot.ios.template_release.framework`，1,273,248 字节，`Mach-O 64-bit dynamically linked shared library arm64`，导出 `_spine_godot_library_init`
+
+workflow 在 `.github/workflows/spine-ios.yml`，Release tag `spine-godot-ios` 存二进制。
+
+framework 放进 `addons/spine/ios/` 后，Godot 的 iOS 导出器自动把它拷到 `sts2.app/Frameworks/` 并加进 Xcode 工程的 `Embed Frameworks` phase（带 `CodeSignOnCopy`），`spine_godot_extension.gdextension` 里的 `ios.release` 条目本来就有，不用改。
+
+主程序现在有两条 `LC_LOAD_DYLIB`：
+
+```
+@rpath/sts2.dylib
+@rpath/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release
+```
+
+**这意味着 spine framework 和 `sts2.dylib` 一样必须签通。** 漏签不是「动画不动」，是 dyld 启动就失败。
+
+### v6 关键判据
+
+装上后点单人游戏，日志里应该看到：
+
+```
+[INFO] [Startup] Time to main menu: 4,xxx ms
+```
+
+然后是地图。如果还看到 `Cannot get class 'SpineSprite'`，说明装的是 v5 或更早的包。
+
+### 签名（v6 起多了一个 framework）
+
+```bash
+unzip -q sts2-unsigned.ipa -d work
+APP=work/Payload/sts2.app
+
+# 先签所有 framework 里的二进制
+for f in "$APP"/Frameworks/*; do
+  [ -e "$f" ] && codesign -f -s "你的 identity" --timestamp=none "$f"
+done
+
+# 再签 app 外壳
+codesign -f -s "你的 identity" --timestamp=none "$APP"
+
+codesign --verify --deep --strict --verbose=2 "$APP"
+```
+
+仓库里的 `SIGN_IOS.sh` 已经是这个逻辑（它会遍历 `Frameworks/*`，所以自动覆盖 spine）：
+
+```bash
+./SIGN_IOS.sh "你的 identity" sts2-unsigned.ipa
+```
 
 ---
 
