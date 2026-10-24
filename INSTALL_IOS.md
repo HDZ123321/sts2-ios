@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 851,164,588 字节（约 812 MB） |
-| SHA256 | `e51821c9e1e28bdff92e4c650ca77f165fb19ba3dbb80410253958b4249bbbc7` |
+| 大小 | 1,163,700,442 字节（约 1110 MB） |
+| SHA256 | `4252ec2f5252e4b5744be0b46925ce4717823abb9d8a9230feb84cb2327cc5e8` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机，模拟器不支持） |
@@ -17,19 +17,34 @@
 包内结构：
 
 ```
-Payload/sts2.app/sts2                         68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib       199,447,816   NativeAOT 产物（游戏逻辑）
-Payload/sts2.app/Frameworks/libspine_godot.ios.template_release
-                                              1,273,248   spine-godot（骨骼动画，iOS arm64）
-Payload/sts2.app/sts2.pck                  1,582,409,436   全部游戏资源
-Payload/sts2.app/Info.plist                        1,547
+Payload/sts2.app/sts2                                    68,111,632   主程序（libgodot 链接产物）
+Payload/sts2.app/Frameworks/sts2.dylib                  199,447,816   NativeAOT 产物（游戏逻辑）
+Payload/sts2.app/Frameworks/libspine_godot.ios.template_release.framework/
+  libspine_godot.ios.template_release                     1,273,248   spine-godot（骨骼动画）
+Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/
+  fmod.ios.template_release                               4,287,144   fmod-godot（音频引擎）
+Payload/sts2.app/sts2.pck                             1,898,964,392   全部游戏资源（含 12 个 FMOD bank）
+Payload/sts2.app/Info.plist                                   1,547
 ```
 
-`sts2.dylib` 导出 `_godotsharp_game_main_init`，`sts2` 主程序通过 `@rpath/sts2.dylib` 链接它 —— 两者必须一起签通，否则启动时找不到托管入口。
+三个原生库都在 `LC_LOAD_DYLIB` 里，全部必须签通：
 
-`libspine_godot.ios.template_release` 导出 `_spine_godot_library_init`，主程序的 `LC_LOAD_DYLIB` 里有
-`@rpath/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release`
-—— 它和 `sts2.dylib` 一样必须签通，漏签会在点「单人游戏」时崩。
+| 库 | 导出符号 | 漏签后果 |
+|---|---|---|
+| `sts2.dylib` | `_godotsharp_game_main_init` | 启动即黑屏（托管入口找不到） |
+| `libspine_godot.ios.template_release` | `_spine_godot_library_init` | 点「单人游戏」崩在 `NBossMapPoint._Ready()` |
+| `fmod.ios.template_release` | `_fmod_library_init` | 不崩，但所有 `FmodServer` 调用变「未声明标识符」→ 静音 |
+
+主程序的实际引用形式（`otool -L` 看到的）：
+
+```
+@rpath/sts2.dylib
+@rpath/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release
+@rpath/fmod.ios.template_release.framework/fmod.ios.template_release
+```
+
+`LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在
+`Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完。
 
 ## 安装（三条路，按你手头条件选）
 
@@ -65,20 +80,34 @@ Bundle ID 是 `com.placeholder.sts2`，AltStore 会自动重签，不用改。
 
 ## 已知功能缺失（必须提前知道）
 
-这个包剔除了两个原生扩展，因为它们没有 iOS 二进制：
+只剩一项：
 
 | 扩展 | 后果 |
 |---|---|
-| **FMOD** | **完全没声音**。所有音效、BGM 静音。 |
 | **Sentry** | 崩溃上报没了（v3 起在 mobile 上主动关闭，避免它把启动流程打断） |
 
-**Spine（骨骼动画）从 v6 起已经补回**，不再是缺失项 —— 见下面的 v6 说明。
+**FMOD 音频从 v7 起已经补回** —— 12 个 bank 全在包里，进游戏就有声音和 BGM。
+**Spine 骨骼动画从 v6 起已经补回**。
 
-## 想补回音频怎么办
+## 音频（v7 起可用）
 
-`NAudioManager` 只通过 `_audioNode.Call(...)` 调 GDScript 的 `audio_manager_proxy.gd`，C# 侧零 FMOD 依赖（`grep FmodServer src/ --include=*.cs` = 0 命中）。改法：写一个 C# 版 `AudioManagerProxy`，用 `AudioStreamPlayer` + 从 `banks/` 解出的音频资源，把 `_audioNode` 指向它。工作量中等，但要重做音频资源管线。
+v7 把 FMOD 的 iOS 二进制补齐了。做法：游戏用的就是 utopia-rise `fmod-gdextension`
+6.1.0-4.5.0（`fmod.dll` / `fmodstudio.dll` / `libGodotFmod.windows.template_release.x86_64.dll`
+与官方 `addons.zip` 逐字节相同），那个 release 自带 iOS 库。
 
-FMOD 本身也有 iOS 目标（`fmod.gdextension` 里声明了 `ios.debug`/`ios.release` 指向 `libs/ios/libGodotFmod.ios.template_*.xcframework`），但需要 Firelight 授权账号才能拿到 iOS 二进制。
+两个坑，都被绕过了：
+
+1. **install name 必须是绝对 `@rpath` 形式。** 官方 dylib 的 `LC_ID_DYLIB` 是相对路径
+   `demo/addons/fmod/libs/ios/...`，hardened runtime 的 dyld 会直接拒绝。已用脚本重写成
+   `@rpath/fmod.ios.template_release.framework/fmod.ios.template_release`（69 字节，
+   刚好塞进 `LC_ID_DYLIB` 的 80 字节槽）。
+2. **framework 的 basename 必须等于包内二进制名。** Xcode 从 `.framework` 名字推导
+   `-framework X`，于是 ld 去找 `X.framework/X`。所以整包必须叫
+   `fmod.ios.template_release.framework`、里面的可执行文件也必须叫 `fmod.ios.template_release`。
+
+`banks/desktop/` 下 12 个 bank（308 MB）通过 `export_presets.cfg` 的
+`include_filter="*.tpsheet, *.atlas, *.skel, *.spine, *.bank"` 进 PCK —— 它们没有 importer，
+不在资源依赖图里，不加过滤器会被静默丢掉。
 
 ## 触摸操作
 
@@ -98,7 +127,9 @@ FMOD 本身也有 iOS 目标（`fmod.gdextension` 里声明了 `ios.debug`/`ios.
 |---|---|
 | 闪退在启动画面 | 证书没签进 `Frameworks/sts2.dylib`。Sideloadly 勾上 "Advanced → Inject dylibs" 或确保重签整个 Payload |
 | 进主菜单但点单人游戏闪退 | `Frameworks/libspine_godot.ios.template_release.framework` 没签。v6 起主程序 `LC_LOAD_DYLIB` 直接引用它，必须跟 `sts2.dylib` 一起签 |
+| 进游戏但完全没声音 | `Frameworks/fmod.ios.template_release.framework` 没签。不崩，只是所有 `FmodServer` 调用变「未声明标识符」 |
 | 卡在黑屏 | PCK 没被找到。确认 `sts2.pck` 与 `sts2` 在同一个 `sts2.app/` 目录下 |
+| 日志里 `dlopen(...relative path not allowed in hardened program)` | 某个 framework 的 `LC_ID_DYLIB` 还是相对路径。v7 的三个库都已是 `@rpath/...` 形式 |
 | 提示 "Unable to install" | Bundle ID 冲突，改一个（Sideloadly 里可以改） |
 | 提示未受信任的开发者 | 设置 → 通用 → VPN与设备管理 → 信任 |
 
@@ -114,7 +145,21 @@ GitHub Actions 在 `macos-14` runner 上完整跑通两条线：
 
 ---
 
-## 当前版本（v6）：补回 Spine，单人游戏不再崩
+## 当前版本（v7）：补回 FMOD，声音回来了
+
+v7 在 v6 基础上只做了一件事：把 FMOD 的 iOS 二进制补齐，让游戏有声音和 BGM。
+详细做法见上面「音频（v7 起可用）」一节。
+
+判据（进游戏后）：
+
+- 主菜单有 BGM
+- 点按钮有 `event:/sfx/ui/clicks/...` 的音效
+- 日志里不再出现 `Parse Error: Identifier "FmodServer" not declared`
+- 日志里不再出现 `Failed to instantiate an autoload, script 'res://addons/fmod/FmodManager.gd'`
+
+---
+
+## v6：补回 Spine，单人游戏不再崩
 
 v5 已经能进主菜单，但点「单人游戏」会崩：
 
