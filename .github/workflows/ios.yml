@@ -159,6 +159,18 @@ jobs:
             PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
             -quiet
 
+      - name: Weaken the fmod dylib reference
+        run: |
+          set -euo pipefail
+          APP="build/sts2.xcarchive/Products/Applications/sts2.app"
+          cp "$APP/sts2" "$RUNNER_TEMP/sts2.orig"
+          python3 tools/weaken_dylib_ref.py "$APP/sts2" "$APP/sts2.new" fmod
+          mv "$APP/sts2.new" "$APP/sts2"
+          chmod +x "$APP/sts2"
+          cmp -s "$APP/sts2" "$RUNNER_TEMP/sts2.orig" && \
+            { echo "::error::executable unchanged - weaken step did not run"; exit 1; }
+          echo "fmod reference is now LC_LOAD_WEAK_DYLIB (load failure no longer fatal)"
+
       - name: Package unsigned IPA
         run: |
           mkdir -p build/Payload

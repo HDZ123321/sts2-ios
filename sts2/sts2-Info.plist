@@ -38,12 +38,8 @@
 	<array>
 		<string>arm64</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string></string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string></string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string></string>
+	<string>Slay the Spire 2 uses the microphone only if you enable in-game voice chat.</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UIStatusBarHidden</key>
