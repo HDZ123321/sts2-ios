@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 1,163,700,358 字节（约 1110 MB） |
-| SHA256 | `9b0fa578bdef59a7a0d742b7503c8db7756cc7afc9b4910fabb6c6742ff250bc` |
+| 大小 | 1,163,703,233 字节（约 1110 MB） |
+| SHA256 | `b43d93df4f13fbe5c2a82fc364b739f16af16a3f416f19c47e4236d73d3135bc` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机，模拟器不支持） |
@@ -23,7 +23,7 @@ Payload/sts2.app/Frameworks/libspine_godot.ios.template_release.framework/
   libspine_godot.ios.template_release                     1,273,248   spine-godot（骨骼动画）
 Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/
   fmod.ios.template_release                               4,287,144   fmod-godot（音频引擎）
-Payload/sts2.app/sts2.pck                             1,898,964,392   全部游戏资源（含 12 个 FMOD bank）
+Payload/sts2.app/sts2.pck                             1,899,083,875   全部游戏资源（含 12 个 FMOD bank）
 Payload/sts2.app/Info.plist                                   1,556
 ```
 
@@ -40,8 +40,13 @@ Payload/sts2.app/Info.plist                                   1,556
 ```
 @rpath/sts2.dylib
 @rpath/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release
-@rpath/fmod.ios.template_release.framework/fmod.ios.template_release
+@rpath/fmod-disabled.framework/fmod-disabled            ← v10 起：弱链接且指向不存在的路径
 ```
+
+v10 起主程序**不再**在启动时加载 fmod。fmod 的 framework 仍留在
+`Frameworks/` 里，改由 Godot 的 `GDExtensionManager` 在日志系统就绪之后
+`dlopen`，这样万一它加载失败也能在 `godot.log` 里留下痕迹，而不是在
+`main()` 之前静默 abort。
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在
 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完。
@@ -145,7 +150,46 @@ GitHub Actions 在 `macos-14` runner 上完整跑通两条线：
 
 ---
 
-## 当前版本（v8）：修掉「秒退且不留日志」
+## 当前版本（v10）：声音真的响了 + 屏幕能跟着转
+
+v9 能进游戏，但有两个遗留：**大部分音效没有**、**屏幕不跟着手机转**。两个都修了。
+
+### 声音：`dlopen` 被一个没人定义的符号拖死
+
+fmod 的 iOS 二进制通过 **flat namespace** 引用了 30 个符号，其中
+`_load_all_fmod_plugins` 在整个工程里**没有任何定义** —— 主程序没有、
+`libgodot.a` 没有、四个 `libfmod*_iphoneos.a` 的所有 slice 也没有。
+
+`GDExtensionManager` 用 `dlopen(path, RTLD_NOW)` 加载扩展，`RTLD_NOW` 要求
+**所有**未定义符号当场解析。差这一个，整个库就加载失败，返回
+`LOAD_STATUS_FAILED`，于是 `FmodServer` / `FmodBus` / `FmodEvent` 全部变成
+「未声明的标识符」，`audio_manager_proxy.gd` 解析失败，`FmodManager` autoload
+实例化失败，`FmodBankLoader` 退化成占位节点 —— 一路静音。
+
+而且这个失败**不会写进 `godot.log`**：`load_extensions()` 在 `Main::setup()`
+里执行，早于 `main.cpp:2145` 创建 `RotatedFileLogger`，`ERR_PRINT` 只进 stderr。
+
+修法：把 fmod 二进制里每一个 `DYNAMIC_LOOKUP` 未定义符号的 `n_desc` 打上
+`N_WEAK_REF`（`0x40`）。弱引用允许解析失败，`dlopen` 就能成功，其余 29 个
+系统符号（`_objc_msgSend`、`_AVAudioSession*`、`_AudioQueue*` …）本来就能解析。
+`_load_all_fmod_plugins` 唯一的调用点在 `FMOD_OS_Net_Connect` 内部，初始化阶段
+走不到，弱化没有副作用。
+
+CI 里加了 `tools/verify_fmod_syms.py`，一旦有强引用回流就 `::error::` 失败。
+
+### 旋转：改的是 plist，不是 project.godot
+
+归档用的是 `sts2/sts2-Info.plist`（`INFOPLIST_FILE`），不是 Godot 导出器生成的
+那份，所以只改 `project.godot` 的 `display/window/handheld/orientation` 没用。
+现在 iPhone 与 iPad 两个数组都给了 `LandscapeLeft` + `LandscapeRight`。
+CI 里加了校验，退化成单方向就失败。
+
+### 判据
+
+进游戏后：主菜单有 BGM、点按钮有音效、战斗里有打击音；把手机横过来转 180°
+画面跟着翻。日志里 `Parse Error: Identifier "FmodServer" not declared` 应当归零。
+
+## v8：修掉「秒退且不留日志」
 
 v7 加上 FMOD 之后，装机直接闪退，而且**没有任何 `godot.log` 生成**。原因不是资源、
 不是签名，而是主程序里对 fmod 的那条动态库引用。
