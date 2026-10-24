@@ -59,16 +59,25 @@
 
   <Target Name="ApplyBeforeFieldInitPatch"
           DependsOnTargets="BuildBfiTool"
-          AfterTargets="Build;CoreCompile"
-          BeforeTargets="IlcCompile"
-          Condition="Exists('$(BfiTypeList)') and Exists('$(TargetPath)')">
+          AfterTargets="CoreCompile"
+          BeforeTargets="CopyFilesToOutputDirectory;IlcCompile">
+    <!--
+      ILC consumes @(IntermediateAssembly) (obj/.../sts2.dll), NOT $(TargetPath) (bin/...).
+      Patching only bin/ leaves the assembly ILC actually compiles unpatched, so the
+      BeforeFieldInit flags never reach the AOT image. Patch the intermediate assembly
+      before it is copied to bin and before IlcCompile reads it.
+      Note: IntermediateAssembly is an ITEM, so it must be referenced as @(...->'%(FullPath)').
+    -->
     <PropertyGroup>
-      <BfiTmp>$(TargetDir)$(TargetName)_bfi.dll</BfiTmp>
+      <_BfiAsmPath>@(IntermediateAssembly->'%(FullPath)')</_BfiAsmPath>
     </PropertyGroup>
-    <Exec Command="dotnet &quot;$(BfiToolDll)&quot; &quot;$(TargetPath)&quot; &quot;$(BfiTypeList)&quot; &quot;$(BfiTmp)&quot;"
+    <Error Condition="'$(_BfiAsmPath)' == ''" Text="BfiPatch: IntermediateAssembly is empty; cannot locate the assembly ILC will compile." />
+    <Message Importance="high" Text="BfiPatch: patching intermediate assembly $(_BfiAsmPath)" />
+    <!-- obj/ has no reference DLLs next to it, so Cecil needs libs/ as a 4th arg to resolve Sentry/Steamworks/etc. -->
+    <Exec Command="dotnet &quot;$(BfiToolDll)&quot; &quot;$(_BfiAsmPath)&quot; &quot;$(BfiTypeList)&quot; &quot;$(_BfiAsmPath).bfi&quot; &quot;$(MSBuildThisFileDirectory)libs&quot;"
           IgnoreExitCode="false" />
-    <Copy SourceFiles="$(BfiTmp)" DestinationFiles="$(TargetPath)" />
-    <Delete Files="$(BfiTmp)" />
-    <Message Importance="high" Text="BfiPatch: BeforeFieldInit 已回填到 $(TargetName).dll" />
+    <Copy SourceFiles="$(_BfiAsmPath).bfi" DestinationFiles="$(_BfiAsmPath)" />
+    <Delete Files="$(_BfiAsmPath).bfi" />
+    <Message Importance="high" Text="BfiPatch: BeforeFieldInit 已回填到 $(_BfiAsmPath)" />
   </Target>
 </Project>

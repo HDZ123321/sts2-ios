@@ -13,6 +13,8 @@ if (args.Length < 2)
 string asmPath = Path.GetFullPath(args[0]);
 string listPath = Path.GetFullPath(args[1]);
 string outputPath = args.Length > 2 ? Path.GetFullPath(args[2]) : asmPath;
+// Optional 4th arg: extra directory containing reference assemblies (obj/ has none next to it).
+string extraResolverDir = args.Length > 3 ? Path.GetFullPath(args[3]) : string.Empty;
 
 if (!File.Exists(asmPath))
 {
@@ -31,6 +33,10 @@ var wanted = new HashSet<string>(
         .Where(l => l.Length > 0 && !l.StartsWith("#")),
     StringComparer.Ordinal);
 
+Console.WriteLine($"input  : {asmPath}");
+Console.WriteLine($"output : {outputPath}");
+Console.WriteLine($"list   : {listPath}");
+
 string asmDir = Path.GetDirectoryName(asmPath)!;
 
 var resolver = new DefaultAssemblyResolver();
@@ -39,6 +45,7 @@ resolver.AddSearchDirectory(asmDir);
 foreach (string extra in new[]
 {
     Environment.GetEnvironmentVariable("BFI_RESOLVER_DIR") ?? string.Empty,
+    extraResolverDir,
     Path.Combine(asmDir, "libs"),
 })
 {

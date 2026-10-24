@@ -95,7 +95,9 @@ jobs:
           PY
 
       - name: Build BfiPatch tool
-        run: dotnet build tools/BfiPatch/BfiPatch.csproj -c Release --nologo
+        run: |
+          dotnet build tools/BfiPatch/BfiPatch.csproj -c Release --nologo
+          dotnet build tools/TypeFlags/TypeFlags.csproj -c Release --nologo
 
       - name: NativeAOT publish (ios-arm64)
         run: |
@@ -107,6 +109,18 @@ jobs:
             -p:StripSymbols=false \
             -p:TrimmerSingleWarn=false \
             -o "$PWD/out-ios-arm64"
+
+      - name: Verify BeforeFieldInit reached the ILC input
+        run: |
+          # ILC compiles @(IntermediateAssembly) = obj/Release/ios-arm64/sts2.dll.
+          # If the BfiPatch target patched only bin/, this assembly stays unpatched and the
+          # AOT image crashes with KeyNotFoundException 'RELIC.ASTROLABE' at ModelDb.Init.
+          OBJ_DLL=".godot/mono/temp/obj/Release/ios-arm64/sts2.dll"
+          test -f "$OBJ_DLL" || { echo "::error::ILC input assembly not found at $OBJ_DLL"; exit 1; }
+          dotnet tools/TypeFlags/bin/Release/net9.0/TypeFlags.dll "$OBJ_DLL" bfi_types.txt
+          echo "--- for reference, the bin/ copy ---"
+          dotnet tools/TypeFlags/bin/Release/net9.0/TypeFlags.dll \
+            .godot/mono/temp/bin/Release/ios-arm64/sts2.dll bfi_types.txt
 
       - name: Verify AOT output
         run: |
