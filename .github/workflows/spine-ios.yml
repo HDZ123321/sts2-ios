@@ -1,0 +1,164 @@
+name: Build spine-godot iOS framework
+
+# spine-godot 官方不发布预编译二进制，只能在 macOS 上自己编。
+# 产物：libspine_godot.ios.template_{debug,release}.framework，放进
+#       项目的 addons/spine/ios/ 后再由 Godot iOS 导出器嵌入 app。
+#
+# 版本对应关系（已核对）：
+#   spine-runtimes 4.2 分支  <->  游戏 .spskel 头是 4.2.03
+#   godot-cpp 4.5 分支       <->  游戏引擎 Godot 4.5.1
+#   SpineSprite.h:52 有 class SpineMesh2D（游戏场景里用到 240 次）
+
+on:
+  workflow_dispatch:
+    inputs:
+      spine_branch:
+        description: 'spine-runtimes branch'
+        required: false
+        default: '4.2'
+      godot_cpp_branch:
+        description: 'godot-cpp branch'
+        required: false
+        default: '4.5'
+  push:
+    branches: [master, main]
+    paths:
+      - '.github/workflows/spine-ios.yml'
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    permissions:
+      contents: write
+
+    env:
+      SPINE_BRANCH: ${{ github.event.inputs.spine_branch || '4.2' }}
+      GODOT_CPP_BRANCH: ${{ github.event.inputs.godot_cpp_branch || '4.5' }}
+      OUT_TAG: spine-godot-ios
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install SCons
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --upgrade "scons>=4.0"
+          echo "$HOME/Library/Python/$(python3 -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin" >> "$GITHUB_PATH"
+          export PATH="$HOME/Library/Python/$(python3 -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin:$PATH"
+          scons --version | head -5
+
+      - name: Clone spine-runtimes and godot-cpp
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$SPINE_BRANCH" \
+            https://github.com/EsotericSoftware/spine-runtimes.git spine-runtimes
+          cd spine-runtimes
+          git clone --depth 1 --branch "$GODOT_CPP_BRANCH" \
+            https://github.com/godotengine/godot-cpp.git spine-godot/godot-cpp
+          echo "spine branch: $(git rev-parse --short HEAD)"
+          echo "godot-cpp branch: $(cd spine-godot/godot-cpp && git rev-parse --short HEAD)"
+          test -d spine-godot/godot-cpp/include
+          test -d spine-cpp/spine-cpp/include
+
+      - name: Vendor spine-cpp into spine_godot
+        run: |
+          set -euo pipefail
+          cd spine-runtimes
+          # SConstruct globs spine_godot/spine-cpp/src/spine/*.cpp and adds
+          # spine_godot/spine-cpp/include to CPPPATH — mirror what
+          # spine-godot/build/setup-extension.sh does.
+          cp -r spine-cpp/spine-cpp spine-godot/spine_godot
+          test -f spine-godot/spine_godot/spine-cpp/include/spine/Version.h
+          grep -E 'SPINE_VERSION_STRING' \
+            spine-godot/spine_godot/spine-cpp/include/spine/Version.h
+
+      - name: Build ios-arm64 template_debug
+        run: |
+          set -euo pipefail
+          cd spine-runtimes/spine-godot
+          scons -j"$(sysctl -n hw.logicalcpu)" \
+            platform=ios target=template_debug arch=arm64
+
+      - name: Build ios-arm64 template_release
+        run: |
+          set -euo pipefail
+          cd spine-runtimes/spine-godot
+          scons -j"$(sysctl -n hw.logicalcpu)" \
+            platform=ios target=template_release arch=arm64
+
+      - name: Verify frameworks
+        run: |
+          set -euo pipefail
+          cd spine-runtimes/spine-godot/bin/ios
+          ls -la
+          for t in template_debug template_release; do
+            FW="libspine_godot.ios.$t.framework"
+            test -d "$FW" || { echo "::error::missing $FW"; exit 1; }
+            test -f "$FW/Info.plist" || { echo "::error::$FW has no Info.plist"; exit 1; }
+            BIN="$FW/libspine_godot.ios.$t"
+            test -f "$BIN" || { echo "::error::$FW has no binary"; exit 1; }
+            echo "--- $FW ---"
+            file "$BIN"
+            lipo -info "$BIN"
+            nm -gU "$BIN" 2>/dev/null | grep -i spine_godot_library_init || \
+              { echo "::error::entry symbol spine_godot_library_init missing in $FW"; exit 1; }
+            otool -L "$BIN" | head -20
+            plutil -p "$FW/Info.plist"
+          done
+
+      - name: Verify exported classes
+        run: |
+          set -euo pipefail
+          BIN=spine-runtimes/spine-godot/bin/ios/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release
+          for cls in SpineSprite SpineMesh2D SpineBoneNode SpineSlotNode \
+                     SpineSkeletonDataResource SpineAnimationState SpineSkeleton; do
+            if strings -a "$BIN" | grep -qx "$cls"; then
+              echo "OK  $cls"
+            else
+              echo "::error::class $cls not registered in the built framework"
+              exit 1
+            fi
+          done
+
+      - name: Package frameworks
+        run: |
+          set -euo pipefail
+          cd spine-runtimes/spine-godot/bin/ios
+          rm -f "${OLDPWD}/spine-godot-ios.zip"
+          zip -qry "${OLDPWD}/spine-godot-ios.zip" \
+            libspine_godot.ios.template_debug.framework \
+            libspine_godot.ios.template_release.framework
+          cd "${OLDPWD}"
+          ls -lh spine-godot-ios.zip
+          unzip -l spine-godot-ios.zip
+
+      - name: Publish to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release view "$OUT_TAG" >/dev/null 2>&1 || \
+            gh release create "$OUT_TAG" \
+              --title "spine-godot iOS framework (spine ${SPINE_BRANCH} / godot-cpp ${GODOT_CPP_BRANCH})" \
+              --notes "Prebuilt iOS arm64 frameworks for spine-godot, needed by the StS2 iOS port."
+          gh release upload "$OUT_TAG" spine-godot-ios.zip --clobber
+          gh release view "$OUT_TAG" --json assets \
+            --jq '.assets[] | "\(.name)\t\(.size)\t\(.state)"'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-godot-ios
+          path: spine-godot-ios.zip
+          retention-days: 14
+          compression-level: 0
