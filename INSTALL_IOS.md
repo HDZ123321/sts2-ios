@@ -4,21 +4,21 @@
 
 | 项目 | 值 |
 |---|---|
-| 文件名 | `sts2-v3.ipa` |
-| 大小 | 850,505,978 字节（约 811 MB） |
-| SHA256 | `71c5591e42397be523a0b9b105dd0f9835fbca3f23a2a6455cbfd9a868984dad` |
+| 文件名 | `sts2-v4.ipa` |
+| 大小 | 850,542,698 字节（约 811 MB） |
+| SHA256 | `69d935141bb27d28f60d2b7bbc04864fad144bc547c0997806f64f340a898f07` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机；模拟器不支持） |
 | 签名 | **未签名**，需自行签名 |
 | 游戏版本 | 0.107.1 |
-| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-v3.ipa |
+| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-v4.ipa |
 
 包内结构：
 
 ```
 Payload/sts2.app/sts2                      68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib    199,196,712   NativeAOT 编译出的游戏逻辑
+Payload/sts2.app/Frameworks/sts2.dylib    199,432,000   NativeAOT 编译出的游戏逻辑
 Payload/sts2.app/sts2.pck               1,582,287,648   全部游戏资源
 Payload/sts2.app/Info.plist                     1,547
 ```
@@ -106,6 +106,71 @@ GitHub Actions 在 `macos-14` runner 上完整跑通：`dotnet publish -r ios-ar
 
 ---
 
+## 致命错误修复版（v4）说明
+
+v3 之后游戏已经能进到启动流程，但弹出「遇到了致命错误」。v4 修的是这条：
+
+```
+System.InvalidOperationException: Reflection-based serialization has been disabled for this application.
+   at System.Text.Json.JsonSerializer.Deserialize[TValue](String, JsonSerializerOptions)
+   at MegaCrit.Sts2.Core.Assets.AtlasManager.LoadAtlasInternal(String atlasName)
+   at MegaCrit.Sts2.Core.Assets.AtlasManager.LoadEssentialAtlases()
+   at MegaCrit.Sts2.Core.Helpers.OneTimeInitialization.ExecuteEssential()
+   at MegaCrit.Sts2.Core.Nodes.NGame.<GameStartup>d__128.MoveNext()
+```
+
+`AtlasManager` 读 `.tpsheet` 时用的是裸 `JsonSerializer.Deserialize<TpSheetData>(json, _jsonOptions)`，而 `_jsonOptions` 只设了 `PropertyNameCaseInsensitive`，没有 `TypeInfoResolver`。桌面 JIT 下 System.Text.Json 会退回反射实现，能跑；iOS 是 NativeAOT，`JsonSerializer.IsReflectionEnabledByDefault = false`，直接抛异常。
+
+这一炸在 `OneTimeInitialization.ExecuteEssential()` 的第一步（`AtlasManager.LoadEssentialAtlases()`），后面 `LocManager.Initialize()` / `ModelDb.Init()` / `ModelIdSerializationCache.Init()` / `MessageTypes.Initialize()` / `ActionTypes.Initialize()` 一个都没跑，`GameStartup` 抛到 `GameStartupError()` → 致命错误弹窗。
+
+**修法**：加源生成的 JSON 契约，把 `_jsonOptions.TypeInfoResolver` 指过去。
+
+```csharp
+// src/Core/Assets/TpSheetSerializerContext.cs
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(TpSheetData))]
+[JsonSerializable(typeof(TpSheetTexture))]
+[JsonSerializable(typeof(TpSheetSprite))]
+[JsonSerializable(typeof(TpSheetRect))]
+[JsonSerializable(typeof(TpSheetSize))]
+internal sealed partial class TpSheetSerializerContext : JsonSerializerContext { }
+```
+
+```csharp
+// src/Core/Assets/AtlasManager.cs
+private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
+{
+    PropertyNameCaseInsensitive = true,
+    TypeInfoResolver = TpSheetSerializerContext.Default
+};
+```
+
+**怎么验的**：桌面 JIT 测不出这类问题，必须在 `sts2.runtimeconfig.json` 里显式关掉反射 JSON：
+
+```json
+"configProperties": {
+  "System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault": false,
+  "System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported": false
+}
+```
+
+关掉后跑 Windows 导出包：`Reflection-based serialization` 计数 0、`tpsheet not found` 计数 0、13 个图集全部加载（`ui 102 / compressed 45 / epoch 57 / relic 341 / relic_outline 341 / power 264 / card 875 / potion 63 / potion_outline 63 / stats_screen 16 / intent 310 / era 27 / controller 112`）、`Time to main menu: 4,220ms`、`Preloading 'Common' Complete: assets=778`。
+
+**顺手全量审计过**：`grep -rn "JsonSerializer\." src/ --include=*.cs | grep -v Generated` 只剩 26 处，全部走 `JsonSerializationUtility.GetTypeInfo<T>()` 或 `XxxSerializerContext.Default.Xxx`；裸调用只有 `AtlasManager.cs:112` 这一处，已修。`RuntimeHelpers.PrepareMethod`（`OneTimeInitialization.PrewarmJit()`）在 NativeAOT 下是 no-op，不抛。
+
+### v4 关键判据
+
+```
+[INFO] AtlasManager: Loaded ui_atlas with 102 sprites      ← v4 新增，出现就说明过了
+[INFO] AtlasManager: Loaded card_atlas with 875 sprites
+[INFO] ModelIdSerializationCache initialized. Categories: 20 Entries: 1622 ...
+[INFO] [Startup] Time to main menu: N,NNNms
+```
+
+如果日志里出现 `Reflection-based serialization has been disabled`，说明装的是旧包。
+
+---
+
 ## 黑屏修复版（v3）说明
 
 ### v3 修的是真凶
@@ -159,14 +224,14 @@ Metal 3.1 - Forward Mobile - Using Device #0: Apple ...   ← 渲染起来了
 顺序不能错：**先签 `Frameworks/sts2.dylib`，再签 `.app` 外壳**。iOS 内核对 `dlopen` 未签名/签名不匹配的 dylib 直接拒绝，Godot 侧只看到 `open_dynamic_library` 失败，表现就是黑屏。
 
 ```bash
-unzip -q sts2-v3.ipa -d work
+unzip -q sts2-v4.ipa -d work
 codesign -f -s "你的 identity" --entitlements work/Payload/sts2.app/sts2.entitlements   work/Payload/sts2.app/Frameworks/sts2.dylib
 codesign -f -s "你的 identity" --entitlements work/Payload/sts2.app/sts2.entitlements   work/Payload/sts2.app
 codesign --verify --deep --strict --verbose=2 work/Payload/sts2.app
 ( cd work && zip -qry ../sts2-signed.ipa Payload )
 ```
 
-仓库根目录的 `SIGN_IOS.sh` 就是这套流程，用法 `./SIGN_IOS.sh "你的 identity" sts2-v3.ipa`。
+仓库根目录的 `SIGN_IOS.sh` 就是这套流程，用法 `./SIGN_IOS.sh "你的 identity" sts2-v4.ipa`。
 
 ### 已知仍缺失（不影响启动）
 
