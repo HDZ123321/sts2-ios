@@ -28,6 +28,7 @@
 				dstSubfolderSpec = 10;
 				files = (
 					589384010000000000000003,
+589384010000000000000006,
 
 				);
 				name = "Embed Frameworks";
@@ -53,8 +54,11 @@
 /* End PBXFileReference section */
 
 		589384010000000000000001 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; };
-589384010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libspine_godot.ios.template_release.framework"; path = "sts2/dylibs/addons/spine/ios/libspine_godot.ios.template_release.framework"; sourceTree = "<group>"; };
+589384010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libGodotFmod.ios.template_release.framework"; path = "sts2/dylibs/addons/fmod/libs/ios/libGodotFmod.ios.template_release.framework"; sourceTree = "<group>"; };
 589384010000000000000003 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+589384010000000000000004 = {isa = PBXBuildFile; fileRef = 589384010000000000000005; };
+589384010000000000000005 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libspine_godot.ios.template_release.framework"; path = "sts2/dylibs/addons/spine/ios/libspine_godot.ios.template_release.framework"; sourceTree = "<group>"; };
+589384010000000000000006 = {isa = PBXBuildFile; fileRef = 589384010000000000000005; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,7 +69,8 @@
 				9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */,
 				DEADBEEF2F582BE20003B888 /* sts2.xcframework */,
 				
-				589384010000000000000001
+				589384010000000000000001,
+589384010000000000000004
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,7 +104,8 @@
 				9039D3BD24C093AC0020482C /* MoltenVK.xcframework */,
 				DEADBEEF1F582BE20003B888 /* sts2.xcframework */,
 				
-				589384010000000000000002
+				589384010000000000000002,
+589384010000000000000005
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
