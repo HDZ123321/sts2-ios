@@ -52,10 +52,13 @@ jobs:
       - name: Install SCons
         run: |
           set -euo pipefail
-          python3 -m pip install --user --upgrade "scons>=4.0"
-          echo "$HOME/Library/Python/$(python3 -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin" >> "$GITHUB_PATH"
-          export PATH="$HOME/Library/Python/$(python3 -c 'import sys;print(f"{sys.version_info.major}.{sys.version_info.minor}")')/bin:$PATH"
-          scons --version | head -5
+          # Homebrew's python3 is externally managed (PEP 668), so --user installs
+          # are refused on macOS runners. Use a venv and put it on PATH instead.
+          python3 -m venv "$RUNNER_TEMP/scons-venv"
+          "$RUNNER_TEMP/scons-venv/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/scons-venv/bin/pip" install "scons>=4.0"
+          echo "$RUNNER_TEMP/scons-venv/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/scons-venv/bin/scons" --version | head -5
 
       - name: Clone spine-runtimes and godot-cpp
         run: |
