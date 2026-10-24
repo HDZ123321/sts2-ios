@@ -4,26 +4,26 @@
 
 | 项目 | 值 |
 |---|---|
-| 文件名 | `sts2-v4.ipa` |
-| 大小 | 850,542,698 字节（约 811 MB） |
-| SHA256 | `69d935141bb27d28f60d2b7bbc04864fad144bc547c0997806f64f340a898f07` |
+| 文件名 | `sts2-unsigned.ipa` |
+| 大小 | 850,749,793 字节（约 811 MB） |
+| SHA256 | `85b440a78e7d033294c4e2ecbfa191d3edc58f7087df7e061bbde87e104f4a88` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
-| 架构 | arm64（真机；模拟器不支持） |
-| 签名 | **未签名**，需自行签名 |
+| 架构 | arm64（真机，模拟器不支持） |
+| 签名 | **未签名**，需要自己签 |
 | 游戏版本 | 0.107.1 |
-| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-v4.ipa |
+| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-unsigned.ipa |
 
 包内结构：
 
 ```
-Payload/sts2.app/sts2                      68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib    199,432,000   NativeAOT 编译出的游戏逻辑
-Payload/sts2.app/sts2.pck               1,582,287,648   全部游戏资源
-Payload/sts2.app/Info.plist                     1,547
+Payload/sts2.app/sts2                         68,111,632   主程序（libgodot 链接产物）
+Payload/sts2.app/Frameworks/sts2.dylib       199,447,816   NativeAOT 产物（游戏逻辑）
+Payload/sts2.app/sts2.pck                  1,582,287,648   全部游戏资源
+Payload/sts2.app/Info.plist                        1,547
 ```
 
-`sts2.dylib` 导出了 `_godotsharp_game_main_init`，`sts2` 主程序通过 `@rpath/sts2.dylib` 链接它 —— 这条链是通的，引擎能在启动时找到托管入口。
+`sts2.dylib` 导出 `_godotsharp_game_main_init`，`sts2` 主程序通过 `@rpath/sts2.dylib` 链接它 —— 两者必须一起签通，否则启动时找不到托管入口。
 
 ## 安装（三条路，按你手头条件选）
 
@@ -106,7 +106,78 @@ GitHub Actions 在 `macos-14` runner 上完整跑通：`dotnet publish -r ios-ar
 
 ---
 
-## 致命错误修复版（v4）说明
+## 当前版本（v5）：修掉 `RELIC.ASTROLABE`
+
+v4 把「致命错误」里的 `Reflection-based serialization` 修好了，但同一位置又冒出一条新的：
+
+```
+System.TypeInitializationException: A type initializer threw an exception.
+ ---> System.Collections.Generic.KeyNotFoundException:
+      The given key 'RELIC.ASTROLABE' was not present in the dictionary.
+   at MegaCrit.Sts2.Core.Models.ModelDb.Get[T]()
+   at MegaCrit.Sts2.Core.Models.Events.Darv..cctor()
+   at MegaCrit.Sts2.Core.Models.Events.Darv..ctor()
+   at System.ActivatorImplementation.CreateInstance(Type, Boolean)
+   at MegaCrit.Sts2.Core.Models.ModelDb.Init()
+   at MegaCrit.Sts2.Core.Helpers.OneTimeInitialization.ExecuteEssential()
+```
+
+原因是**编译流水线里的补丁打错了程序集**，不是游戏代码的问题。
+
+### 背景：`beforefieldinit` 为什么重要
+
+游戏原始 `sts2.dll` 里，绝大多数带静态构造函数的类型都标着 `beforefieldinit`（C# 的默认语义：静态构造器可以在**首次访问该类型的任何静态字段之前**的任意时刻运行，运行时可以推迟到真正需要时才跑）。
+
+用 ilspy 反编译再重新编译，`static Darv()` 变成了**显式静态构造函数**，`beforefieldinit` 丢了。语义就从「可以推迟」变成「触碰类型即执行」。
+
+`ModelDb.Init()` 是按索引顺序 `0..1623` 逐个 `Activator.CreateInstance(type)` 的。`Darv` 在 index 761，`Astrolabe` 在 index 1333 —— 构造 `Darv` 时 `Astrolabe` 还没进 `_contentById`，`Darv` 的静态构造器却要 `ModelDb.Relic<Astrolabe>()`，于是 `KeyNotFoundException`。
+
+修法是给这 7 个类型把 `beforefieldinit` 标志补回去（`Mono.Cecil` 改 `TypeAttributes.BeforeFieldInit`）：
+
+```
+MegaCrit.Sts2.Core.Assets.AssetSets
+MegaCrit.Sts2.Core.DevConsole.ConsoleCommands.LeaderboardConsoleCmd
+MegaCrit.Sts2.Core.Localization.LocManager
+MegaCrit.Sts2.Core.Models.Events.Darv
+MegaCrit.Sts2.Core.Models.Events.JungleMazeAdventure
+MegaCrit.Sts2.Core.Multiplayer.Serialization.ModelIdSerializationCache
+MegaCrit.Sts2.Core.Nodes.Screens.Timeline.NEraColumn
+```
+
+### v4 为什么没生效
+
+补丁 MSBuild target 改的是 `$(TargetPath)` = `bin/Release/ios-arm64/sts2.dll`，但 **ILC（NativeAOT 的编译器）读的是 `@(IntermediateAssembly)` = `obj/Release/ios-arm64/sts2.dll`**（`Microsoft.NETCore.Native.targets:171` 的 `ManagedBinary Include="@(IntermediateAssembly)"`）。
+
+补丁打在 ILC 从不读的那份副本上，所以构建日志明明打印了 `patched: ... Darv ...`、`types requested=7 matched=7 patched=7`，AOT 镜像里却一个 `BeforeFieldInit` 都没有。
+
+还有个次要坑：`IntermediateAssembly` 是 **item** 不是 property，写成 `$(IntermediateAssembly)` 会展开成空串，让整个 target 静默跳过。
+
+### v5 的改法
+
+- target 改挂 `AfterTargets=CoreCompile` / `BeforeTargets=CopyFilesToOutputDirectory;IlcCompile`
+- 直接就地改 `obj/` 那份（`bin/` 靠正常的复制步骤拿到已打补丁的字节）
+- 用 `@(IntermediateAssembly->'%(FullPath)')` 取路径
+- 给 Cecil 传第 4 个参数 `libs/`，否则在 `obj/` 旁边解析不到 `Sentry`/`Steamworks` 等引用
+- **新增 CI 断言步骤**：`TypeFlags` 的 verify 模式检查 `obj/Release/ios-arm64/sts2.dll` 里这 7 个类型是否都带 `BeforeFieldInit`，缺一个就 `exit 1`，不让 dylib 出包
+
+### v5 关键判据
+
+```
+[INFO] [Sentry.NET] Disabled on mobile: native sentry library is not shipped in this build
+[INFO] Steam initialization skipped (editor mode). Use --force-steam to enable.
+[INFO] AtlasManager: Loaded ui_atlas with 102 sprites
+[INFO] ModelIdSerializationCache initialized. Categories: 20 Entries: 1622 Epochs: 57 Hash: 3954186980
+[INFO] [Startup] Time to main menu: N,NNNms
+```
+
+出现 `Time to main menu` 就说明主菜单真的起来了。如果还看到 `KeyNotFoundException 'RELIC.ASTROLABE'`，说明装的是 v4 或更早的包。
+
+本地复现这个 bug 的方法：`sts2.runtimeconfig.json` 里把
+`System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault` 设 `false` 之外，
+`beforefieldinit` 这条在 JIT 下也会炸（因为它是 C# 语义差异，不是 AOT 特有），
+所以只要用重新编译的 `sts2.dll` 且不打卡，桌面跑 `--force-steam=off` 一样能看到 `RELIC.ASTROLABE`。
+
+---
 
 v3 之后游戏已经能进到启动流程，但弹出「遇到了致命错误」。v4 修的是这条：
 
