@@ -2,14 +2,16 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>libGodotFmod</string>
+	<string>fmod.ios.template_release</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.placeholder.sts2.framework.libGodotFmod-ios-template-release</string>
+	<string>com.placeholder.sts2.framework.fmod-ios-template_release</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>libGodotFmod.ios.template_release</string>
+	<string>fmod.ios.template_release</string>
 	<key>CFBundlePackageType</key>
 	<string>FMWK</string>
 	<key>CFBundleShortVersionString</key>

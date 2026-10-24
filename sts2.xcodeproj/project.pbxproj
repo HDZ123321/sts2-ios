@@ -54,7 +54,7 @@
 /* End PBXFileReference section */
 
 		589384010000000000000001 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; };
-589384010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libGodotFmod.ios.template_release.framework"; path = "sts2/dylibs/addons/fmod/libs/ios/libGodotFmod.ios.template_release.framework"; sourceTree = "<group>"; };
+589384010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "fmod.ios.template_release.framework"; path = "sts2/dylibs/addons/fmod/libs/ios/fmod.ios.template_release.framework"; sourceTree = "<group>"; };
 589384010000000000000003 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 589384010000000000000004 = {isa = PBXBuildFile; fileRef = 589384010000000000000005; };
 589384010000000000000005 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libspine_godot.ios.template_release.framework"; path = "sts2/dylibs/addons/spine/ios/libspine_godot.ios.template_release.framework"; sourceTree = "<group>"; };
