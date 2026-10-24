@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 1,163,700,442 字节（约 1110 MB） |
-| SHA256 | `4252ec2f5252e4b5744be0b46925ce4717823abb9d8a9230feb84cb2327cc5e8` |
+| 大小 | 1,163,700,358 字节（约 1110 MB） |
+| SHA256 | `9b0fa578bdef59a7a0d742b7503c8db7756cc7afc9b4910fabb6c6742ff250bc` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机，模拟器不支持） |
@@ -24,7 +24,7 @@ Payload/sts2.app/Frameworks/libspine_godot.ios.template_release.framework/
 Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/
   fmod.ios.template_release                               4,287,144   fmod-godot（音频引擎）
 Payload/sts2.app/sts2.pck                             1,898,964,392   全部游戏资源（含 12 个 FMOD bank）
-Payload/sts2.app/Info.plist                                   1,547
+Payload/sts2.app/Info.plist                                   1,556
 ```
 
 三个原生库都在 `LC_LOAD_DYLIB` 里，全部必须签通：
@@ -145,10 +145,66 @@ GitHub Actions 在 `macos-14` runner 上完整跑通两条线：
 
 ---
 
-## 当前版本（v7）：补回 FMOD，声音回来了
+## 当前版本（v8）：修掉「秒退且不留日志」
+
+v7 加上 FMOD 之后，装机直接闪退，而且**没有任何 `godot.log` 生成**。原因不是资源、
+不是签名，而是主程序里对 fmod 的那条动态库引用。
+
+### 为什么会闪退且无日志
+
+主程序 `sts2` 把 `fmod.ios.template_release.framework/fmod.ios.template_release`
+写在 `LC_LOAD_DYLIB`（强引用）里，位置排在 `libobjc.A`、`AVFoundation`、
+`AudioToolbox` 之前。而 fmod 这个 dylib 有 30 个 **flat-namespace** 强绑定符号
+（`_objc_msgSend`、`_OBJC_CLASS_$_AVAudioSession`、整组 `_AudioQueue*` /
+`_AudioUnit*` / `_AudioFile*` 等）。dyld 处理到 fmod 时那些系统镜像还没加载，
+于是 `Symbol not found ... Expected in: flat namespace`，进程在 `main()` 之前就被杀掉。
+
+Godot 的日志是在 `Main::setup()` 里才建的
+（`main.cpp:2115-2146`，`user://logs/godot.log`），晚于全部 `LC_LOAD_DYLIB`，
+所以**这类崩溃一定不留日志** —— 这本身就是「崩在 dyld 阶段」的判据。
+
+v6 没有 fmod，spine 的 flat 绑定数是 0，所以 v6 能正常进主菜单。
+
+### v8 的两处改法
+
+1. **把 fmod 的引用降级为弱链接**：CI 新增一步
+   `tools/weaken_dylib_ref.py`，把主程序里那条 `LC_LOAD_DYLIB` 就地改写成
+   `LC_LOAD_WEAK_DYLIB`。fmod 加载失败不再致命，游戏照常启动（只是没声音）。
+   CI 日志里能看到：
+   ```
+   weakened @0xdc8: @rpath/fmod.ios.template_release.framework/fmod.ios.template_release
+   verify: LC_LOAD_WEAK_DYLIB ...
+   verify: hard=0 weak=1 (ncmds=39, commands sane=True)
+   ```
+2. **补上麦克风隐私说明**：原先 `NSMicrophoneUsageDescription` 是空字符串，
+   FMOD 初始化时会话 category 用 `AVAudioSessionCategoryPlayAndRecord`，
+   iOS 对空 usage description 的处理是**直接终止进程**（也不写日志）。
+   现在改成：
+   ```
+   NSMicrophoneUsageDescription = Slay the Spire 2 uses the microphone only if you enable in-game voice chat.
+   ```
+   同时删掉了两个用不到的空键（`NSCameraUsageDescription` /
+   `NSPhotoLibraryUsageDescription`）。
+
+### v8 关键判据
+
+装好后第一次启动，应该能进主菜单而不是闪退。然后：
+
+- **有 BGM 和音效** → fmod 正常加载了
+- **能进主菜单但完全没声音** → fmod 弱链接生效了、但库本身没被加载
+  （大概率是 `Frameworks/fmod.ios.template_release.framework` 没签进证书）。
+  用 `codesign -dvvv` 看这个 framework 有没有 Authority。
+
+如果是后者，日志里会出现 `FmodServer` 未声明这类报错 —— 但游戏能玩。
+
+---
+
+## v7：补回 FMOD，声音回来了
 
 v7 在 v6 基础上只做了一件事：把 FMOD 的 iOS 二进制补齐，让游戏有声音和 BGM。
 详细做法见上面「音频（v7 起可用）」一节。
+
+> v7 的 FMOD 引用是强链接，装机秒退；v8 已降级为弱链接并补上麦克风隐私说明。
 
 判据（进游戏后）：
 
