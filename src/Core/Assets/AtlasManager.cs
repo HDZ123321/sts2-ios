@@ -33,7 +33,8 @@ public static class AtlasManager
 
 	private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
 	{
-		PropertyNameCaseInsensitive = true
+		PropertyNameCaseInsensitive = true,
+		TypeInfoResolver = TpSheetSerializerContext.Default
 	};
 
 	private static readonly ConcurrentDictionary<string, AtlasData> _atlases = new ConcurrentDictionary<string, AtlasData>();
