@@ -27,6 +27,9 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 90
 
+    permissions:
+      contents: write
+
     env:
       BUNDLE_ID: ${{ github.event.inputs.bundle_id || 'com.placeholder.sts2' }}
       PCK_TAG: v0.107.1-ios
@@ -180,6 +183,21 @@ jobs:
           path: build/sts2-unsigned.ipa
           retention-days: 14
           compression-level: 0
+
+      # 直接把 IPA 挂到 Release：用户从 Release 页面点击就能下，不用等 artifact 回传。
+      - name: Publish IPA to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${PCK_TAG}"
+          IPA="build/sts2-unsigned.ipa"
+          test -f "$IPA"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "Slay the Spire 2 iOS ${GITHUB_SHA::7}" --notes "Automated build ${GITHUB_SHA}"
+          gh release upload "$TAG" "$IPA" --clobber
+          gh release view "$TAG" --json assets \
+            --jq '.assets[] | "\(.name)\t\(.size)\t\(.state)"'
 
       - name: Upload dSYM
         uses: actions/upload-artifact@v4
