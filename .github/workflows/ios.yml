@@ -179,6 +179,13 @@ jobs:
           python3 tools/ordinal_dump.py "$APP/sts2" | sed -n '1,10p'
           echo "fmod no longer loaded by dyld; Godot will dlopen it at runtime"
 
+      - name: Verify fmod flat-namespace imports are weak
+        run: |
+          set -euo pipefail
+          APP="build/sts2.xcarchive/Products/Applications/sts2.app"
+          python3 tools/verify_fmod_syms.py             "$APP/Frameworks/fmod.ios.template_release.framework/fmod.ios.template_release"
+          echo "fmod can now dlopen even though _load_all_fmod_plugins is undefined"
+
       - name: Package unsigned IPA
         run: |
           mkdir -p build/Payload
