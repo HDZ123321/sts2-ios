@@ -10,3 +10,4 @@
 *.dll binary
 *.nupkg binary
 *.xcframework binary
+*.framework binary

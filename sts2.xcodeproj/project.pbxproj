@@ -27,7 +27,8 @@
 				dstPath = "";
 				dstSubfolderSpec = 10;
 				files = (
-					
+					589384010000000000000003,
+
 				);
 				name = "Embed Frameworks";
 				runOnlyForDeploymentPostprocessing = 0;
@@ -51,7 +52,10 @@
 		90DD2D9D24B36E8000717FE1 = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = "Launch Screen.storyboard"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-		
+		589384010000000000000001 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; };
+589384010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "libspine_godot.ios.template_release.framework"; path = "sts2/dylibs/addons/spine/ios/libspine_godot.ios.template_release.framework"; sourceTree = "<group>"; };
+589384010000000000000003 = {isa = PBXBuildFile; fileRef = 589384010000000000000002; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+
 
 /* Begin PBXFrameworksBuildPhase section */
 		D0BCFE3118AEBDA2004A7AAE /* Frameworks */ = {
@@ -61,7 +65,7 @@
 				9039D3BE24C093AC0020482C /* MoltenVK.xcframework in Frameworks */,
 				DEADBEEF2F582BE20003B888 /* sts2.xcframework */,
 				
-				
+				589384010000000000000001
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -95,7 +99,7 @@
 				9039D3BD24C093AC0020482C /* MoltenVK.xcframework */,
 				DEADBEEF1F582BE20003B888 /* sts2.xcframework */,
 				
-				
+				589384010000000000000002
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
