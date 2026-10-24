@@ -123,15 +123,24 @@ jobs:
         run: |
           set -euo pipefail
           BIN=spine-runtimes/spine-godot/bin/ios/libspine_godot.ios.template_release.framework/libspine_godot.ios.template_release
+          strings -a "$BIN" > "$RUNNER_TEMP/spine_strings.txt"
+          echo "--- every string mentioning Spine ---"
+          grep -o 'Spine[A-Za-z0-9_]*' "$RUNNER_TEMP/spine_strings.txt" | sort -u | head -80
+          echo "--- required classes ---"
+          # NOTE: clang merges string literals into one pooled blob, so a class
+          # name is frequently NOT its own NUL-terminated line. Match substrings.
+          missing=0
           for cls in SpineSprite SpineMesh2D SpineBoneNode SpineSlotNode \
                      SpineSkeletonDataResource SpineAnimationState SpineSkeleton; do
-            if strings -a "$BIN" | grep -qx "$cls"; then
-              echo "OK  $cls"
+            n=$(grep -c "$cls" "$RUNNER_TEMP/spine_strings.txt" || true)
+            if [ "$n" -gt 0 ]; then
+              echo "OK  $cls ($n hits)"
             else
               echo "::error::class $cls not registered in the built framework"
-              exit 1
+              missing=1
             fi
           done
+          test "$missing" -eq 0
 
       - name: Package frameworks
         run: |
