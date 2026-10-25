@@ -48,6 +48,10 @@ public partial class TouchInputAdapter : Node
 	{
 		// 触摸事件必须能在 _Input 里看到，即使游戏暂停或界面吞事件。
 		ProcessMode = ProcessModeEnum.Always;
+
+		// 诊断探针：把 GDExtension 的真实加载状态写进 godot.log。
+		// GDExtensionManager 的失败路径只走 ERR_PRINT（stderr），日志里看不到。
+		MegaCrit.Sts2.Core.Audio.AudioExtensionProbe.RunOnce();
 	}
 
 	public override void _Input(InputEvent inputEvent)
