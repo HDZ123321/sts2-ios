@@ -48,6 +48,13 @@ public partial class TouchInputAdapter : Node
 	{
 		// 触摸事件必须能在 _Input 里看到，即使游戏暂停或界面吞事件。
 		ProcessMode = ProcessModeEnum.Always;
+		try
+		{
+			MegaCrit.Sts2.Core.Audio.AudioExtensionProbe.RunOnce();
+		}
+		catch (System.Exception)
+		{
+		}
 	}
 
 	public override void _Input(InputEvent inputEvent)
