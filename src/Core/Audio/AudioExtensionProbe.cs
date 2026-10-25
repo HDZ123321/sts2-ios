@@ -197,6 +197,14 @@ public static class AudioExtensionProbe
 
 	private static void Log(string msg)
 	{
-		GD.Print("[AudioProbe] " + msg);
+		string line = "[AudioProbe] " + msg;
+		GD.Print(line);
+		try
+		{
+			MegaCrit.Sts2.Core.Logging.Log.Info(line);
+		}
+		catch (Exception)
+		{
+		}
 	}
 }

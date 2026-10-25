@@ -519,6 +519,14 @@ public class NGame : Control
 		{
 			Log.Warn("Sentry initialization failed, continuing without crash reporting: " + ex.Message);
 		}
+		try
+		{
+			MegaCrit.Sts2.Core.Audio.AudioExtensionProbe.RunOnce();
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("AudioExtensionProbe failed: " + ex.Message);
+		}
 		RootSceneContainer = GetNode<NSceneContainer>("%RootSceneContainer");
 		HoverTipsContainer = GetNode<Node>("%HoverTipsContainer");
 		DebugAudio = GetNode<NDebugAudioManager>("%DebugAudioManager");
