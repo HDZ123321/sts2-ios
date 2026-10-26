@@ -10,3 +10,5 @@ sts2_aot.xcframework/
 # build leftovers
 tools/**/obj/
 tools/**/bin/
+__pycache__/
+*.pyc
