@@ -613,10 +613,13 @@ public class NGame : Control
 		{
 			return;
 		}
-		// The canvas is always scaled uniformly, so take the smaller of the two axis ratios. With
-		// AspectRatioSetting.Auto (expand) the two are equal; with a fixed aspect ratio (keep) the
-		// smaller one is the scale that actually got applied and the other axis is letterboxed.
-		float uniformScale = Mathf.Min(visibleRect.Size.X / windowSize.X, visibleRect.Size.Y / windowSize.Y);
+		// Convert screen pixels to canvas units. Window::_update_viewport_size keeps the canvas
+		// uniformly scaled and then either expands it or letterboxes it, so the real ratio is
+		// screen_size / viewport_size. Because screen_size is never larger than the window on either
+		// axis, viewport_size / windowSize undershoots on the letterboxed axis and matches on the
+		// other one - taking the larger of the two recovers the exact ratio. With AspectRatioSetting
+		// .Auto (expand) both axes already match and this is a no-op.
+		float uniformScale = Mathf.Max(visibleRect.Size.X / windowSize.X, visibleRect.Size.Y / windowSize.Y);
 		// The safe area is reported in screen pixels measured from the top-left of the window, while
 		// SafeAreaRect has to be in canvas units measured from the top-left of the canvas. Those two
 		// origins only coincide when the canvas fills the window. With a fixed aspect ratio Godot
