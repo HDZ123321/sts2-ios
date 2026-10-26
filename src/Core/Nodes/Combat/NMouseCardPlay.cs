@@ -175,7 +175,7 @@ public class NMouseCardPlay : NCardPlay
 	{
 		get
 		{
-			float num = _viewport.GetVisibleRect().Size.Y * 0.75f;
+			float num = BottomOfPlayableArea - _viewport.GetVisibleRect().Size.Y * (1f - _playZoneScreenProportion);
 			if (_skipStartCardDrag)
 			{
 				return num + 100f;
@@ -188,7 +188,26 @@ public class NMouseCardPlay : NCardPlay
 		}
 	}
 
-	private float CancelZoneThreshold => _viewport.GetVisibleRect().Size.Y * 0.95f;
+	private float CancelZoneThreshold => BottomOfPlayableArea - _viewport.GetVisibleRect().Size.Y * (1f - _cancelZoneScreenProportion);
+
+	/// <summary>
+	/// The y coordinate the play and cancel zones are measured from. Using the bottom of the safe area
+	/// instead of the raw viewport keeps the cancel zone above the home indicator, which otherwise sits
+	/// exactly where the game expects a deliberate downward drag. On desktop the safe area is the whole
+	/// viewport, so this is the same value the old proportional maths produced.
+	/// </summary>
+	private float BottomOfPlayableArea
+	{
+		get
+		{
+			NGame game = NGame.Instance;
+			if (game != null)
+			{
+				return game.SafeAreaRect.End.Y;
+			}
+			return _viewport.GetVisibleRect().End.Y;
+		}
+	}
 
 	public static NMouseCardPlay Create(NHandCardHolder holder, StringName cancelShortcut, bool wasStartedWithShortcut)
 	{

@@ -1,4 +1,5 @@
 using System.IO;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Saves.Migrations;
 
 namespace MegaCrit.Sts2.Core.Saves.Managers;
@@ -45,6 +46,7 @@ public class PrefsSaveManager
 		if (!readSaveResult.Success || readSaveResult.SaveData == null)
 		{
 			Prefs = _migrationManager.CreateNewSave<PrefsSave>();
+			ApplyPlatformDefaults(Prefs);
 			SavePrefs();
 		}
 		else
@@ -52,5 +54,17 @@ public class PrefsSaveManager
 			Prefs = readSaveResult.SaveData;
 		}
 		return readSaveResult;
+	}
+
+	/// <summary>
+	/// Overrides the cross-platform defaults for a brand new prefs file. Only runs the first time a
+	/// profile is created, so an explicit choice the player makes later is never overwritten.
+	/// </summary>
+	private static void ApplyPlatformDefaults(PrefsSave prefs)
+	{
+		if (MobileDevice.IsTouchOnly)
+		{
+			prefs.IsLongPressEnabled = true;
+		}
 	}
 }

@@ -74,7 +74,7 @@ public class NResetGameplayButton : NSettingsButton
 		prefsSave.ShowRunTimer = false;
 		prefsSave.ShowCardIndices = false;
 		prefsSave.PhobiaMode = false;
-		prefsSave.IsLongPressEnabled = false;
+		prefsSave.IsLongPressEnabled = PrefsSave.DefaultIsLongPressEnabled;
 		prefsSave.UploadData = true;
 		prefsSave.TextEffectsEnabled = true;
 		prefsSave.ShowMultiplayerDrawings = true;

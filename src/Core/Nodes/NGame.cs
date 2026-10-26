@@ -497,6 +497,19 @@ public class NGame : Control
 	/// </summary>
 	public Vector2 SafeAreaEnd => SafeAreaRect.Position + SafeAreaRect.Size;
 
+	/// <summary>
+	/// How far the safe area is pushed in from the top-left of the visible canvas. Zero on desktop and
+	/// on devices without cutouts.
+	/// </summary>
+	public Vector2 SafeAreaInsetTopLeft => SafeAreaRect.Position - GetViewport().GetVisibleRect().Position;
+
+	/// <summary>
+	/// How far the safe area is pushed in from the bottom-right of the visible canvas. Zero on desktop
+	/// and on devices without cutouts. Negative components mean the inset is on the opposite edge,
+	/// which is why callers add rather than subtract.
+	/// </summary>
+	public Vector2 SafeAreaInsetBottomRight => SafeAreaRect.End - GetViewport().GetVisibleRect().End;
+
 	private WorldEnvironment WorldEnvironment { get; set; }
 
 	private NHitStop HitStop { get; set; }
@@ -846,7 +859,46 @@ public class NGame : Control
 			ApplyDisplaySettings();
 			ApplySyncSetting();
 		}
+		ApplyMsaa();
+		ApplyFontOversampling();
 		Engine.MaxFps = SaveManager.Instance.SettingsSave.FpsLimit;
+	}
+
+	/// <summary>
+	/// Pushes the saved MSAA level onto the root viewport. Without this the setting was only ever
+	/// applied from the options paginator, so a fresh launch always rendered with MSAA disabled no
+	/// matter what the save file said.
+	/// </summary>
+	public void ApplyMsaa()
+	{
+		RenderingServer.ViewportMsaa msaa = SaveManager.Instance.SettingsSave.Msaa switch
+		{
+			2 => RenderingServer.ViewportMsaa.Msaa2X,
+			4 => RenderingServer.ViewportMsaa.Msaa4X,
+			8 => RenderingServer.ViewportMsaa.Msaa8X,
+			_ => RenderingServer.ViewportMsaa.Disabled
+		};
+		RenderingServer.ViewportSetMsaa2D(GetViewport().GetViewportRid(), msaa);
+		Log.Info($"[Display] MSAA 2D: {msaa}");
+	}
+
+	/// <summary>
+	/// Turns on dynamic font oversampling so glyphs are rasterised at the physical pixel density of
+	/// the panel instead of the 1920x1080 design canvas. The project file ships with oversampling
+	/// disabled, which leaves text visibly soft on a retina screen. The factor comes from the ratio
+	/// between the physical screen and the canvas, capped at 2x because beyond that the extra atlas
+	/// memory buys nothing a phone can show.
+	/// </summary>
+	public void ApplyFontOversampling()
+	{
+		if (!MobileDevice.IsMobile)
+		{
+			return;
+		}
+		float ratio = MobileDevice.CanvasPixelRatio;
+		_window.SetUseFontOversampling(true);
+		_window.OversamplingOverride = ratio;
+		Log.Info($"[Display] Font oversampling: {ratio:0.##}x (canvas {GetViewport().GetVisibleRect().Size} screen {MobileDevice.ScreenSize})");
 	}
 
 	/// <summary>

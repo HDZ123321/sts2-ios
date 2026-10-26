@@ -58,16 +58,41 @@ public class NDiscardPileButton : NCombatCardPile
 
 	protected override PileType Pile => PileType.Discard;
 
+	/// <summary>
+	/// The scene-authored position of the button, captured before any tween moves it. The safe area
+	/// inset is applied on top of this rather than on top of the live position, otherwise every
+	/// window resize would stack another copy of the inset.
+	/// </summary>
+	private Vector2 _scenePosition;
+
+	private bool _scenePositionCaptured;
+
 	public override void _Ready()
 	{
 		ConnectSignals();
 		_emptyPileMessage = new LocString("combat_messages", "OPEN_EMPTY_DISCARD");
+		GetTree().Root.Connect(Viewport.SignalName.SizeChanged, Callable.From(SetAnimInOutPositions));
+		SetAnimInOutPositions();
 	}
 
+	/// <summary>
+	/// Anchors the pile button inside the safe area so the home indicator strip does not cover it.
+	/// </summary>
 	protected override void SetAnimInOutPositions()
 	{
-		_showPosition = base.Position;
-		_hidePosition = base.Position + new Vector2(150f, 100f);
+		if (!_scenePositionCaptured)
+		{
+			_scenePosition = base.Position;
+			_scenePositionCaptured = true;
+		}
+		Vector2 corner = _scenePosition;
+		NGame game = NGame.Instance;
+		if (game != null)
+		{
+			corner += game.SafeAreaInsetTopLeft + game.SafeAreaInsetBottomRight;
+		}
+		_showPosition = corner;
+		_hidePosition = corner + new Vector2(150f, 100f);
 	}
 
 	/// <summary>

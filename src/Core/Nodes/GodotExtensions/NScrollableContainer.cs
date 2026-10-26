@@ -200,6 +200,40 @@ public class NScrollableContainer : Control
 
 	private bool _disableScrollingIfContentFits;
 
+	/// <summary>
+	/// Fling velocity in canvas units per second, captured while the player drags and decayed after
+	/// release so the list keeps gliding instead of stopping the instant the finger lifts.
+	/// </summary>
+	private float _flingVelocityY;
+
+	/// <summary>
+	/// Timestamp of the last drag sample, used to turn a frame's pixel delta into a per-second
+	/// velocity without depending on a fixed frame rate.
+	/// </summary>
+	private ulong _lastDragSampleMsec;
+
+	/// <summary>
+	/// Exponential decay applied to the fling each second. Higher stops sooner.
+	/// </summary>
+	private const float _flingFriction = 4.5f;
+
+	/// <summary>
+	/// A release slower than this (canvas units per second) does not start a fling; it is the
+	/// difference between a deliberate drag and an accidental twitch.
+	/// </summary>
+	private const float _minFlingVelocity = 120f;
+
+	/// <summary>
+	/// Upper bound on the fling so a violent swipe cannot throw the list across several screens.
+	/// </summary>
+	private const float _maxFlingVelocity = 6000f;
+
+	/// <summary>
+	/// A drag sample older than this is treated as a fresh start rather than a continuation, so a
+	/// pause mid-gesture does not produce a huge bogus velocity.
+	/// </summary>
+	private const ulong _dragSampleMaxAgeMsec = 100;
+
 	private float ScrollViewportTop
 	{
 		get
@@ -331,16 +365,23 @@ public class NScrollableContainer : Control
 	{
 		if (inputEvent.IsActionPressed(MegaInput.up))
 		{
+			_flingVelocityY = 0f;
 			_targetDragPosY += _controllerScrollAmount;
 		}
 		else if (inputEvent.IsActionPressed(MegaInput.down))
 		{
+			_flingVelocityY = 0f;
 			_targetDragPosY += 0f - _controllerScrollAmount;
 		}
 	}
 
 	/// <summary>
 	/// Detects mouse click up/down and updates our scroll target accordingly.
+	/// On a touchscreen Godot synthesises a mouse button plus a mouse motion for every finger, so the
+	/// motion branch already handles dragging. <see cref="T:Godot.InputEventScreenDrag" /> is read
+	/// only for its velocity, which the engine measures itself and which stays in screen space
+	/// (immune to the content scale), giving a far steadier fling than differentiating positions.
+	/// The relative delta is deliberately not applied twice.
 	/// </summary>
 	private void ProcessMouseEvent(InputEvent inputEvent)
 	{
@@ -350,6 +391,14 @@ public class NScrollableContainer : Control
 		}
 		if (!(inputEvent is InputEventMouseMotion inputEventMouseMotion))
 		{
+			if (inputEvent is InputEventScreenDrag inputEventScreenDrag)
+			{
+				if (_isDragging)
+				{
+					TrackDragVelocity(inputEventScreenDrag.ScreenVelocity.Y);
+				}
+				return;
+			}
 			if (!(inputEvent is InputEventMouseButton inputEventMouseButton))
 			{
 				return;
@@ -361,17 +410,61 @@ public class NScrollableContainer : Control
 				{
 					_startDragPosY = _content.Position.Y - _paddingTop;
 					_targetDragPosY = _startDragPosY;
+					_flingVelocityY = 0f;
+					_lastDragSampleMsec = 0uL;
+				}
+				else
+				{
+					BeginFling();
 				}
 			}
 			else if (!inputEventMouseButton.Pressed)
 			{
 				_isDragging = false;
+				_flingVelocityY = 0f;
 			}
 		}
 		else if (_isDragging)
 		{
 			_targetDragPosY += inputEventMouseMotion.Relative.Y;
+			TrackDragVelocity(inputEventMouseMotion.Relative.Y);
 		}
+	}
+
+	/// <summary>
+	/// Folds one drag sample into the running fling velocity. Samples are normalised to per-second
+	/// units so the same code works at 30, 60 or 120 fps, and stale samples restart the measurement
+	/// instead of producing an enormous spike.
+	/// </summary>
+	private void TrackDragVelocity(float deltaY)
+	{
+		ulong now = Time.GetTicksMsec();
+		if (_lastDragSampleMsec == 0uL || now - _lastDragSampleMsec > _dragSampleMaxAgeMsec)
+		{
+			_lastDragSampleMsec = now;
+			return;
+		}
+		ulong elapsed = now - _lastDragSampleMsec;
+		if (elapsed == 0uL)
+		{
+			return;
+		}
+		_lastDragSampleMsec = now;
+		float instantVelocity = deltaY * 1000f / (float)elapsed;
+		_flingVelocityY = Mathf.Lerp(_flingVelocityY, instantVelocity, 0.35f);
+	}
+
+	/// <summary>
+	/// Decides whether the gesture that just ended should keep gliding.
+	/// </summary>
+	private void BeginFling()
+	{
+		if (Mathf.Abs(_flingVelocityY) < _minFlingVelocity)
+		{
+			_flingVelocityY = 0f;
+			return;
+		}
+		_flingVelocityY = Mathf.Clamp(_flingVelocityY, 0f - _maxFlingVelocity, _maxFlingVelocity);
 	}
 
 	/// <summary>
@@ -398,6 +491,7 @@ public class NScrollableContainer : Control
 			throw new InvalidOperationException("No content to scroll!");
 		}
 		_targetDragPosY = 0f;
+		_flingVelocityY = 0f;
 		Control? content = _content;
 		Vector2 position = _content.Position;
 		position.Y = _paddingTop;
@@ -424,6 +518,7 @@ public class NScrollableContainer : Control
 		{
 			return;
 		}
+		AdvanceFling(delta);
 		float num = _paddingTop + _targetDragPosY;
 		if (!Mathf.IsEqualApprox(_content.Position.Y, num))
 		{
@@ -458,6 +553,33 @@ public class NScrollableContainer : Control
 			{
 				_targetDragPosY = Mathf.Lerp(_targetDragPosY, 0f, (float)delta * 12f);
 			}
+		}
+	}
+
+	/// <summary>
+	/// Moves the scroll target by the current fling velocity and bleeds that velocity off. The fling
+	/// dies at the ends of the list so it does not fight the bounce-back that pulls the content back
+	/// into range.
+	/// </summary>
+	private void AdvanceFling(double delta)
+	{
+		if (_isDragging || _scrollbarPressed || _flingVelocityY == 0f)
+		{
+			return;
+		}
+		_targetDragPosY += _flingVelocityY * (float)delta;
+		_flingVelocityY *= Mathf.Exp(0f - _flingFriction * (float)delta);
+		if (Mathf.Abs(_flingVelocityY) < _minFlingVelocity * 0.25f)
+		{
+			_flingVelocityY = 0f;
+			return;
+		}
+		float min = Mathf.Min(ScrollLimitBottom, 0f);
+		float max = Mathf.Max(ScrollLimitBottom, 0f);
+		if (_targetDragPosY <= min || _targetDragPosY >= max)
+		{
+			_targetDragPosY = Mathf.Clamp(_targetDragPosY, min, max);
+			_flingVelocityY = 0f;
 		}
 	}
 

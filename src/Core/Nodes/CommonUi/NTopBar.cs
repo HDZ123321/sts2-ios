@@ -235,6 +235,24 @@ public class NTopBar : Control
 
 	private Player? _player;
 
+	/// <summary>
+	/// How far the bar has to sit below the top of the canvas so the notch and the status bar do not
+	/// cover the portrait, hp and gold readouts. Zero on desktop.
+	/// </summary>
+	private float _safeAreaOffsetY;
+
+	/// <summary>
+	/// Where the bar rests when shown. Kept separate from the tween target so a safe area change
+	/// while the bar is hidden still lands the animation in the right place next time.
+	/// </summary>
+	private float _shownPositionY;
+
+	/// <summary>
+	/// Whether the bar is currently tucked off the top of the screen. A resize while hidden must not
+	/// drag it back down, so the safe area handler only snaps the position when the bar is visible.
+	/// </summary>
+	private bool _isHidden;
+
 	public NTopBarMapButton Map { get; private set; }
 
 	public NTopBarDeckButton Deck { get; private set; }
@@ -297,6 +315,39 @@ public class NTopBar : Control
 		_capstoneContainer = GetParent().GetNode<NCapstoneContainer>("%CapstoneScreenContainer");
 		_capstoneContainer.Connect(Node.SignalName.ChildEnteredTree, Callable.From<Node>(ToggleAnimState));
 		_capstoneContainer.Connect(Node.SignalName.ChildExitingTree, Callable.From<Node>(ToggleAnimState));
+		ApplySafeAreaOffset();
+		GetTree().Root.Connect(Viewport.SignalName.SizeChanged, Callable.From(ApplySafeAreaOffset));
+	}
+
+	/// <summary>
+	/// Pushes the bar down by the top safe area inset. NGame computes the inset once per window size
+	/// change, so this runs both on ready and whenever the viewport resizes.
+	/// </summary>
+	private void ApplySafeAreaOffset()
+	{
+		NGame game = NGame.Instance;
+		if (game == null)
+		{
+			return;
+		}
+		Rect2 visible = GetViewport().GetVisibleRect();
+		_safeAreaOffsetY = Mathf.Max(0f, game.SafeAreaRect.Position.Y - visible.Position.Y);
+		_shownPositionY = _safeAreaOffsetY;
+		if (_hideTween != null && _hideTween.IsRunning())
+		{
+			return;
+		}
+		if (_isHidden)
+		{
+			return;
+		}
+		Vector2 position = base.Position;
+		if (Mathf.IsEqualApprox(position.Y, _shownPositionY))
+		{
+			return;
+		}
+		position.Y = _shownPositionY;
+		base.Position = position;
 	}
 
 	public void Initialize(IRunState runState)
@@ -391,17 +442,19 @@ public class NTopBar : Control
 	public void AnimHide()
 	{
 		base.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Disabled;
+		_isHidden = true;
 		_hideTween?.Kill();
 		_hideTween = CreateTween();
-		_hideTween.TweenProperty(this, "position:y", -100f, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
+		_hideTween.TweenProperty(this, "position:y", _safeAreaOffsetY - 100f, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
 	}
 
 	public void AnimShow()
 	{
 		base.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Enabled;
+		_isHidden = false;
 		_hideTween?.Kill();
 		_hideTween = CreateTween();
-		_hideTween.TweenProperty(this, "position:y", 0f, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
+		_hideTween.TweenProperty(this, "position:y", _shownPositionY, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
 	}
 
 	private void OnRelicsUpdated(RelicModel _)

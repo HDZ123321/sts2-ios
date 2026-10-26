@@ -1,6 +1,8 @@
 using Godot;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Platform.Steam;
 using MegaCrit.Sts2.Core.Saves.Migrations;
+using MegaCrit.Sts2.Core.Settings;
 using Steamworks;
 
 namespace MegaCrit.Sts2.Core.Saves.Managers;
@@ -56,6 +58,22 @@ public class SettingsSaveManager
 		{
 			settings.Fullscreen = true;
 			settings.WindowPosition = new Vector2I(0, 0);
+		}
+		if (MobileDevice.IsMobile)
+		{
+			// A phone only ever runs fullscreen, so the saved window geometry and the aspect ratio
+			// picked for a desktop monitor are both meaningless here.
+			settings.Fullscreen = true;
+			settings.WindowPosition = new Vector2I(0, 0);
+			settings.AspectRatioSetting = AspectRatioSetting.Auto;
+			settings.LimitFpsInBackground = true;
+			if (MobileDevice.IsPhone)
+			{
+				// Phones get a tighter frame budget than tablets: 60 fps is already the panel limit on
+				// most of them, and anything above it just drains the battery.
+				settings.FpsLimit = 60;
+				settings.Msaa = 2;
+			}
 		}
 	}
 }

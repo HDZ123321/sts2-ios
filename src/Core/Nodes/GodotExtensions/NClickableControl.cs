@@ -5,6 +5,7 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.ControllerInput;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.addons.mega_text;
 
 namespace MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -114,6 +115,11 @@ public class NClickableControl : Control
 		/// Cached name for the '_GuiInput' method.
 		/// </summary>
 		public new static readonly StringName _GuiInput = "_GuiInput";
+
+		/// <summary>
+		/// Cached name for the '_HasPoint' method.
+		/// </summary>
+		public new static readonly StringName _HasPoint = "_HasPoint";
 
 		/// <summary>
 		/// Cached name for the 'CheckMouseDragThreshold' method.
@@ -262,6 +268,30 @@ public class NClickableControl : Control
 	private Vector2 _beginDragPosition;
 
 	private bool _isPressed;
+
+	/// <summary>
+	/// Cached hit rect grown to the minimum touch target. Recomputed whenever <see cref="P:Godot.Control.Size" />
+	/// changes; only used on touch platforms.
+	/// </summary>
+	private Rect2 _touchHitRect;
+
+	/// <summary>
+	/// The size <see cref="_touchHitRect" /> was computed for, so the rect can be rebuilt lazily.
+	/// </summary>
+	private Vector2 _touchHitRectSize = new Vector2(-1f, -1f);
+
+	/// <summary>
+	/// How much a touch target may grow per axis, as a fraction of the control's own size. Small
+	/// icons sit shoulder to shoulder in the top bar, so an unbounded expansion would let one
+	/// control swallow taps meant for its neighbour.
+	/// </summary>
+	private const float _maxTouchTargetGrowthRatio = 0.5f;
+
+	/// <summary>
+	/// Cached once because <see cref="_HasPoint" /> runs on every hit test, and a platform feature
+	/// query per hit test is not free.
+	/// </summary>
+	private static readonly bool _usesTouchTargets = MobileDevice.IsMobile;
 
 	private static readonly StyleBoxEmpty _blankFocusStyle = new StyleBoxEmpty();
 
@@ -521,6 +551,48 @@ public class NClickableControl : Control
 		}
 	}
 
+	/// <summary>
+	/// Grows the GUI hit rect to at least the platform's minimum touch target. Godot routes both
+	/// touch and emulated mouse events through <see cref="M:Godot.Control._HasPoint(Godot.Vector2)" />,
+	/// so widening this rect is what turns a 64x64 icon into a 44pt tap target on a phone.
+	/// Desktop builds keep the exact rect.
+	/// </summary>
+	/// <param name="point">Point in this control's local space.</param>
+	public override bool _HasPoint(Vector2 point)
+	{
+		if (!_usesTouchTargets)
+		{
+			return base._HasPoint(point);
+		}
+		Vector2 currentSize = base.Size;
+		if (_touchHitRectSize != currentSize)
+		{
+			_touchHitRectSize = currentSize;
+			_touchHitRect = BuildTouchHitRect(currentSize);
+		}
+		return _touchHitRect.HasPoint(point);
+	}
+
+	/// <summary>
+	/// Expands the control's rect symmetrically until each axis reaches the minimum touch target.
+	/// Growth is capped relative to the authored size so neighbouring icons never overlap into an
+	/// ambiguous tap.
+	/// </summary>
+	private static Rect2 BuildTouchHitRect(Vector2 currentSize)
+	{
+		if (currentSize.X <= 0f || currentSize.Y <= 0f)
+		{
+			return new Rect2(Vector2.Zero, currentSize);
+		}
+		Vector2 target = MobileDevice.MinimumTouchTarget(currentSize);
+		float maxX = currentSize.X * (1f + _maxTouchTargetGrowthRatio);
+		float maxY = currentSize.Y * (1f + _maxTouchTargetGrowthRatio);
+		float width = Mathf.Min(target.X, maxX);
+		float height = Mathf.Min(target.Y, maxY);
+		Vector2 grow = (new Vector2(width, height) - currentSize) * 0.5f;
+		return new Rect2(-grow, new Vector2(width, height));
+	}
+
 	protected void CheckMouseDragThreshold(InputEvent inputEvent)
 	{
 		if (!(_ignoreDragThreshold <= 0f) && _isPressed && inputEvent is InputEventMouseMotion { GlobalPosition: var globalPosition } && globalPosition.DistanceTo(_beginDragPosition) >= _ignoreDragThreshold)
@@ -654,6 +726,10 @@ public class NClickableControl : Control
 		{
 			new PropertyInfo(Variant.Type.Object, "inputEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName._HasPoint, new PropertyInfo(Variant.Type.Bool, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Vector2, "point", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.CheckMouseDragThreshold, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "inputEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
@@ -770,6 +846,11 @@ public class NClickableControl : Control
 		{
 			_GuiInput(VariantUtils.ConvertTo<InputEvent>(in args[0]));
 			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName._HasPoint && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<bool>(_HasPoint(VariantUtils.ConvertTo<Vector2>(in args[0])));
 			return true;
 		}
 		if (method == MethodName.CheckMouseDragThreshold && args.Count == 1)
@@ -894,6 +975,10 @@ public class NClickableControl : Control
 			return true;
 		}
 		if (method == MethodName._GuiInput)
+		{
+			return true;
+		}
+		if (method == MethodName._HasPoint)
 		{
 			return true;
 		}

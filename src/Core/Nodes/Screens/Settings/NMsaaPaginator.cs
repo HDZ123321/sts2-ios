@@ -75,6 +75,7 @@ public class NMsaaPaginator : NPaginator, IResettableSettingNode
 		int num = _options.IndexOf(SaveManager.Instance.SettingsSave.Msaa.ToString());
 		_currentIndex = ((num != -1) ? num : 3);
 		_label.SetTextAutoSize(GetMsaaLabel(int.Parse(_options[_currentIndex])));
+		RenderingServer.ViewportSetMsaa2D(GetViewport().GetViewportRid(), GetMsaa(SaveManager.Instance.SettingsSave.Msaa));
 	}
 
 	protected override void OnIndexChanged(int index)

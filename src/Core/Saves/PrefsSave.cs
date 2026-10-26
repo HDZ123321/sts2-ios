@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Settings;
 
 namespace MegaCrit.Sts2.Core.Saves;
@@ -39,7 +40,16 @@ public class PrefsSave : ISaveSchema
 	public bool MuteInBackground { get; set; } = true;
 
 	[JsonPropertyName("long_press")]
-	public bool IsLongPressEnabled { get; set; }
+	public bool IsLongPressEnabled { get; set; } = DefaultIsLongPressEnabled;
+
+	/// <summary>
+	/// What <see cref="IsLongPressEnabled" /> should be before the player ever touches the setting.
+	/// A touchscreen has no hover, so a stray tap on the end turn button ends the turn outright;
+	/// requiring a press-and-hold makes that deliberate. Desktop keeps the instant click because a
+	/// mouse is precise enough already. Kept as a static so the prefs file stays a pure data schema
+	/// and the value is never serialised.
+	/// </summary>
+	public static bool DefaultIsLongPressEnabled => MobileDevice.IsTouchOnly;
 
 	[JsonPropertyName("text_effects_enabled")]
 	public bool TextEffectsEnabled { get; set; } = true;
