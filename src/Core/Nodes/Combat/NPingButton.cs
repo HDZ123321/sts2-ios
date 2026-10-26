@@ -209,9 +209,9 @@ public class NPingButton : NButton
 
 	private Tween? _hoverTween;
 
-	private Vector2 ShowPos => _showPosRatio * _viewport.GetVisibleRect().Size;
+	private Vector2 ShowPos => NGame.Instance.MapToSafeArea(_showPosRatio);
 
-	private Vector2 HidePos => _hidePosRatio * _viewport.GetVisibleRect().Size;
+	private Vector2 HidePos => NGame.Instance.MapToSafeArea(_hidePosRatio);
 
 	protected override string[] Hotkeys => new string[1] { MegaInput.select };
 

@@ -70,7 +70,7 @@ public class NResetGraphicsButton : NSettingsButton
 		settingsSave.WindowPosition = new Vector2I(-1, -1);
 		settingsSave.WindowSize = new Vector2I(1920, 1080);
 		settingsSave.Fullscreen = true;
-		settingsSave.AspectRatioSetting = AspectRatioSetting.SixteenByNine;
+		settingsSave.AspectRatioSetting = SettingsSave.DefaultAspectRatioSetting;
 		settingsSave.TargetDisplay = -1;
 		settingsSave.ResizeWindows = true;
 		settingsSave.VSync = VSyncType.Adaptive;

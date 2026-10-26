@@ -169,6 +169,14 @@ public class NControllerManager : Node
 	/// </summary>
 	private const float WarpDisplacementThresholdSq = 250000f;
 
+	/// <summary>
+	/// Whether the display server exposes a real pointer. On mobile (iOS/Android) there is no cursor,
+	/// so <see cref="M:Godot.DisplayServer.MouseGetPosition" /> and <see cref="M:Godot.Input.WarpMouse(Godot.Vector2)" />
+	/// fall through to the base implementation and spam "Mouse is not supported by this display server."
+	/// into the log every time the player touches the screen.
+	/// </summary>
+	private static readonly bool _hasPointer = !OS.HasFeature("mobile");
+
 	private MegaLabel _label;
 
 	private Tween? _notifyTween;
@@ -314,7 +322,10 @@ public class NControllerManager : Node
 		if (flag || flag2)
 		{
 			IsUsingController = false;
-			Input.WarpMouse(_lastMousePosition);
+			if (_hasPointer)
+			{
+				Input.WarpMouse(_lastMousePosition);
+			}
 			viewport?.GuiReleaseFocus();
 			EmitSignal(SignalName.MouseDetected);
 			ControlModeChanged();
@@ -333,11 +344,14 @@ public class NControllerManager : Node
 			Viewport viewport = GetViewport();
 			if (viewport != null)
 			{
-				Vector2I vector2I = DisplayServer.MouseGetPosition();
-				Vector2I vector2I2 = DisplayServer.WindowGetPosition();
-				_lastMousePosition = new Vector2(vector2I.X - vector2I2.X, vector2I.Y - vector2I2.Y);
-				viewport.WarpMouse(_offscreenPos);
-				_skipMouseCheckFrames = 2;
+				if (_hasPointer)
+				{
+					Vector2I vector2I = DisplayServer.MouseGetPosition();
+					Vector2I vector2I2 = DisplayServer.WindowGetPosition();
+					_lastMousePosition = new Vector2(vector2I.X - vector2I2.X, vector2I.Y - vector2I2.Y);
+					viewport.WarpMouse(_offscreenPos);
+					_skipMouseCheckFrames = 2;
+				}
 			}
 			ActiveScreenContext.Instance.FocusOnDefaultControl();
 			EmitSignal(SignalName.ControllerDetected);

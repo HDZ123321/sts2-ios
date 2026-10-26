@@ -468,6 +468,35 @@ public class NGame : Control
 
 	public Control? ScreenshakeTarget => _screenShake.ShakeTarget;
 
+	/// <summary>
+	/// The part of the canvas that is safe to draw interactive UI on, in canvas units (the same units as
+	/// <see cref="P:Godot.Control.Size" /> and <see cref="M:Godot.Viewport.GetVisibleRect" />).
+	/// On a handheld with a notch or a Dynamic Island the hardware covers a strip along one of the short
+	/// edges plus the home indicator strip along the bottom, and anything drawn underneath is either
+	/// clipped or impossible to tap. Everywhere else (desktop, and any device that reports no cutouts)
+	/// this is simply the full visible rect.
+	/// </summary>
+	public Rect2 SafeAreaRect { get; private set; } = new Rect2(Vector2.Zero, devResolution);
+
+	/// <summary>
+	/// Maps a position expressed as a fraction of the full canvas onto the same fraction of
+	/// <see cref="P:MegaCrit.Sts2.Core.Nodes.NGame.SafeAreaRect" />. Controls that park themselves near a
+	/// screen edge - the end turn button, the proceed button, the confirm button - use this so that on a
+	/// notched device they land inside the usable area instead of under the cutout or the home indicator.
+	/// On desktop, where the safe area is the whole canvas, this is the identity transform.
+	/// </summary>
+	public Vector2 MapToSafeArea(Vector2 fractionOfCanvas)
+	{
+		return SafeAreaRect.Position + fractionOfCanvas * SafeAreaRect.Size;
+	}
+
+	/// <summary>
+	/// The bottom-right corner of <see cref="P:MegaCrit.Sts2.Core.Nodes.NGame.SafeAreaRect" />. Controls that
+	/// pin themselves to the bottom-right corner of the screen - the confirm button, the exhaust pile button -
+	/// subtract their offset from this instead of from the raw canvas size.
+	/// </summary>
+	public Vector2 SafeAreaEnd => SafeAreaRect.Position + SafeAreaRect.Size;
+
 	private WorldEnvironment WorldEnvironment { get; set; }
 
 	private NHitStop HitStop { get; set; }
@@ -545,6 +574,9 @@ public class NGame : Control
 		Transition = GetNode<NTransition>("%GameTransitionRect");
 		_mainThreadId = System.Environment.CurrentManagedThreadId;
 		GetWindow().Connect(Window.SignalName.FilesDropped, Callable.From<string[]>(FileDropHandler.OnFilesDropped));
+		// Children run their _Ready before this node does, and several of them position themselves from
+		// SafeAreaRect, so it has to be valid before the first frame rather than only after _Ready.
+		ApplySafeArea();
 		TaskHelper.RunSafely(GameStartupWrapper());
 	}
 
@@ -552,7 +584,52 @@ public class NGame : Control
 	{
 		_window = GetTree().Root;
 		_window.Connect(Viewport.SignalName.SizeChanged, Callable.From(OnWindowChange));
+		ApplySafeArea();
 		this.RemoveChildSafely(WorldEnvironment);
+	}
+
+	/// <summary>
+	/// Recomputes <see cref="P:MegaCrit.Sts2.Core.Nodes.NGame.SafeAreaRect" /> from the display server's
+	/// reported safe area. The display server hands back screen pixels, so the result is converted into
+	/// canvas units using the ratio between the window size and the visible rect - with
+	/// <c>stretch/mode="canvas_items"</c> those two differ by the content scale factor, and on a phone
+	/// they also differ in aspect ratio because the canvas is letterboxed or expanded.
+	/// </summary>
+	private void ApplySafeArea()
+	{
+		Rect2 visibleRect = GetViewport().GetVisibleRect();
+		SafeAreaRect = new Rect2(visibleRect.Position, visibleRect.Size);
+		if (!OS.HasFeature("mobile"))
+		{
+			return;
+		}
+		Vector2I windowSize = DisplayServer.WindowGetSize();
+		if (windowSize.X <= 0 || windowSize.Y <= 0 || visibleRect.Size.X <= 0f || visibleRect.Size.Y <= 0f)
+		{
+			return;
+		}
+		Rect2I safeArea = DisplayServer.GetDisplaySafeArea();
+		if (safeArea.Size.X <= 0 || safeArea.Size.Y <= 0)
+		{
+			return;
+		}
+		// The canvas is always scaled uniformly, so take the smaller of the two axis ratios. With
+		// AspectRatioSetting.Auto (expand) the two are equal; with a fixed aspect ratio (keep) the
+		// smaller one is the scale that actually got applied and the other axis is letterboxed.
+		float uniformScale = Mathf.Min(visibleRect.Size.X / windowSize.X, visibleRect.Size.Y / windowSize.Y);
+		Vector2 insetMin = new Vector2(safeArea.Position.X, safeArea.Position.Y) * uniformScale;
+		Vector2 insetMax = new Vector2(safeArea.Position.X + safeArea.Size.X, safeArea.Position.Y + safeArea.Size.Y) * uniformScale;
+		Vector2 safeMin = visibleRect.Position + insetMin;
+		Vector2 safeMax = visibleRect.Position + insetMax;
+		// Clamp to the visible rect: a display server that reports a bogus safe area (or a window that
+		// is momentarily 0-sized while the device rotates) must never produce a negative extent.
+		safeMin = new Vector2(Mathf.Max(safeMin.X, visibleRect.Position.X), Mathf.Max(safeMin.Y, visibleRect.Position.Y));
+		safeMax = new Vector2(Mathf.Min(safeMax.X, visibleRect.End.X), Mathf.Min(safeMax.Y, visibleRect.End.Y));
+		if (safeMax.X > safeMin.X && safeMax.Y > safeMin.Y)
+		{
+			SafeAreaRect = new Rect2(safeMin, safeMax - safeMin);
+		}
+		Log.Info($"[SafeArea] window={windowSize} visible={visibleRect} reported={safeArea} -> {SafeAreaRect}");
 	}
 
 	/// <summary>
@@ -716,6 +793,7 @@ public class NGame : Control
 	private void OnWindowChange()
 	{
 		Log.Info($"Window changed! New size: {DisplayServer.WindowGetSize()}");
+		ApplySafeArea();
 		EmitSignal(SignalName.WindowChange, SaveManager.Instance.SettingsSave.AspectRatioSetting == AspectRatioSetting.Auto);
 	}
 

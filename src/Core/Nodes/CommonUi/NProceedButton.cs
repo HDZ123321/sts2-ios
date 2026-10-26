@@ -249,9 +249,9 @@ public class NProceedButton : NButton
 
 	protected override string[] Hotkeys => new string[1] { MegaInput.accept };
 
-	private Vector2 ShowPos => _showPosRatio * _viewport.GetVisibleRect().Size;
+	private Vector2 ShowPos => NGame.Instance.MapToSafeArea(_showPosRatio);
 
-	private Vector2 HidePos => _hidePosRatio * _viewport.GetVisibleRect().Size;
+	private Vector2 HidePos => NGame.Instance.MapToSafeArea(_hidePosRatio);
 
 	public override void _Ready()
 	{

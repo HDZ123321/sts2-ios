@@ -220,6 +220,44 @@ jobs:
           fi
           echo "flat-namespace binds are weak imports; dlopen will succeed"
 
+      - name: Stamp release_info.json into the app bundle
+        run: |
+          set -euo pipefail
+          APP="build/sts2.xcarchive/Products/Applications/sts2.app"
+          # ReleaseInfoManager looks for release_info.json next to the executable, which on iOS is
+          # sts2.app/release_info.json. Without it ReleaseInfo stays null, ModManager warns
+          # "Game doesn't have ReleaseInfo" and every mod is assumed compatible, and run metrics
+          # record the build id as NON-RELEASE-VERSION. The version is the release tag minus the
+          # -ios suffix; the tag is what the PCK was cut from.
+          VERSION="${PCK_TAG%-ios}"
+          DATE_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          python3 - "$APP/release_info.json" "$VERSION" "$DATE_UTC" "${{ github.sha }}" "${{ github.ref_name }}" <<'PY'
+          import json, sys
+          path, version, date, commit, branch = sys.argv[1:6]
+          # main_assembly_hash is what AssemblyHasher would compute over sts2.dll. Under NativeAOT
+          # the assembly has no on-disk Location, so the runtime reports 0; matching that keeps
+          # Sentry's build hash comparison from flagging every crash as a mismatched build.
+          info = {
+              "commit": commit,
+              "version": version,
+              "date": date,
+              "branch": branch,
+              "main_assembly_hash": 0,
+          }
+          with open(path, "w", encoding="utf-8") as f:
+              json.dump(info, f, indent=2)
+              f.write("\n")
+          print("wrote", path, info)
+          PY
+          python3 - "$APP/release_info.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1], encoding="utf-8"))
+          for key in ("commit", "version", "date", "branch", "main_assembly_hash"):
+              assert key in d, "release_info.json is missing %s" % key
+          assert d["version"], "release_info.json version is empty"
+          print("release_info.json verified:", d["version"], d["commit"][:12])
+          PY
+
       - name: Package unsigned IPA
         run: |
           mkdir -p build/Payload
@@ -232,9 +270,10 @@ jobs:
 
       - name: Sanity check IPA
         run: |
-          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Frameworks/)' || true
+          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|release_info.json|Frameworks/)' || true
           test -f build/Payload/sts2.app/sts2
           test -f build/Payload/sts2.app/sts2.pck
+          test -f build/Payload/sts2.app/release_info.json
           du -sh build/Payload/sts2.app
 
       - name: Upload unsigned IPA

@@ -82,10 +82,93 @@ public class NullPlatformUtilStrategy : IPlatformUtilStrategy
 
 	public void OpenVirtualKeyboard()
 	{
+		// On mobile the OS keyboard is the only way to type, and there is no Steam Deck style
+		// floating overlay to fall back on. Godot's own LineEdit/TextEdit already call
+		// DisplayServer.VirtualKeyboardShow when they receive a mouse-up, but that path only fires
+		// once the control has focus, and NMegaLineEdit/NMegaTextEdit call this method on the very
+		// first tap - the same tap that grants focus. Driving the display server directly here makes
+		// the first tap show the keyboard instead of silently swallowing it.
+		if (!DisplayServer.HasFeature(DisplayServer.Feature.VirtualKeyboard))
+		{
+			return;
+		}
+		Control? focused = (Engine.GetMainLoop() as SceneTree)?.Root?.GuiGetFocusOwner();
+		if (focused is LineEdit lineEdit)
+		{
+			DisplayServer.VirtualKeyboardShow(lineEdit.Text, lineEdit.GetGlobalRect(), ToDisplayServerKeyboardType(lineEdit.VirtualKeyboardType), lineEdit.MaxLength, lineEdit.CaretColumn);
+		}
+		else if (focused is TextEdit textEdit)
+		{
+			DisplayServer.VirtualKeyboardShow(textEdit.Text, textEdit.GetGlobalRect(), DisplayServer.VirtualKeyboardType.Multiline, -1, GetTextEditCaretOffset(textEdit), GetTextEditCaretEnd(textEdit));
+		}
+		else
+		{
+			// Nothing owns the focus, so there is no text to edit and no caret to place. Showing an
+			// empty keyboard here would leave the player typing into a void with no way to commit,
+			// so stay quiet instead.
+			Log.Warn($"OpenVirtualKeyboard called with no text control focused ({focused?.GetType().Name ?? "null"}).");
+		}
 	}
 
 	public void CloseVirtualKeyboard()
 	{
+		if (DisplayServer.HasFeature(DisplayServer.Feature.VirtualKeyboard))
+		{
+			DisplayServer.VirtualKeyboardHide();
+		}
+	}
+
+	/// <summary>
+	/// Maps Godot's LineEdit keyboard hint enum onto the display server's own enum. The two are
+	/// declared separately in the engine even though they carry the same values today.
+	/// </summary>
+	private static DisplayServer.VirtualKeyboardType ToDisplayServerKeyboardType(LineEdit.VirtualKeyboardTypeEnum type)
+	{
+		return type switch
+		{
+			LineEdit.VirtualKeyboardTypeEnum.Number => DisplayServer.VirtualKeyboardType.Number,
+			LineEdit.VirtualKeyboardTypeEnum.NumberDecimal => DisplayServer.VirtualKeyboardType.NumberDecimal,
+			LineEdit.VirtualKeyboardTypeEnum.Phone => DisplayServer.VirtualKeyboardType.Phone,
+			LineEdit.VirtualKeyboardTypeEnum.EmailAddress => DisplayServer.VirtualKeyboardType.EmailAddress,
+			LineEdit.VirtualKeyboardTypeEnum.Password => DisplayServer.VirtualKeyboardType.Password,
+			LineEdit.VirtualKeyboardTypeEnum.Url => DisplayServer.VirtualKeyboardType.Url,
+			LineEdit.VirtualKeyboardTypeEnum.Multiline => DisplayServer.VirtualKeyboardType.Multiline,
+			_ => DisplayServer.VirtualKeyboardType.Default,
+		};
+	}
+
+	/// <summary>
+	/// Character offset of the caret from the start of a <see cref="T:Godot.TextEdit" />, which is
+	/// what the virtual keyboard wants for cursor placement.
+	/// </summary>
+	private static int GetTextEditCaretOffset(TextEdit textEdit)
+	{
+		int caretLine = textEdit.GetCaretLine();
+		int offset = 0;
+		for (int i = 0; i < caretLine; i++)
+		{
+			offset += textEdit.GetLine(i).Length + 1;
+		}
+		return offset + textEdit.GetCaretColumn();
+	}
+
+	/// <summary>
+	/// Same as <see cref="M:MegaCrit.Sts2.Core.Platform.Null.NullPlatformUtilStrategy.GetTextEditCaretOffset(Godot.TextEdit)" />
+	/// but for the far end of the selection, so the keyboard can mirror the current selection.
+	/// </summary>
+	private static int GetTextEditCaretEnd(TextEdit textEdit)
+	{
+		if (!textEdit.HasSelection())
+		{
+			return -1;
+		}
+		int line = textEdit.GetSelectionToLine();
+		int offset = 0;
+		for (int i = 0; i < line; i++)
+		{
+			offset += textEdit.GetLine(i).Length + 1;
+		}
+		return offset + textEdit.GetSelectionToColumn();
 	}
 
 	public void SetRichPresence(string token, string? playerGroup, int? groupSize)
@@ -145,6 +228,14 @@ public class NullPlatformUtilStrategy : IPlatformUtilStrategy
 
 	public SupportedWindowMode GetSupportedWindowMode()
 	{
+		// Handheld platforms have no window manager: the app is always fullscreen and there is no
+		// second display to move to. Reporting FullscreenOnly makes ApplyDisplaySettings force the
+		// fullscreen branch and makes the settings screen hide the fullscreen toggle, which would
+		// otherwise look tappable but do nothing.
+		if (OS.HasFeature("mobile"))
+		{
+			return SupportedWindowMode.FullscreenOnly;
+		}
 		return SupportedWindowMode.Any;
 	}
 }

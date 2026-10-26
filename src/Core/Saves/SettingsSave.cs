@@ -37,7 +37,16 @@ public class SettingsSave : ISaveSchema
 	public bool Fullscreen { get; set; } = true;
 
 	[JsonPropertyName("aspect_ratio")]
-	public AspectRatioSetting AspectRatioSetting { get; set; } = AspectRatioSetting.SixteenByNine;
+	public AspectRatioSetting AspectRatioSetting { get; set; } = DefaultAspectRatioSetting;
+
+	/// <summary>
+	/// The aspect ratio a fresh settings file starts with.
+	/// On desktop the game ships a fixed 16:9 canvas, which is what the art was authored against.
+	/// Handheld displays are almost never 16:9 (iPhone 16 Pro is 2796x1290, about 2.167:1), so a fixed
+	/// 16:9 canvas would be letterboxed with black bars on the left and right. Auto lets the canvas follow
+	/// the device instead, which is what every other mobile build of a desktop game does.
+	/// </summary>
+	public static AspectRatioSetting DefaultAspectRatioSetting => OS.HasFeature("mobile") ? AspectRatioSetting.Auto : AspectRatioSetting.SixteenByNine;
 
 	[JsonPropertyName("target_display")]
 	public int TargetDisplay { get; set; } = -1;

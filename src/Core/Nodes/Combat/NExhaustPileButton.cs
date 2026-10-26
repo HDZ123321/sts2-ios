@@ -121,7 +121,7 @@ public class NExhaustPileButton : NCombatCardPile
 
 	protected override void SetAnimInOutPositions()
 	{
-		_showPosition = NGame.Instance.Size - _posOffset;
+		_showPosition = NGame.Instance.SafeAreaEnd - _posOffset;
 		_hidePosition = _showPosition + _hideOffset;
 	}
 
