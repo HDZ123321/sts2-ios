@@ -617,10 +617,19 @@ public class NGame : Control
 		// AspectRatioSetting.Auto (expand) the two are equal; with a fixed aspect ratio (keep) the
 		// smaller one is the scale that actually got applied and the other axis is letterboxed.
 		float uniformScale = Mathf.Min(visibleRect.Size.X / windowSize.X, visibleRect.Size.Y / windowSize.Y);
-		Vector2 insetMin = new Vector2(safeArea.Position.X, safeArea.Position.Y) * uniformScale;
-		Vector2 insetMax = new Vector2(safeArea.Position.X + safeArea.Size.X, safeArea.Position.Y + safeArea.Size.Y) * uniformScale;
-		Vector2 safeMin = visibleRect.Position + insetMin;
-		Vector2 safeMax = visibleRect.Position + insetMax;
+		// The safe area is reported in screen pixels measured from the top-left of the window, while
+		// SafeAreaRect has to be in canvas units measured from the top-left of the canvas. Those two
+		// origins only coincide when the canvas fills the window. With a fixed aspect ratio Godot
+		// centres the canvas and attaches it at Rect2(margin, screen_size) - see the
+		// CONTENT_SCALE_MODE_CANVAS_ITEMS branch of Window::_update_viewport_size - so the canvas
+		// origin sits `margin` pixels inside the window and has to be subtracted first.
+		// visibleRect.Size / uniformScale recovers screen_size in pixels, so half the difference is
+		// exactly that margin. With Auto the canvas fills the window and this is zero.
+		Vector2 letterboxMargin = (new Vector2(windowSize.X, windowSize.Y) - visibleRect.Size / uniformScale) * 0.5f;
+		Vector2 safePixelsMin = new Vector2(safeArea.Position.X, safeArea.Position.Y);
+		Vector2 safePixelsMax = new Vector2(safeArea.Position.X + safeArea.Size.X, safeArea.Position.Y + safeArea.Size.Y);
+		Vector2 safeMin = visibleRect.Position + (safePixelsMin - letterboxMargin) * uniformScale;
+		Vector2 safeMax = visibleRect.Position + (safePixelsMax - letterboxMargin) * uniformScale;
 		// Clamp to the visible rect: a display server that reports a bogus safe area (or a window that
 		// is momentarily 0-sized while the device rotates) must never produce a negative extent.
 		safeMin = new Vector2(Mathf.Max(safeMin.X, visibleRect.Position.X), Mathf.Max(safeMin.Y, visibleRect.Position.Y));
