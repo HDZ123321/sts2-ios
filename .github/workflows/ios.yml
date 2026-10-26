@@ -200,12 +200,25 @@ jobs:
           print('NSMicrophoneUsageDescription = %r' % mic)
           PY
 
-      - name: Verify fmod flat-namespace imports are weak
+      - name: Weaken fmod flat-namespace binds in the archived framework
         run: |
           set -euo pipefail
           APP="build/sts2.xcarchive/Products/Applications/sts2.app"
-          python3 tools/verify_fmod_syms.py             "$APP/Frameworks/fmod.ios.template_release.framework/fmod.ios.template_release"
-          echo "fmod can now dlopen even though _load_all_fmod_plugins is undefined"
+          FMOD="$APP/Frameworks/fmod.ios.template_release.framework/fmod.ios.template_release"
+          cp "$FMOD" "$RUNNER_TEMP/fmod.orig"
+          # Godot opens the framework with RTLD_NOW, so dyld resolves every bind
+          # eagerly. _load_all_fmod_plugins is defined nowhere, one miss kills the
+          # whole dlopen and the GDExtension never registers (no BGM, most SFX
+          # silent). N_WEAK_REF in the nlist does nothing here: dyld4 takes weak
+          # semantics from the bind opcode flags, not from n_desc. So flip the
+          # opcode immediate 0x40 -> 0x41 for all 30 flat-namespace binds.
+          python3 tools/weaken_fmod_bind.py "$FMOD"
+          python3 tools/weaken_fmod_bind.py --check "$FMOD"
+          if cmp -s "$FMOD" "$RUNNER_TEMP/fmod.orig"; then
+            echo "::error::fmod dylib unchanged - bind weakening did not run"
+            exit 1
+          fi
+          echo "flat-namespace binds are weak imports; dlopen will succeed"
 
       - name: Package unsigned IPA
         run: |
