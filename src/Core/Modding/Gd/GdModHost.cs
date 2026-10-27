@@ -59,10 +59,20 @@ public partial class GdModHost : Node
 			Name = "GdModHost"
 		};
 		parent.AddChildSafely(host);
+		host.Start();
 		return host;
 	}
 
-	public override void _Ready()
+	/// <summary>
+	/// Does the work that would normally live in <c>_Ready</c>.
+	///
+	/// It cannot live in <c>_Ready</c>: Godot only dispatches <c>_Ready</c> to nodes that carry a
+	/// script registered with the C# script bridge (a <c>[ScriptPath]</c> type, or a node the editor
+	/// instantiated). This host is built with <c>new</c> from the game's own C#, so no script is
+	/// attached and its <c>_Ready</c> is never dispatched. Calling the startup sequence explicitly is
+	/// the whole reason this method exists and is public.
+	/// </summary>
+	public void Start()
 	{
 		GdModRuntime.ModRoot = this;
 		InstallApi();
@@ -87,6 +97,7 @@ public partial class GdModHost : Node
 			Name = "Sts2Api"
 		};
 		this.AddChildSafely(api);
+		api.Activate();
 	}
 
 	/// <summary>

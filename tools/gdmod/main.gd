@@ -44,6 +44,23 @@ func on_run_started(run) -> void:
 ## combat is a handle to the CombatState.
 func on_combat_started(combat) -> void:
 	Sts2.log("example_gd: combat started")
+	_selftest(combat)
+
+
+## Walks the read path, the write path and one hook round trip in a single pass, so a run of this
+## mod is enough to prove the bridge is wired end to end. Delete this method to silence it.
+func _selftest(combat) -> void:
+	var enemies = Sts2.enemies(combat)
+	Sts2.log("example_gd: selftest enemies=%d" % enemies.size())
+	if enemies.is_empty():
+		return
+	var enemy = enemies[0]
+	var before = Sts2.creature_hp(enemy)
+	var block = Sts2.creature_block(enemy)
+	Sts2.log("example_gd: selftest target=%s hp=%d block=%d" % [Sts2.creature_name(enemy), before, block])
+	Sts2.damage(enemy, 6)
+	var after = Sts2.creature_hp(enemy)
+	Sts2.log("example_gd: selftest hp %d -> %d (delta %d)" % [before, after, before - after])
 
 
 ## combat is a handle to the CombatState.

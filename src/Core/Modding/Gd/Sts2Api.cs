@@ -119,6 +119,20 @@ public class Sts2Api : Godot.Node
 
 	public override void _Ready()
 	{
+		Activate();
+	}
+
+	/// <summary>
+	/// Registers the singleton. Called by <see cref="GdModHost.InstallApi"/> directly as well,
+	/// because a node built with <c>new</c> from C# carries no script and therefore never receives the
+	/// <c>_Ready</c> notification. Guarded so both paths agreeing costs nothing.
+	/// </summary>
+	public void Activate()
+	{
+		if (Instance == this)
+		{
+			return;
+		}
 		Instance = this;
 		Engine.RegisterSingleton(SingletonName, this);
 		Log.Info("[GdMod] Sts2Api registered as singleton 'Sts2'");
@@ -217,46 +231,44 @@ public class Sts2Api : Godot.Node
 	}
 
 	// ---------------------------------------------------------------- combat collections
+	//
+	// Each of these takes the combat handle it was handed by the host. The host fires
+	// on_combat_started(combat), on_turn_started(combat) and friends, so a mod almost always has one
+	// in hand; an empty handle falls back to whatever combat is currently running. The parameter is
+	// not optional in the C# sense because Godot requires a fixed arity per method, and a mod that
+	// passes one argument to a zero-argument method has its call dropped outright.
 
-	public Godot.Collections.Array<string> allies()
+	/// <summary>Creatures fighting alongside the local player. Pass "" for the current combat.</summary>
+	public Godot.Collections.Array<string> allies(string combatHandle)
 	{
-		Godot.Collections.Array<string> result = new Godot.Collections.Array<string>();
-		CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
-		if (combat == null)
-		{
-			return result;
-		}
-		foreach (Creature creature in combat.Allies)
-		{
-			result.Add(GdModRuntime.HandleFor(creature));
-		}
-		return result;
+		return CollectCreatures(ResolveCombat(combatHandle)?.Allies);
 	}
 
-	public Godot.Collections.Array<string> enemies()
+	/// <summary>Creatures fighting the local player. Pass "" for the current combat.</summary>
+	public Godot.Collections.Array<string> enemies(string combatHandle)
 	{
-		Godot.Collections.Array<string> result = new Godot.Collections.Array<string>();
-		CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
-		if (combat == null)
-		{
-			return result;
-		}
-		foreach (Creature creature in combat.Enemies)
-		{
-			result.Add(GdModRuntime.HandleFor(creature));
-		}
-		return result;
+		return CollectCreatures(ResolveCombat(combatHandle)?.Enemies);
 	}
 
-	public Godot.Collections.Array<string> hittable_enemies()
+	/// <summary>Enemies that can be targeted right now. Pass "" for the current combat.</summary>
+	public Godot.Collections.Array<string> hittable_enemies(string combatHandle)
+	{
+		return CollectCreatures(ResolveCombat(combatHandle)?.HittableEnemies);
+	}
+
+	private static CombatState? ResolveCombat(string handle)
+	{
+		return GdModRuntime.Resolve<CombatState>(handle) ?? CombatManager.Instance.DebugOnlyGetState();
+	}
+
+	private static Godot.Collections.Array<string> CollectCreatures(IEnumerable<Creature>? creatures)
 	{
 		Godot.Collections.Array<string> result = new Godot.Collections.Array<string>();
-		CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
-		if (combat == null)
+		if (creatures == null)
 		{
 			return result;
 		}
-		foreach (Creature creature in combat.HittableEnemies)
+		foreach (Creature creature in creatures)
 		{
 			result.Add(GdModRuntime.HandleFor(creature));
 		}
@@ -509,12 +521,17 @@ public class Sts2Api : Godot.Node
 
 	// ---------------------------------------------------------------- mutate: creature
 
+	/// <summary>
+	/// Deals real attack damage: block first, then HP, through the full damage pipeline so every
+	/// damage hook fires and powers react. The amount is raw damage before modifiers, exactly as a
+	/// card would declare it.
+	/// </summary>
 	public void damage(string creatureHandle, double amount)
 	{
 		Creature? creature = GdModRuntime.Resolve<Creature>(creatureHandle);
 		if (creature != null)
 		{
-			creature.DamageBlockInternal((decimal)amount, ValueProp.Move);
+			GdModRuntime.Fire(CreatureCmd.Damage(Ctx, creature, (decimal)amount, ValueProp.Move, null, null), "damage");
 		}
 	}
 
@@ -668,9 +685,9 @@ public class Sts2Api : Godot.Node
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.Allies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.Enemies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.HittableEnemies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.Allies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo> { new PropertyInfo(Variant.Type.String, "combatHandle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false) }, null));
+		list.Add(new MethodInfo(MethodName.Enemies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo> { new PropertyInfo(Variant.Type.String, "combatHandle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false) }, null));
+		list.Add(new MethodInfo(MethodName.HittableEnemies, new PropertyInfo(Variant.Type.Array, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo> { new PropertyInfo(Variant.Type.String, "combatHandle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false) }, null));
 		list.Add(new MethodInfo(MethodName.PlayerGold, new PropertyInfo(Variant.Type.Int, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -920,19 +937,19 @@ public class Sts2Api : Godot.Node
 			ret = VariantUtils.CreateFrom<int>(get_power_amount(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
-		if (method == MethodName.Allies && args.Count == 0)
+		if (method == MethodName.Allies && args.Count == 1)
 		{
-			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(allies());
+			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(allies(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
-		if (method == MethodName.Enemies && args.Count == 0)
+		if (method == MethodName.Enemies && args.Count == 1)
 		{
-			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(enemies());
+			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(enemies(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
-		if (method == MethodName.HittableEnemies && args.Count == 0)
+		if (method == MethodName.HittableEnemies && args.Count == 1)
 		{
-			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(hittable_enemies());
+			ret = VariantUtils.CreateFrom<Godot.Collections.Array<string>>(hittable_enemies(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
 		if (method == MethodName.PlayerGold && args.Count == 1)
