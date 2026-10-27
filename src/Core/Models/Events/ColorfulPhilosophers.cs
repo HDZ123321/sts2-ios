@@ -15,13 +15,14 @@ namespace MegaCrit.Sts2.Core.Models.Events;
 
 public sealed class ColorfulPhilosophers : EventModel
 {
-	private static IEnumerable<CardPoolModel> CardPoolColorOrder => new global::_003C_003Ez__ReadOnlyArray<CardPoolModel>(new CardPoolModel[5]
+	private static IEnumerable<CardPoolModel> CardPoolColorOrder => new global::_003C_003Ez__ReadOnlyArray<CardPoolModel>(new CardPoolModel[6]
 	{
 		ModelDb.CardPool<NecrobinderCardPool>(),
 		ModelDb.CardPool<IroncladCardPool>(),
 		ModelDb.CardPool<RegentCardPool>(),
 		ModelDb.CardPool<SilentCardPool>(),
-		ModelDb.CardPool<DefectCardPool>()
+		ModelDb.CardPool<DefectCardPool>(),
+		ModelDb.CardPool<global::Watcher.Code.Character.WatcherCardPool>()
 	});
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new CardsVar(3));

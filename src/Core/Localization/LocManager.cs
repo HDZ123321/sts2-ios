@@ -469,10 +469,28 @@ public class LocManager
 					dictionary4 = dictionary4.ToDictionary((KeyValuePair<string, string> kvp) => kvp.Key, (KeyValuePair<string, string> kvp) => ConvertToW(kvp.Value));
 				}
 				locTable.MergeWith(dictionary4);
+				if (BakedContent.IsBakedLocTable(moddedLocTable))
+				{
+					locTable.MergeWith(BakedContent.WithUnprefixedAliases(dictionary4));
+				}
 			}
 			dictionary2[fileNameWithoutExtension] = locTable;
 		}
 		return (tables: dictionary2, overridesActive: item, validationErrors: list);
+	}
+
+	/// <summary>
+	/// Adds entries to an already loaded table. Used for content that ships inside the build
+	/// and therefore has no localization file of its own.
+	/// </summary>
+	public void AddEntries(string tableName, Dictionary<string, string> entries)
+	{
+		if (!_tables.TryGetValue(tableName, out LocTable value))
+		{
+			Log.Error("Cannot add entries to unknown localization table " + tableName);
+			return;
+		}
+		value.MergeWith(entries);
 	}
 
 	public LocTable GetTable(string name)

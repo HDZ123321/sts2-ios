@@ -125,7 +125,7 @@ public abstract class CardModel : AbstractModel
 
 	public LocString Description => new LocString("cards", base.Id.Entry + ".description");
 
-	protected LocString SelectionScreenPrompt
+	public LocString SelectionScreenPrompt
 	{
 		get
 		{

@@ -75,7 +75,7 @@ public abstract class CharacterModel : AbstractModel
 
 	public LocString EventDeathPreventionLine => new LocString("characters", base.Id.Entry + ".eventDeathPrevention");
 
-	public string TrailPath => SceneHelper.GetScenePath("vfx/card_trail_" + base.Id.Entry.ToLowerInvariant());
+	public virtual string TrailPath => SceneHelper.GetScenePath("vfx/card_trail_" + base.Id.Entry.ToLowerInvariant());
 
 	public abstract int StartingHp { get; }
 
@@ -101,13 +101,13 @@ public abstract class CharacterModel : AbstractModel
 
 	public virtual IReadOnlyList<PotionModel> StartingPotions => Array.Empty<PotionModel>();
 
-	private string VisualsPath => SceneHelper.GetScenePath("creature_visuals/" + base.Id.Entry.ToLowerInvariant());
+	protected virtual string VisualsPath => SceneHelper.GetScenePath("creature_visuals/" + base.Id.Entry.ToLowerInvariant());
 
-	private string IconTexturePath => ImageHelper.GetImagePath("ui/top_panel/character_icon_" + base.Id.Entry.ToLowerInvariant() + ".png");
+	protected virtual string IconTexturePath => ImageHelper.GetImagePath("ui/top_panel/character_icon_" + base.Id.Entry.ToLowerInvariant() + ".png");
 
 	public Texture2D IconTexture => PreloadManager.Cache.GetTexture2D(IconTexturePath);
 
-	private string IconOutlineTexturePath => ImageHelper.GetImagePath("ui/top_panel/character_icon_" + base.Id.Entry.ToLowerInvariant() + "_outline.png");
+	protected virtual string IconOutlineTexturePath => ImageHelper.GetImagePath("ui/top_panel/character_icon_" + base.Id.Entry.ToLowerInvariant() + "_outline.png");
 
 	public Texture2D IconOutlineTexture => PreloadManager.Cache.GetTexture2D(IconOutlineTexturePath);
 
@@ -115,25 +115,25 @@ public abstract class CharacterModel : AbstractModel
 
 	public Control Icon => PreloadManager.Cache.GetScene(IconPath).Instantiate<Control>(PackedScene.GenEditState.Disabled);
 
-	public string EnergyCounterPath => SceneHelper.GetScenePath("combat/energy_counters/" + base.Id.Entry.ToLowerInvariant() + "_energy_counter");
+	public virtual string EnergyCounterPath => SceneHelper.GetScenePath("combat/energy_counters/" + base.Id.Entry.ToLowerInvariant() + "_energy_counter");
 
-	public string MerchantAnimPath => SceneHelper.GetScenePath("merchant/characters/" + base.Id.Entry.ToLowerInvariant() + "_merchant");
+	public virtual string MerchantAnimPath => SceneHelper.GetScenePath("merchant/characters/" + base.Id.Entry.ToLowerInvariant() + "_merchant");
 
-	public string RestSiteAnimPath => SceneHelper.GetScenePath("rest_site/characters/" + base.Id.Entry.ToLowerInvariant() + "_rest_site");
+	public virtual string RestSiteAnimPath => SceneHelper.GetScenePath("rest_site/characters/" + base.Id.Entry.ToLowerInvariant() + "_rest_site");
 
-	private string ArmPointingTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_point.png");
+	protected virtual string ArmPointingTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_point.png");
 
 	public Texture2D ArmPointingTexture => PreloadManager.Cache.GetTexture2D(ArmPointingTexturePath);
 
-	private string ArmRockTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_rock.png");
+	protected virtual string ArmRockTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_rock.png");
 
 	public Texture2D ArmRockTexture => PreloadManager.Cache.GetTexture2D(ArmRockTexturePath);
 
-	private string ArmPaperTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_paper.png");
+	protected virtual string ArmPaperTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_paper.png");
 
 	public Texture2D ArmPaperTexture => PreloadManager.Cache.GetTexture2D(ArmPaperTexturePath);
 
-	private string ArmScissorsTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_scissors.png");
+	protected virtual string ArmScissorsTexturePath => ImageHelper.GetImagePath("ui/hands/multiplayer_hand_" + base.Id.Entry.ToLowerInvariant() + "_scissors.png");
 
 	public Texture2D ArmScissorsTexture => PreloadManager.Cache.GetTexture2D(ArmScissorsTexturePath);
 
@@ -145,7 +145,7 @@ public abstract class CharacterModel : AbstractModel
 
 	public string CharacterSelectDesc => base.Id.Entry.ToUpperInvariant() + ".description";
 
-	public string CharacterSelectBg => SceneHelper.GetScenePath("screens/char_select/char_select_bg_" + base.Id.Entry.ToLowerInvariant());
+	public virtual string CharacterSelectBg => SceneHelper.GetScenePath("screens/char_select/char_select_bg_" + base.Id.Entry.ToLowerInvariant());
 
 	protected virtual string CharacterSelectIconPath => ImageHelper.GetImagePath("packed/character_select/char_select_" + base.Id.Entry.ToLowerInvariant() + ".png");
 
@@ -155,7 +155,7 @@ public abstract class CharacterModel : AbstractModel
 
 	public CompressedTexture2D CharacterSelectLockedIcon => ResourceLoader.Load<CompressedTexture2D>(CharacterSelectLockedIconPath, null, ResourceLoader.CacheMode.Reuse);
 
-	public string CharacterSelectTransitionPath => "res://materials/transitions/" + base.Id.Entry.ToLowerInvariant() + "_transition_mat.tres";
+	public virtual string CharacterSelectTransitionPath => "res://materials/transitions/" + base.Id.Entry.ToLowerInvariant() + "_transition_mat.tres";
 
 	protected virtual string MapMarkerPath => ImageHelper.GetImagePath("packed/map/icons/map_marker_" + base.Id.Entry.ToLowerInvariant() + ".png");
 
@@ -195,7 +195,7 @@ public abstract class CharacterModel : AbstractModel
 
 	public virtual string CharacterSelectSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_select";
 
-	public string AttackSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_attack";
+	public virtual string AttackSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_attack";
 
 	public string CastSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_cast";
 

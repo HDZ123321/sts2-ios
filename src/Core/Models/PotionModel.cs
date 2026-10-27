@@ -62,9 +62,9 @@ public abstract class PotionModel : AbstractModel
 		}
 	}
 
-	private string PackedImagePath => ImageHelper.GetImagePath("atlases/potion_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
+	protected virtual string PackedImagePath => ImageHelper.GetImagePath("atlases/potion_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
 
-	private string PackedOutlinePath => ImageHelper.GetImagePath("atlases/potion_outline_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
+	protected virtual string PackedOutlinePath => ImageHelper.GetImagePath("atlases/potion_outline_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
 
 	public string ImagePath => PackedImagePath;
 

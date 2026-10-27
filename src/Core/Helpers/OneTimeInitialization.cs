@@ -48,6 +48,7 @@ public static class OneTimeInitialization
 			return;
 		}
 		_state = State.VeryEarly;
+		BakedContent.Mount();
 		if (TestMode.IsOn)
 		{
 			SettingsReadResult = SaveManager.Instance.InitSettingsDataForTest();
@@ -77,9 +78,13 @@ public static class OneTimeInitialization
 		ResourceLoader.AddResourceFormatLoader(_atlasResourceLoader, atFront: true);
 		AtlasManager.LoadEssentialAtlases();
 		LocManager.Initialize();
+		BakedContent.InjectLocEntries();
 		ModelDb.Init();
 		ModelIdSerializationCache.Init();
 		ModelDb.InitIds();
+		// The Watcher stance models are per-player state rather than canonical models,
+		// so they subscribe to the combat hook chain on their own.
+		global::Watcher.Code.Events.WatcherSubscriber.Subscribe();
 		MessageTypes.Initialize();
 		ActionTypes.Initialize();
 	}

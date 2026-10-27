@@ -168,7 +168,7 @@ public class NRestSiteCharacter : Node2D
 
 	private Control _rightThoughtAnchor;
 
-	private int _characterIndex;
+	public int _characterIndex;
 
 	private NThoughtBubbleVfx? _thoughtBubbleVfx;
 

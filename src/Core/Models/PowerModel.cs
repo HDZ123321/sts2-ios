@@ -101,9 +101,9 @@ public abstract class PowerModel : AbstractModel
 		}
 	}
 
-	public string PackedIconPath => ImageHelper.GetImagePath("atlases/power_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
+	public virtual string PackedIconPath => ImageHelper.GetImagePath("atlases/power_atlas.sprites/" + base.Id.Entry.ToLowerInvariant() + ".tres");
 
-	private string BigIconPath => ImageHelper.GetImagePath("powers/" + base.Id.Entry.ToLowerInvariant() + ".png");
+	protected virtual string BigIconPath => ImageHelper.GetImagePath("powers/" + base.Id.Entry.ToLowerInvariant() + ".png");
 
 	private string BigBetaIconPath => ImageHelper.GetImagePath("powers/beta/" + base.Id.Entry.ToLowerInvariant() + ".png");
 
@@ -447,7 +447,7 @@ public abstract class PowerModel : AbstractModel
 		this.PulsingStopped?.Invoke();
 	}
 
-	protected void Flash()
+	public void Flash()
 	{
 		this.Flashed?.Invoke(this);
 	}

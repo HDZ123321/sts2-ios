@@ -22,6 +22,10 @@ public static class ModelDb
 
 	private static readonly Dictionary<ModelId, AbstractModel> _contentById = new Dictionary<ModelId, AbstractModel>(4096);
 
+	private static Dictionary<ModelId, Type> _typeById;
+
+	private static readonly HashSet<ModelId> _resolving = new HashSet<ModelId>();
+
 	private static IEnumerable<CardModel>? _allCards;
 
 	private static IEnumerable<CardPoolModel>? _allCardPools;
@@ -120,13 +124,14 @@ public static class ModelDb
 	/// <summary>
 	/// Get all the characters in the game (ignores Unlocks/Epoch state).
 	/// </summary>
-	public static IEnumerable<CharacterModel> AllCharacters => new global::_003C_003Ez__ReadOnlyArray<CharacterModel>(new CharacterModel[5]
+	public static IEnumerable<CharacterModel> AllCharacters => new global::_003C_003Ez__ReadOnlyArray<CharacterModel>(new CharacterModel[6]
 	{
 		Character<Ironclad>(),
 		Character<Silent>(),
 		Character<Regent>(),
 		Character<Necrobinder>(),
-		Character<Defect>()
+		Character<Defect>(),
+		Character<global::Watcher.Code.Character.Watcher>()
 	});
 
 	/// <summary>
@@ -392,9 +397,56 @@ public static class ModelDb
 		foreach (Type type in allAbstractModelSubtypes)
 		{
 			ModelId id = GetId(type);
+			if (_contentById.ContainsKey(id))
+			{
+				// A constructor earlier in this loop already pulled the type in through
+				// GetById (see TryResolveMissing); rebuilding it would trip the
+				// DuplicateModelException guard in AbstractModel's constructor.
+				continue;
+			}
 			AbstractModel value = (AbstractModel)Activator.CreateInstance(type);
 			_contentById[id] = value;
 		}
+	}
+
+	/// <summary>
+	/// Constructs and registers the model behind <paramref name="id"/> if that type is a known subtype
+	/// but has not been built yet. Model constructors may query other models (the ported Watcher card
+	/// Alpha does, for Beta's hover tip), and the subtype table order does not guarantee that the
+	/// other model exists at that point.
+	/// </summary>
+	private static bool TryResolveMissing(ModelId id)
+	{
+		EnsureTypeIndex();
+		if (!_typeById.TryGetValue(id, out Type value) || _resolving.Contains(id))
+		{
+			return false;
+		}
+		_resolving.Add(id);
+		try
+		{
+			Inject(value);
+		}
+		finally
+		{
+			_resolving.Remove(id);
+		}
+		return _contentById.ContainsKey(id);
+	}
+
+	private static void EnsureTypeIndex()
+	{
+		if (_typeById != null)
+		{
+			return;
+		}
+		Dictionary<ModelId, Type> dictionary = new Dictionary<ModelId, Type>();
+		Type[] allAbstractModelSubtypes = AllAbstractModelSubtypes;
+		foreach (Type type in allAbstractModelSubtypes)
+		{
+			dictionary[GetId(type)] = type;
+		}
+		_typeById = dictionary;
 	}
 
 	/// <summary>
@@ -488,9 +540,19 @@ public static class ModelDb
 		return ModelId.SlugifyCategory(GetCategoryType(type).Name);
 	}
 
+	/// <summary>The prefix the content was published under, kept so existing saves still resolve.</summary>
+	private const string ModNamespaceRoot = "Watcher.Code";
+
+	private const string ModEntryPrefix = "WATCHER-";
+
 	public static string GetEntry(Type type)
 	{
-		return StringHelper.Slugify(type.Name);
+		string slug = StringHelper.Slugify(type.Name);
+		if (type.Namespace != null && type.Namespace.StartsWith(ModNamespaceRoot, StringComparison.Ordinal))
+		{
+			return ModEntryPrefix + slug;
+		}
+		return slug;
 	}
 
 	public static T? GetByIdOrNull<T>(ModelId id) where T : AbstractModel
@@ -498,6 +560,10 @@ public static class ModelDb
 		if (_contentById.TryGetValue(id, out AbstractModel value))
 		{
 			return (T)value;
+		}
+		if (TryResolveMissing(id) && _contentById.TryGetValue(id, out AbstractModel value2))
+		{
+			return (T)value2;
 		}
 		return null;
 	}
@@ -515,7 +581,7 @@ public static class ModelDb
 
 	private static T Get<T>() where T : AbstractModel
 	{
-		return (T)_contentById[GetId<T>()];
+		return GetById<T>(GetId<T>());
 	}
 
 	private static AbstractModel Get(Type type)

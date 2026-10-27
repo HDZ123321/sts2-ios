@@ -1,0 +1,45 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Godot;
+using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
+using MegaCrit.Sts2.Core.ValueProps;
+using Watcher.Code.Commands;
+using Watcher.Code.Vfx;
+
+namespace Watcher.Code.Stances;
+
+public class DivinityStance : WatcherStanceModel
+{
+	public override bool ShouldReceiveCombatHooks => true;
+
+	protected override StanceVfxConfig VfxConfig => new StanceVfxConfig("res://Watcher/scenes/watcher_mod/vfx/divinity_aura.tscn", new Color(1.1f, 0.7f, 1.4f), "res://Watcher/audio/divinity_enter.ogg", new Color(0.8f, 0.3f, 1f), ShakeStrength.Strong, "res://Watcher/audio/divinity_loop.ogg");
+
+	public override Task OnEnterStance(PlayerChoiceContext ctx, Player player, CardModel? source)
+	{
+		player.PlayerCombatState.GainEnergy(3m);
+		return base.OnEnterStance(ctx, player, source);
+	}
+
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	{
+		if (dealer == base.Owner.Creature && !props.HasFlag(ValueProp.Unpowered))
+		{
+			return 3m;
+		}
+		return 1m;
+	}
+
+	public override async Task BeforeSideTurnStart(PlayerChoiceContext ctx, CombatSide side, IReadOnlyList<Creature> participants, ICombatState combatState)
+	{
+		if (side == base.Owner.Creature.Side)
+		{
+			await StanceCmd.ExitStance(ctx, base.Owner, null);
+		}
+	}
+}

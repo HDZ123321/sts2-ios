@@ -33,6 +33,15 @@ public static class HoverTipFactory
 		return afflictionModel.HoverTips;
 	}
 
+	/// <summary>
+	/// Passes an already-built tip through the same call shape as the static enum
+	/// overload, so callers can mix the two without branching.
+	/// </summary>
+	public static IHoverTip Static(IHoverTip tip)
+	{
+		return tip;
+	}
+
 	public static IHoverTip FromKeyword(CardKeyword keyword)
 	{
 		if (!_keywordHoverTips.ContainsKey(keyword))

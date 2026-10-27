@@ -154,7 +154,7 @@ public class NCreatureVisuals : Node2D
 
 	private const double _baseLiquidOverlayDuration = 1.0;
 
-	private Node2D _body;
+	public Node2D _body;
 
 	private Node2D? _phobiaModeBody;
 

@@ -1156,6 +1156,10 @@ private static void WriteSafeModeMarker(string reason)
 				}
 			}
 		}
+		foreach (string bakedLocTable in BakedContent.GetLocTables(language, file))
+		{
+			yield return bakedLocTable;
+		}
 	}
 
 	/// <summary>

@@ -106,12 +106,21 @@ public sealed class PaelsEye : RelicModel
 		return Task.CompletedTask;
 	}
 
+	/// <summary>
+	/// Whether this relic is the one that asked for the current extra turn.  Several
+	/// effects can grant one at the same time, and only the relic that voted should
+	/// spend itself when the turn actually happens.
+	/// </summary>
+	private bool _votedForExtraTurn;
+
 	public override bool ShouldTakeExtraTurn(Player player)
 	{
 		if (!UsedThisCombat && !AnyCardsPlayedThisTurn() && WasOwnerPartOfLastPlayerTurn)
 		{
-			return player == base.Owner;
+			_votedForExtraTurn = player == base.Owner;
+			return _votedForExtraTurn;
 		}
+		_votedForExtraTurn = false;
 		return false;
 	}
 
@@ -129,10 +138,11 @@ public sealed class PaelsEye : RelicModel
 
 	public override Task AfterTakingExtraTurn(Player player)
 	{
-		if (player != base.Owner)
+		if (player != base.Owner || !_votedForExtraTurn)
 		{
 			return Task.CompletedTask;
 		}
+		_votedForExtraTurn = false;
 		Flash();
 		base.Status = RelicStatus.Normal;
 		UsedThisCombat = true;
@@ -141,6 +151,7 @@ public sealed class PaelsEye : RelicModel
 
 	public override Task AfterCombatEnd(CombatRoom _)
 	{
+		_votedForExtraTurn = false;
 		base.Status = RelicStatus.Normal;
 		UsedThisCombat = false;
 		return Task.CompletedTask;

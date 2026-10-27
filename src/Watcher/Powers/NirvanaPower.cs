@@ -1,0 +1,36 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using BaseLib.Hooks;
+using BaseLib.Utils;
+using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.HoverTips;
+using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.ValueProps;
+using Watcher.Code.Abstract;
+
+namespace Watcher.Code.Powers;
+
+public sealed class NirvanaPower : WatcherPowerModel, IAfterScryed
+{
+	public override PowerType Type => PowerType.Buff;
+
+	public override PowerStackType StackType => PowerStackType.Counter;
+
+	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlyArray<IHoverTip>(new IHoverTip[2]
+	{
+		HoverTipFactory.Static(StaticHoverTip.Block),
+		HoverTipFactory.Static(BaseLibTip.Scry)
+	});
+
+	public async Task AfterScryed(PlayerChoiceContext ctx, Player player, int scryAmount, int discardAmount, List<CardModel> seen, List<CardModel> discarded)
+	{
+		if (player == ((PowerModel)(object)this).Owner.Player)
+		{
+			await CreatureCmd.GainBlock(((PowerModel)(object)this).Owner, ((PowerModel)(object)this).Amount, ValueProp.Unpowered, null);
+			((PowerModel)(object)this).Flash();
+		}
+	}
+}
