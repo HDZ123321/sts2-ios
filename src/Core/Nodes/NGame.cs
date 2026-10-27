@@ -1153,6 +1153,7 @@ public class NGame : Control
 		}
 		await LoadMainMenu();
 		Log.Info($"[Startup] Time to main menu: {Time.GetTicksMsec():N0}ms");
+		ModManager.ResolveStartupWatchdog();
 		LogResourceStats("main menu loaded (essential)");
 		TaskHelper.RunSafely(LoadDeferredStartupAssetsAsync());
 		_joinCallbackHandler?.CheckForCommandLineJoin();
