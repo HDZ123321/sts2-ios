@@ -83,6 +83,7 @@ public class Sts2Api : Godot.Node
 		public static readonly StringName CardRarityName = "card_rarity";
 		public static readonly StringName CardUpgradeLevel = "card_upgrade_level";
 		public static readonly StringName CardOwner = "card_owner";
+		public static readonly StringName PlayerCreature = "player_creature";
 
 		public static readonly StringName ModelName = "model_name";
 		public static readonly StringName ModelId = "model_id";
@@ -416,6 +417,16 @@ public class Sts2Api : Godot.Node
 
 	// ---------------------------------------------------------------- model metadata
 
+	/// <summary>
+	/// Returns the handle of the creature a player is driving. Hooks hand out either a
+	/// <see cref="Player"/> handle or a <see cref="Creature"/> handle depending on the hook, and the
+	/// creature accessors only accept the latter, so this is the bridge between the two.
+	/// </summary>
+	public string player_creature(string handle)
+	{
+		return GdModRuntime.HandleFor(GdModRuntime.Resolve<Player>(handle)?.Creature);
+	}
+
 	public string model_name(string handle)
 	{
 		return GdModRuntime.Resolve<AbstractModel>(handle)?.Id.Entry ?? string.Empty;
@@ -729,6 +740,10 @@ public class Sts2Api : Godot.Node
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.PlayerCreature, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.ModelName, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -1005,6 +1020,11 @@ public class Sts2Api : Godot.Node
 			ret = VariantUtils.CreateFrom<string>(card_owner(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
+		if (method == MethodName.PlayerCreature && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<string>(player_creature(VariantUtils.ConvertTo<string>(in args[0])));
+			return true;
+		}
 		if (method == MethodName.ModelName && args.Count == 1)
 		{
 			ret = VariantUtils.CreateFrom<string>(model_name(VariantUtils.ConvertTo<string>(in args[0])));
@@ -1157,6 +1177,7 @@ public class Sts2Api : Godot.Node
 		if (method == MethodName.CardRarityName) { return true; }
 		if (method == MethodName.CardUpgradeLevel) { return true; }
 		if (method == MethodName.CardOwner) { return true; }
+		if (method == MethodName.PlayerCreature) { return true; }
 		if (method == MethodName.ModelName) { return true; }
 		if (method == MethodName.ModelId) { return true; }
 		if (method == MethodName.Log) { return true; }
