@@ -27,8 +27,8 @@ public static class ModManager
 	private static bool _allowInitForTests;
 
 	/// <summary>
-	/// True when this boot ran with mods suppressed. A suppressed boot must not disarm the watchdog,
-	/// otherwise a mod that crashes startup would crash again on every following launch.
+	/// True when this boot ran with mods suppressed, i.e. the previous two boots never reached the main
+	/// menu. A suppressed boot is the recovery boot: it has to make the recovery stick.
 	/// </summary>
 	private static bool _suppressedThisBoot;
 
@@ -84,13 +84,27 @@ public static class ModManager
 			State = ModManagerState.Skipped;
 			return;
 		}
-		if (IsModSuppressionRequested())
+		if (IsModSuppressionRequested(out int incompleteBoots, out bool manual))
 		{
-			_suppressedThisBoot = true;
-			Log.Warn("[Mods] mods are suppressed because " + SafeModeMarkerPath + " exists (" + ResolveModDirectory(SafeModeMarkerPath) + ")");
-			Log.Warn("[Mods] delete that file to let mods load again; the game will not clear it by itself");
-			State = ModManagerState.Skipped;
-			return;
+			if (manual)
+			{
+				Log.Warn("[Mods] mods are suppressed because " + SafeModeMarkerPath + " exists (" + ResolveModDirectory(SafeModeMarkerPath) + ")");
+				Log.Warn("[Mods] that file was written by hand, so the game leaves it alone; delete it to load mods again");
+				State = ModManagerState.Skipped;
+				return;
+			}
+			if (incompleteBoots <= IncompleteBootTolerance)
+			{
+				Log.Warn($"[Mods] the previous boot started with mods and never reached the main menu ({incompleteBoots} of {IncompleteBootTolerance} allowed). Loading mods normally this time; one more failure at startup will suppress them");
+			}
+			else
+			{
+				_suppressedThisBoot = true;
+				Log.Warn($"[Mods] mods are suppressed because the last {incompleteBoots} boots with mods never reached the main menu");
+				Log.Warn("[Mods] start the game once with mods off to switch them off in the save, then re-enable them one at a time");
+				State = ModManagerState.Skipped;
+				return;
+			}
 		}
 		if (TestMode.IsOn && !_allowInitForTests)
 		{
@@ -215,19 +229,43 @@ public static class ModManager
 	}
 
 	/// <summary>
-	/// True when the player asked for a clean boot after a mod broke startup.
+	/// How many consecutive boots may start with mods and never reach the main menu before the game
+	/// stops loading them. One is deliberate: a player who force-quits during the loading screen, or
+	/// whose device kills the app there, would otherwise lose every mod to a single accident.
+	/// </summary>
+	public const int IncompleteBootTolerance = 1;
+
+	/// <summary>
+	/// Reports whether mods must be suppressed this boot, and why.
 	///
 	/// <c>--nomods</c> cannot serve this on mobile: neither iOS nor Android hands a launch argument to
-	/// a shipped app. A marker file is the equivalent that works everywhere — the modding UI writes
-	/// it before restarting, and a successful boot deletes it, so the suppression lasts exactly one
-	/// launch.
+	/// a shipped app. A marker file is the equivalent that works everywhere.
+	///
+	/// The file holds a count of boots that started with mods and never reached the main menu, written
+	/// as <c>watchdog N</c>, or <c>manual</c> when the player created it themselves. The two cases are
+	/// kept apart on purpose: a watchdog file is the game's own bookkeeping and the resolver deletes it,
+	/// while a hand-written one is a request the game must not silently discard, because the player who
+	/// wrote it is in the middle of diagnosing something and expects it to stay until they say so.
 	/// </summary>
-	public static bool IsModSuppressionRequested()
+	public static bool IsModSuppressionRequested(out int incompleteBoots, out bool manual)
 	{
-		return Godot.FileAccess.FileExists(SafeModeMarkerPath);
+		incompleteBoots = 0;
+		manual = false;
+		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return false;
+		}
+		string text = ReadSafeModeMarker();
+		if (text.StartsWith("watchdog ", StringComparison.Ordinal) && int.TryParse(text.Substring("watchdog ".Length).Trim(), out int value))
+		{
+			incompleteBoots = Math.Max(value, 1);
+			return true;
+		}
+		manual = true;
+		return true;
 	}
 
-	/// <summary>Path of the one-shot safe-mode marker file.</summary>
+	/// <summary>Path of the safe-mode marker file.</summary>
 	public static string SafeModeMarkerPath => "user://nomods";
 
 	/// <summary>Arms safe mode by hand, for a player who already knows a mod is breaking the boot.</summary>
@@ -236,7 +274,17 @@ public static class ModManager
 		WriteSafeModeMarker("manual");
 	}
 
-	private static void WriteSafeModeMarker(string reason)
+	private static string ReadSafeModeMarker()
+	{
+		using Godot.FileAccess file = Godot.FileAccess.Open(SafeModeMarkerPath, Godot.FileAccess.ModeFlags.Read);
+		if (file == null)
+		{
+			return string.Empty;
+		}
+		return file.GetAsText();
+	}
+
+private static void WriteSafeModeMarker(string reason)
 	{
 		using Godot.FileAccess file = Godot.FileAccess.Open(SafeModeMarkerPath, Godot.FileAccess.ModeFlags.Write);
 		if (file == null)
@@ -248,12 +296,12 @@ public static class ModManager
 	}
 
 	/// <summary>
-	/// Arms the startup watchdog just before the mods are loaded.
+	/// Records that this boot is about to start with mods loaded, incrementing the run of boots that did
+	/// so and never reported reaching the main menu.
 	///
-	/// The marker survives a crash but is removed by <see cref="ResolveStartupWatchdog"/> once the main
-	/// menu is up, so it is a one-shot "the previous boot never got this far" signal. On mobile this is
-	/// the only way out of a mod that kills the process during startup: <c>--nomods</c> needs a launch
-	/// argument, which iOS never passes to a shipped app.
+	/// The count has to be written before the mods load, not after: a mod script runs before the main
+	/// menu, so the crash this protects against happens after this point and before any chance to
+	/// report it. <see cref="ResolveStartupWatchdog"/> puts the count back to zero.
 	/// </summary>
 	private static void ArmStartupWatchdog()
 	{
@@ -261,17 +309,30 @@ public static class ModManager
 		{
 			return;
 		}
-		WriteSafeModeMarker("watchdog " + _mods.Count);
-		Log.Info($"[Mods] startup watchdog armed ({_mods.Count} manifest(s)); it is released once the main menu is up");
+		int num = ReadIncompleteBootCount() + 1;
+		WriteSafeModeMarker("watchdog " + num);
+		Log.Info($"[Mods] startup watchdog armed ({_mods.Count} manifest(s), incomplete boot {num} of {IncompleteBootTolerance} allowed); it is released once the main menu is up");
+	}
+
+	private static int ReadIncompleteBootCount()
+	{
+		string text = ReadSafeModeMarker();
+		if (text.StartsWith("watchdog ", StringComparison.Ordinal) && int.TryParse(text.Substring("watchdog ".Length).Trim(), out int value))
+		{
+			return Math.Max(value, 0);
+		}
+		return 0;
 	}
 
 	/// <summary>
 	/// Settles the watchdog once a boot reached the main menu.
 	///
-	/// A boot that ran with mods suppressed is the recovery boot, so it is the one that has to make the
-	/// recovery stick: every mod is switched off in the save, the marker is deleted, and the next launch
-	/// therefore starts clean. Without that the marker would either re-suppress forever or, if simply
-	/// deleted, walk straight back into the same crash.
+	/// Three cases, and they must not be conflated. A boot that ran with mods suppressed is the recovery
+	/// boot, so it is the one that has to make the recovery stick: every mod is switched off in the save
+	/// and the counter is cleared, otherwise the next launch either re-suppresses forever or walks
+	/// straight back into the same crash. A boot that loaded mods and got here has disproved the
+	/// suspicion, so the counter is cleared. A marker the player wrote by hand is neither: it is an
+	/// instruction, and deleting it would undo the only escape hatch they have.
 	/// </summary>
 	public static void ResolveStartupWatchdog()
 	{
@@ -283,6 +344,10 @@ public static class ModManager
 			return;
 		}
 		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return;
+		}
+		if (ReadIncompleteBootCount() == 0)
 		{
 			return;
 		}

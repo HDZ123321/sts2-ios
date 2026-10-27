@@ -232,11 +232,15 @@ Point `--godot` at a 4.5.x build; `$GODOT` is honoured when the flag is omitted.
 ## Safe mode
 
 A mod script runs before the main menu, so a mod that throws during startup would otherwise take the
-game down with no way back in. The game therefore writes `user://nomods` before it loads any mod and
-deletes it once the main menu is up. If the marker survives a boot, the next start skips mods
-entirely, disables every mod in the save file, and clears the marker — so a broken mod is skipped
-once and then stays off until it is re-enabled.
+game down with no way back in. The game therefore counts boots: before it loads any mod it writes the
+number of consecutive boots that started with mods and never reached the main menu to `user://nomods`,
+and a boot that gets to the main menu puts the count back to zero. One such boot is tolerated, because
+force-quitting during the loading screen is an ordinary thing to do; the second one suppresses mods.
 
-To start without mods on purpose, create `nomods` in the user data directory. On iOS that is
-`Documents/nomods`, reachable from the Files app. The game will not delete a marker it did not
-write, so the escape hatch stays until you remove the file.
+A boot that runs with mods suppressed is the recovery boot. It switches every mod off in the save file
+and clears the counter, so the next launch starts clean and mods can be re-enabled one at a time from
+Settings > Modding to find the offender.
+
+To start without mods on purpose, write `manual` into `user://nomods`. On iOS that is
+`Documents/nomods`, reachable from the Files app. The game tells a hand-written marker apart from its
+own and leaves it alone, so the escape hatch stays until the file is deleted by hand.
