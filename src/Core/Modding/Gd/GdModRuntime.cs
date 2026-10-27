@@ -141,7 +141,8 @@ public static class GdModRuntime
 
 	/// <summary>
 	/// Calls <paramref name="method"/> on every loaded mod that defines it and returns the sum of the
-	/// returned deltas. A mod returns nothing (nil) or a non-numeric value to abstain.
+	/// returned deltas. A mod returns nothing (nil) to abstain; anything that is not a number is
+	/// reported and treated as an abstention.
 	/// </summary>
 	public static decimal DispatchAdditive(string method, decimal delta, params Variant[] args)
 	{
@@ -152,14 +153,22 @@ public static class GdModRuntime
 			{
 				continue;
 			}
-			delta += ToDecimal(result);
+			if (!TryToDecimal(mod, method, result, out decimal value))
+			{
+				continue;
+			}
+			delta += value;
 		}
 		return delta;
 	}
 
 	/// <summary>
 	/// Calls <paramref name="method"/> on every loaded mod and multiplies the returned factors
-	/// together. A mod returns nothing (nil) or a non-numeric value to abstain.
+	/// together. A mod returns nothing (nil) to abstain.
+	///
+	/// A bad return is skipped, never treated as zero. Zero would look like a mod that answered and
+	/// said "no damage", which is indistinguishable from a legitimate answer and silently cancels
+	/// every attack in the run; skipping keeps the failure local to the mod that caused it.
 	/// </summary>
 	public static decimal DispatchMultiplicative(string method, decimal factor, params Variant[] args)
 	{
@@ -170,7 +179,11 @@ public static class GdModRuntime
 			{
 				continue;
 			}
-			factor *= ToDecimal(result);
+			if (!TryToDecimal(mod, method, result, out decimal value))
+			{
+				continue;
+			}
+			factor *= value;
 		}
 		return factor;
 	}
@@ -178,6 +191,10 @@ public static class GdModRuntime
 	/// <summary>
 	/// Calls <paramref name="method"/> on every loaded mod and returns the last boolean that a mod
 	/// actually answered, or <paramref name="fallback"/> when nobody answered.
+	///
+	/// The conversion is guarded: a predicate sits in the middle of the damage pipeline, so a mod that
+	/// returns a string here would otherwise throw out of the hook and abort whatever was being
+	/// resolved.
 	/// </summary>
 	public static bool DispatchBool(string method, bool fallback, params Variant[] args)
 	{
@@ -187,6 +204,11 @@ public static class GdModRuntime
 			Variant answer = CallMod(mod, method, args);
 			if (answer.VariantType == Variant.Type.Nil)
 			{
+				continue;
+			}
+			if (answer.VariantType != Variant.Type.Bool)
+			{
+				Log.Error($"[GdMod] {method} in {mod.Name} returned {answer.VariantType} instead of a bool; ignoring that answer");
 				continue;
 			}
 			result = answer.AsBool();
@@ -220,14 +242,21 @@ public static class GdModRuntime
 		}
 	}
 
-	private static decimal ToDecimal(Variant value)
+	private static bool TryToDecimal(Node mod, string method, Variant value, out decimal number)
 	{
-		return value.VariantType switch
+		switch (value.VariantType)
 		{
-			Variant.Type.Int => value.AsInt64(),
-			Variant.Type.Float => (decimal)value.AsDouble(),
-			_ => 0m
-		};
+			case Variant.Type.Int:
+				number = value.AsInt64();
+				return true;
+			case Variant.Type.Float:
+				number = (decimal)value.AsDouble();
+				return true;
+			default:
+				Log.Error($"[GdMod] {method} in {mod.Name} returned {value.VariantType} instead of a number; ignoring that answer");
+				number = 0m;
+				return false;
+		}
 	}
 
 	/// <summary>
