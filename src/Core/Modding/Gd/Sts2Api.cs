@@ -79,6 +79,7 @@ public class Sts2Api : Godot.Node
 		public static readonly StringName CardTitle = "card_title";
 		public static readonly StringName CardId = "card_id";
 		public static readonly StringName CardCost = "card_cost";
+		public static readonly StringName CardStarCost = "card_star_cost";
 		public static readonly StringName CardTypeName = "card_type";
 		public static readonly StringName CardRarityName = "card_rarity";
 		public static readonly StringName CardUpgradeLevel = "card_upgrade_level";
@@ -400,7 +401,17 @@ public class Sts2Api : Godot.Node
 		return GdModRuntime.Resolve<AbstractModel>(handle)?.Id.ToString() ?? string.Empty;
 	}
 
+	/// <summary>
+	/// The energy this card costs right now, after every modifier, which is the number printed on the
+	/// card. Star cost is a separate pool and has its own accessor.
+	/// </summary>
 	public int card_cost(string handle)
+	{
+		return GdModRuntime.Resolve<CardModel>(handle)?.EnergyCost.GetAmountToSpend() ?? 0;
+	}
+
+	/// <summary>The star cost this card charges right now. Most cards charge none.</summary>
+	public int card_star_cost(string handle)
 	{
 		return GdModRuntime.Resolve<CardModel>(handle)?.CurrentStarCost ?? 0;
 	}
@@ -741,6 +752,10 @@ public class Sts2Api : Godot.Node
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.CardStarCost, new PropertyInfo(Variant.Type.Int, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.CardTypeName, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.String, "handle", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -1017,6 +1032,11 @@ public class Sts2Api : Godot.Node
 			ret = VariantUtils.CreateFrom<int>(card_cost(VariantUtils.ConvertTo<string>(in args[0])));
 			return true;
 		}
+		if (method == MethodName.CardStarCost && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<int>(card_star_cost(VariantUtils.ConvertTo<string>(in args[0])));
+			return true;
+		}
 		if (method == MethodName.CardTypeName && args.Count == 1)
 		{
 			ret = VariantUtils.CreateFrom<string>(card_type(VariantUtils.ConvertTo<string>(in args[0])));
@@ -1190,6 +1210,7 @@ public class Sts2Api : Godot.Node
 		if (method == MethodName.CardTitle) { return true; }
 		if (method == MethodName.CardId) { return true; }
 		if (method == MethodName.CardCost) { return true; }
+		if (method == MethodName.CardStarCost) { return true; }
 		if (method == MethodName.CardTypeName) { return true; }
 		if (method == MethodName.CardRarityName) { return true; }
 		if (method == MethodName.CardUpgradeLevel) { return true; }
