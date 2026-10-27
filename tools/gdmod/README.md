@@ -124,7 +124,7 @@ should_allow_targeting(creature)
 should_clear_block(creature)
 should_power_be_removed_on_death(power)
 should_procure_potion(potion, player)
-should_force_potion_reward(potion, player)
+should_force_potion_reward(player, room_type)
 should_take_extra_turn(player)
 should_stop_combat_from_ending()
 ```
@@ -178,7 +178,7 @@ player_stars(player)     player_deck(player)      player_relics(player)
 player_potions(player)   player_creature(player)
 
 pile(player, pile_type)  pile_cards(player, pile_type)  all_cards(player)
-card_title(card)  card_id(card)  card_cost(card)  card_type(card)
+card_title(card)  card_id(card)  card_cost(card)  card_star_cost(card)  card_type(card)
 card_rarity(card) card_upgrade_level(card) card_owner(card)
 
 model_name(handle)  model_id(handle)  log(message)
