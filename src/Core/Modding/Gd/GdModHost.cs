@@ -16,9 +16,12 @@ namespace MegaCrit.Sts2.Core.Modding.Gd;
 ///
 /// Two things happen here and nowhere else:
 ///
-/// 1. The <see cref="GdHookBridge"/> is subscribed to both hook dispatch chains. The bridge is a
-///    single model instance; every combat/run hook dispatch appends it to the listener list, so its
-///    overrides run once per hook and forward to each loaded mod by name.
+/// 1. The two hook bridges are subscribed to the two hook dispatch chains. A hook is dispatched with
+///    <c>runState.IterateHookListeners(combatState)</c>, which appends the run subscribers and then
+///    recurses into <c>combatState.IterateHookListeners()</c>, which appends the combat subscribers.
+///    One model registered in both lists would therefore be appended twice and double-apply every
+///    additive answer, so <see cref="GdCombatHookBridge"/> and <see cref="GdRunHookBridge"/> each
+///    implement only the hooks their own chain dispatches.
 ///
 /// 2. Every loaded mod that ships a GDScript entry point gets an instance parented under this node.
 ///    The entry point is looked up in the mod's own PCK, which <see cref="ModManager.TryLoadMod"/>
@@ -36,7 +39,9 @@ public partial class GdModHost : Node
 
 	private static readonly string[] _defaultEntryCandidates = new string[2] { "main.gdc", "main.gd" };
 
-	private GdHookBridge? _bridge;
+	private GdCombatHookBridge? _combatBridge;
+
+	private GdRunHookBridge? _runBridge;
 
 	private readonly List<Node> _instances = new List<Node>();
 
@@ -60,9 +65,28 @@ public partial class GdModHost : Node
 	public override void _Ready()
 	{
 		GdModRuntime.ModRoot = this;
+		InstallApi();
 		SubscribeHooks();
 		SubscribeLifecycle();
 		LoadMods();
+	}
+
+	/// <summary>
+	/// Adds the <see cref="Sts2Api"/> node, whose own <c>_Ready</c> registers it as the <c>Sts2</c>
+	/// engine singleton. It has to happen before any mod script runs, because a mod resolves the
+	/// singleton in its own <c>_ready</c> and gives up when it is missing.
+	/// </summary>
+	private void InstallApi()
+	{
+		if (Sts2Api.Instance != null)
+		{
+			return;
+		}
+		Sts2Api api = new Sts2Api
+		{
+			Name = "Sts2Api"
+		};
+		this.AddChildSafely(api);
 	}
 
 	/// <summary>
@@ -139,20 +163,21 @@ public partial class GdModHost : Node
 
 	private void SubscribeHooks()
 	{
-		if (_bridge != null)
+		if (_combatBridge != null || _runBridge != null)
 		{
 			return;
 		}
-		_bridge = new GdHookBridge();
+		_combatBridge = new GdCombatHookBridge();
+		_runBridge = new GdRunHookBridge();
 		ModHelper.SubscribeForCombatStateHooks("gd_bridge", delegate
 		{
-			return new AbstractModel[1] { _bridge };
+			return new AbstractModel[1] { _combatBridge };
 		});
 		ModHelper.SubscribeForRunStateHooks("gd_bridge", delegate
 		{
-			return new AbstractModel[1] { _bridge };
+			return new AbstractModel[1] { _runBridge };
 		});
-		Log.Info("[GdMod] hook bridge subscribed to combat and run dispatch");
+		Log.Info("[GdMod] hook bridges subscribed to combat and run dispatch");
 	}
 
 	private void LoadMods()
