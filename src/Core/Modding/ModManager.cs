@@ -78,6 +78,12 @@ public static class ModManager
 			State = ModManagerState.Skipped;
 			return;
 		}
+		if (IsModSuppressionRequested())
+		{
+			Log.Info("Mod loading suppressed by the safe-mode marker, skipping mod initialization");
+			State = ModManagerState.Skipped;
+			return;
+		}
 		if (TestMode.IsOn && !_allowInitForTests)
 		{
 			State = ModManagerState.Skipped;
@@ -85,14 +91,11 @@ public static class ModManager
 		}
 		_allowInitForTests = false;
 		AppDomain.CurrentDomain.AssemblyResolve += HandleAssemblyResolveFailure;
-		string executablePath = OS.GetExecutablePath();
-		string directoryName = Path.GetDirectoryName(executablePath);
-		string path = Path.Combine(directoryName, "mods");
-		string path2 = Path.Combine(directoryName, "mods_STEAMTEST");
-		if (fileIo.DirectoryExists(path))
+		foreach (string path3 in GetModDirectories())
 		{
-			ReadModsInDirRecursive(path, ModSource.ModsDirectory, null);
+			ReadModsInDirRecursive(path3, ModSource.ModsDirectory, null);
 		}
+		string path2 = Path.Combine(Path.GetDirectoryName(OS.GetExecutablePath()) ?? ".", "mods_STEAMTEST");
 		if (fileIo.DirectoryExists(path2))
 		{
 			ReadModsInDirRecursive(path2, ModSource.SteamWorkshop, null);
@@ -135,6 +138,90 @@ public static class ModManager
 			list.Add(settingsSaveMod);
 		}
 		_settings.ModList = list;
+	}
+
+	/// <summary>
+	/// The directories mods are read from, most trusted first.
+	///
+	/// On desktop this stays the historical layout — a <c>mods</c> folder next to the executable —
+	/// followed by the same folder under <c>user://</c> so a mod can be dropped in without write
+	/// access to the install directory.
+	///
+	/// On mobile the executable lives inside the read-only app bundle, so <c>user://mods</c> is the
+	/// only usable location. It resolves to the app's Documents directory there, which the file
+	/// sharing entitlement exposes to the Files app.
+	/// </summary>
+	public static IReadOnlyList<string> GetModDirectories()
+	{
+		List<string> list = new List<string>();
+		if (OS.HasFeature("mobile"))
+		{
+			list.Add("user://mods");
+			return list;
+		}
+		string? installDir = Path.GetDirectoryName(OS.GetExecutablePath());
+		if (!string.IsNullOrEmpty(installDir))
+		{
+			list.Add(Path.Combine(installDir, "mods"));
+		}
+		list.Add("user://mods");
+		return list;
+	}
+
+	/// <summary>
+	/// Absolute path of the first mod directory that exists, or the preferred path when none does.
+	/// Used by the modding UI to show the player where to drop files.
+	/// </summary>
+	public static string GetPrimaryModDirectory()
+	{
+		foreach (string dir in GetModDirectories())
+		{
+			if (_fileIo != null && _fileIo.DirectoryExists(dir))
+			{
+				return ProjectSettings.GlobalizePath(dir);
+			}
+		}
+		IReadOnlyList<string> all = GetModDirectories();
+		return ProjectSettings.GlobalizePath(all[0]);
+	}
+
+	/// <summary>
+	/// True when the player asked for a clean boot after a mod broke startup.
+	///
+	/// <c>--nomods</c> cannot serve this on mobile: neither iOS nor Android hands a launch argument to
+	/// a shipped app. A marker file is the equivalent that works everywhere — the modding UI writes
+	/// it before restarting, and a successful boot deletes it, so the suppression lasts exactly one
+	/// launch.
+	/// </summary>
+	public static bool IsModSuppressionRequested()
+	{
+		return Godot.FileAccess.FileExists(SafeModeMarkerPath);
+	}
+
+	/// <summary>Path of the one-shot safe-mode marker file.</summary>
+	public static string SafeModeMarkerPath => "user://nomods";
+
+	/// <summary>Arms safe mode for the next launch. The marker is consumed by the next boot.</summary>
+	public static void RequestSafeMode()
+	{
+		using Godot.FileAccess file = Godot.FileAccess.Open(SafeModeMarkerPath, Godot.FileAccess.ModeFlags.Write);
+		if (file == null)
+		{
+			Log.Error("[Mods] could not create the safe-mode marker at " + SafeModeMarkerPath);
+			return;
+		}
+		file.StoreString("1");
+		Log.Warn("[Mods] safe mode armed; mods will be skipped on the next launch");
+	}
+
+	/// <summary>Deletes the marker after a boot that got far enough to prove mods are not fatal.</summary>
+	public static void ClearSafeModeMarker()
+	{
+		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return;
+		}
+		DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(SafeModeMarkerPath));
 	}
 
 	public static void ResetForTests()
