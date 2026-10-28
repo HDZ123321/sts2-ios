@@ -149,16 +149,7 @@ public static class PreloadManager
 		}
 		HashSet<string> hashSet2 = hashSet;
 		await (await LoadAssetSets(roomName, AssetSets.CommonAssets, AssetSets.RunSet, AssetSets.Act, hashSet2)).WaitForCompletion();
-		if (Perf.Enabled)
-		{
-			long collectStart = Perf.ElapsedMs;
-			GC.Collect();
-			Log.Info($"[Perf] room gc after '{roomName}': {Perf.ElapsedMs - collectStart}ms (managed={GC.GetTotalMemory(forceFullCollection: false) / 1048576}MB)", 3);
-		}
-		else
-		{
-			GC.Collect();
-		}
+		CollectIfHeapGrew(roomName);
 	}
 
 	/// <summary>
@@ -185,6 +176,36 @@ public static class PreloadManager
 			return AssetLoadingSession.Empty();
 		}
 		return LoadAssets(needLoaded, name);
+	}
+
+	/// <summary>
+	/// How much the managed heap may grow between collections before one is worth its pause.
+	/// A room transition used to force a full blocking collection unconditionally; measuring it
+	/// showed VRAM unchanged afterwards and the heap flat, so the pause bought nothing.
+	/// </summary>
+	private const long _gcGrowthThresholdBytes = 8L * 1024L * 1024L;
+
+	private static long _heapAtLastCollect;
+
+	private static void CollectIfHeapGrew(string roomName)
+	{
+		long totalMemory = GC.GetTotalMemory(forceFullCollection: false);
+		long num = totalMemory - _heapAtLastCollect;
+		if (num < _gcGrowthThresholdBytes)
+		{
+			if (Perf.Enabled)
+			{
+				Log.Info($"[Perf] room gc after '{roomName}': skipped, heap grew {num / 1024}KB", 3);
+			}
+			return;
+		}
+		long collectStart = Perf.ElapsedMs;
+		GC.Collect();
+		_heapAtLastCollect = GC.GetTotalMemory(forceFullCollection: false);
+		if (Perf.Enabled)
+		{
+			Log.Info($"[Perf] room gc after '{roomName}': {Perf.ElapsedMs - collectStart}ms, heap was {totalMemory / 1048576}MB", 3);
+		}
 	}
 
 	private static AssetLoadingSession LoadAssets(IEnumerable<string> assetPaths, string name)

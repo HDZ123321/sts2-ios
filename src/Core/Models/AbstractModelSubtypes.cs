@@ -5202,7 +5202,10 @@ public static class AbstractModelSubtypes
 		typeof(global::Watcher.Code.Stances.CalmStance),
 		typeof(global::Watcher.Code.Stances.DivinityStance),
 		typeof(global::Watcher.Code.Stances.NoStance),
-		typeof(global::Watcher.Code.Stances.WrathStance)
+		typeof(global::Watcher.Code.Stances.WrathStance),
+		typeof(global::Watcher.Code.Cards.Token.BecomeAlmighty),
+		typeof(global::Watcher.Code.Cards.Token.FameAndFortune),
+		typeof(global::Watcher.Code.Cards.Token.LiveForever)
 	};
 
 	public static int Count => _subtypes.Length;

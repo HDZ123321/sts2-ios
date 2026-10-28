@@ -9,7 +9,7 @@ namespace MegaCrit.Sts2.Core.Assets;
 
 public class AssetLoadingSession
 {
-	private const int _batchSize = 128;
+	private const int _batchSize = 512;
 
 	/// <summary>
 	/// How many frames the session may stay idle before it logs its progress again. Logging every
@@ -234,7 +234,7 @@ public class AssetLoadingSession
 	private void ProcessLoadingQueue()
 	{
 		string result;
-		while (_loading.Count < 128 && _toLoad.TryDequeue(out result))
+		while (_loading.Count < _batchSize && _toLoad.TryDequeue(out result))
 		{
 			if (!_cache.ContainsKey(result))
 			{

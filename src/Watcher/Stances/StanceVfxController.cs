@@ -114,7 +114,12 @@ public class StanceVfxController(StanceVfxConfig cfg)
 						{
 							item.Emitting = false;
 						}
-						auraBlobEmitter.GetTree().CreateTimer(2.5).Timeout += delegate
+						SceneTree? tree = auraBlobEmitter.GetTree();
+						if (tree == null)
+						{
+							continue;
+						}
+						tree.CreateTimer(2.5).Timeout += delegate
 						{
 							if (GodotObject.IsInstanceValid(auraBlobEmitter))
 							{
