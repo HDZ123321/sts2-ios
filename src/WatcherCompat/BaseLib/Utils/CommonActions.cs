@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BaseLib.Extensions;
@@ -8,6 +8,8 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
 
 namespace BaseLib.Utils;
 
@@ -25,13 +27,18 @@ public static class CommonActions
 		ArgumentNullException.ThrowIfNull(card);
 		ArgumentNullException.ThrowIfNull(cardPlay);
 		AttackCommand command;
-		if (card.DynamicVars.ContainsKey("CalculatedDamage"))
+		if (card.DynamicVars.TryGetValue("CalculatedDamage", out DynamicVar calculated) && calculated is CalculatedDamageVar calculatedDamage)
 		{
-			command = DamageCmd.Attack(card.DynamicVars.CalculatedDamage);
+			command = DamageCmd.Attack(calculatedDamage);
+		}
+		else if (card.DynamicVars.TryGetValue("Damage", out DynamicVar flat) && flat is DamageVar damageVar)
+		{
+			command = DamageCmd.Attack(damageVar.BaseValue);
 		}
 		else
 		{
-			command = DamageCmd.Attack(card.DynamicVars.Damage.BaseValue);
+			Log.Warn($"{card.Id} declares neither a Damage nor a CalculatedDamage var, attacking for nothing.");
+			command = DamageCmd.Attack(0m);
 		}
 		command.FromCard(card);
 		if (cardPlay.Target != null)
@@ -53,10 +60,25 @@ public static class CommonActions
 		return command;
 	}
 
+	/// <summary>
+	/// Cards built with <c>WithCalculatedBlock</c> carry a <c>CalculatedBlock</c> var instead of
+	/// the plain <c>Block</c> var, so asking for <c>DynamicVars.Block</c> would throw.  Prefer
+	/// whichever var the card actually declares.
+	/// </summary>
 	public static Task<decimal> CardBlock(CardModel card, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(card);
-		return CreatureCmd.GainBlock(card.Owner.Creature, card.DynamicVars.Block, cardPlay);
+		DynamicVarSet vars = card.DynamicVars;
+		if (vars.TryGetValue("CalculatedBlock", out DynamicVar calculated) && calculated is CalculatedBlockVar calculatedBlock)
+		{
+			return CreatureCmd.GainBlock(card.Owner.Creature, calculatedBlock.Calculate(cardPlay.Target), calculatedBlock.Props, cardPlay);
+		}
+		if (vars.TryGetValue("Block", out DynamicVar block) && block is BlockVar blockVar)
+		{
+			return CreatureCmd.GainBlock(card.Owner.Creature, blockVar, cardPlay);
+		}
+		Log.Warn($"{card.Id} declares neither a Block nor a CalculatedBlock var, gaining nothing.");
+		return Task.FromResult(0m);
 	}
 
 	/// <summary>Applies the card's matching power var to the player who played it.</summary>

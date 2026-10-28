@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -189,6 +189,14 @@ public class AutoSlayer
 			{
 				await WaitForRewardsScreenAsync(ct);
 			}
+			if (RunManager.Instance.DebugOnlyGetState() == null || NOverlayStack.Instance?.Peek() is NGameOverScreen)
+			{
+				AutoSlayLog.Action("The player died; draining the game over screen");
+				await DrainOverlayScreensAsync(ct);
+				await WaitForMainMenuAsync(ct);
+				AutoSlayLog.Action("Run ended after the player died, back at the main menu");
+				return;
+			}
 			await DrainOverlayScreensAsync(ct);
 			if (roomType == RoomType.RestSite)
 			{
@@ -357,7 +365,7 @@ public class AutoSlayer
 	private async Task WaitForRewardsScreenAsync(CancellationToken ct)
 	{
 		AutoSlayLog.Action("Waiting for rewards screen");
-		await WaitHelper.Until(() => NOverlayStack.Instance?.Peek() is NRewardsScreen || (NMapScreen.Instance?.IsOpen ?? false), ct, TimeSpan.FromSeconds(10L), "Rewards screen did not appear after combat");
+		await WaitHelper.Until(() => NOverlayStack.Instance?.Peek() is NRewardsScreen || (NMapScreen.Instance?.IsOpen ?? false) || NOverlayStack.Instance?.Peek() is NGameOverScreen || RunManager.Instance.DebugOnlyGetState() == null, ct, TimeSpan.FromSeconds(10L), "Rewards screen did not appear after combat");
 	}
 
 	private async Task WaitForMainMenuAsync(CancellationToken ct)
@@ -420,6 +428,15 @@ public class AutoSlayer
 			item.UnlockIfPossible();
 		}
 		List<NCharacterSelectButton> items = list.Where((NCharacterSelectButton b) => !b.IsLocked).ToList();
+		string requestedCharacter = CommandLineHelper.GetValue("char");
+		if (!string.IsNullOrWhiteSpace(requestedCharacter))
+		{
+			List<NCharacterSelectButton> filtered = items.Where((NCharacterSelectButton b) => b.Character.Id.Entry.Contains(requestedCharacter, StringComparison.OrdinalIgnoreCase)).ToList();
+			if (filtered.Count > 0)
+			{
+				items = filtered;
+			}
+		}
 		NCharacterSelectButton nCharacterSelectButton = _random.NextItem(items);
 		AutoSlayLog.Action($"Selecting character: {nCharacterSelectButton.Character.Id}");
 		nCharacterSelectButton.Select();

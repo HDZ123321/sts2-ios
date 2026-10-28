@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -421,7 +421,9 @@ public class ProgressSaveManager
 						{
 							if (!(character is Deprived))
 							{
-								throw new ArgumentOutOfRangeException("character", character, null);
+								// A character that is not one of the shipped ones (a ported or
+								// modded character) has no fifteen-elite epoch to unlock.
+								return;
 							}
 							epochModel = null;
 						}
@@ -498,7 +500,9 @@ public class ProgressSaveManager
 						{
 							if (!(character is Deprived))
 							{
-								throw new ArgumentOutOfRangeException("character", character, null);
+								// A character that is not one of the shipped ones (a ported or
+								// modded character) has no fifteen-boss epoch to unlock.
+								return;
 							}
 							epochModel = null;
 						}
@@ -558,6 +562,21 @@ public class ProgressSaveManager
 	/// Helper function to obtain character unlocks 1, 2, and 3.
 	/// Requires the player to defeat a boss in an act for the first time (for each character!)
 	/// </summary>
+	/// <summary>
+	/// A ported or modded character does not ship the per-act unlock epochs the base game
+	/// characters have, and <see cref="T:MegaCrit.Sts2.Core.Timeline.EpochModel.Get" /> throws
+	/// when the id is unknown.  Missing epochs simply mean "nothing to unlock".
+	/// </summary>
+	private static EpochModel? TryGetCharUnlockEpoch(string id)
+	{
+		if (!EpochModel.IsValid(id))
+		{
+			Log.Info($"No unlock epoch '{id}' for this character, skipping.");
+			return null;
+		}
+		return EpochModel.Get(id);
+	}
+
 	private void ObtainCharUnlockEpoch(Player localPlayer, int act)
 	{
 		if (localPlayer.Character.IsPlayable)
@@ -567,13 +586,13 @@ public class ProgressSaveManager
 			switch (act)
 			{
 			case 0:
-				epochModel = EpochModel.Get(text + "2_EPOCH");
+				epochModel = TryGetCharUnlockEpoch(text + "2_EPOCH");
 				break;
 			case 1:
-				epochModel = EpochModel.Get(text + "3_EPOCH");
+				epochModel = TryGetCharUnlockEpoch(text + "3_EPOCH");
 				break;
 			case 2:
-				epochModel = EpochModel.Get(text + "4_EPOCH");
+				epochModel = TryGetCharUnlockEpoch(text + "4_EPOCH");
 				break;
 			case 3:
 				Log.Error($"Act {act + 1} is not yet implemented.");
@@ -584,7 +603,7 @@ public class ProgressSaveManager
 			}
 			if (epochModel == null)
 			{
-				Log.Error("EpochModel was not found :(");
+				Log.Info("No epoch to obtain for this character on this act.");
 			}
 			else if (TryObtainEpochMidRun(epochModel, localPlayer))
 			{

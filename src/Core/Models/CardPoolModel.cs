@@ -36,7 +36,7 @@ public abstract class CardPoolModel : AbstractModel, IPoolModel
 	/// </summary>
 	public virtual Color EnergyOutlineColor => new Color("5C5440");
 
-	public string EnergyIconPath => EnergyIconHelper.GetPath(EnergyColorName);
+	public virtual string EnergyIconPath => EnergyIconHelper.GetPath(EnergyColorName);
 
 	/// <summary>
 	/// Get every card in this pool (ignores Unlocks/Epoch state).

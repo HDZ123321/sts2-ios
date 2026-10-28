@@ -80,6 +80,7 @@ public static class OneTimeInitialization
 		LocManager.Initialize();
 		BakedContent.InjectLocEntries();
 		ModelDb.Init();
+		BaseLib.Utils.WatcherRegistry.Populate();
 		ModelIdSerializationCache.Init();
 		ModelDb.InitIds();
 		// The Watcher stance models are per-player state rather than canonical models,

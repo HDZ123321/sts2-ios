@@ -6,7 +6,7 @@ using BaseLib.Utils;
 
 namespace BaseLib.Abstracts;
 
-public abstract class CustomPotionPoolModel : PotionPoolModel
+public abstract class CustomPotionPoolModel : PotionPoolModel, CustomPoolMarker
 {
 	protected override IEnumerable<PotionModel> GenerateAllPotions()
 	{

@@ -144,6 +144,34 @@ public static class GdModRuntime
 	/// returned deltas. A mod returns nothing (nil) to abstain; anything that is not a number is
 	/// reported and treated as an abstention.
 	/// </summary>
+	/// <summary>
+	/// Feeds <paramref name="current"/> through every loaded mod in turn and returns the last
+	/// value produced.  This is the shape vanilla uses for hooks whose wrapper does
+	/// <c>num = listener.Hook(..., num)</c>: a mod that abstains (returns nil) leaves the value
+	/// alone, and a mod that answers replaces it.
+	///
+	/// Do not confuse this with <see cref="DispatchAdditive"/>: seeding a chained hook with 0
+	/// would hand vanilla a value of 0 when no mod is installed (that is how max energy became
+	/// 0 and the hand stopped being drawn).
+	/// </summary>
+	public static decimal DispatchChain(string method, decimal current, params Variant[] args)
+	{
+		foreach (Node mod in _mods)
+		{
+			Variant result = CallMod(mod, method, args);
+			if (result.VariantType == Variant.Type.Nil)
+			{
+				continue;
+			}
+			if (!TryToDecimal(mod, method, result, out decimal value))
+			{
+				continue;
+			}
+			current = value;
+		}
+		return current;
+	}
+
 	public static decimal DispatchAdditive(string method, decimal delta, params Variant[] args)
 	{
 		foreach (Node mod in _mods)

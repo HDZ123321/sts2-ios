@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -359,8 +359,11 @@ public sealed class TheArchitect : EventModel
 	{
 		if (LocalContext.IsMe(base.Owner))
 		{
-			await AnimPlayerAttackIfNecessary(Dialogue.EndAttackers);
-			await AnimArchitectAttackIfNecessary(Dialogue.EndAttackers);
+			// A ported or modded character has no architect dialogue, so Dialogue is null
+			// here and there is no closing attack to play.
+			ArchitectAttackers endAttackers = Dialogue?.EndAttackers ?? ArchitectAttackers.None;
+			await AnimPlayerAttackIfNecessary(endAttackers);
+			await AnimArchitectAttackIfNecessary(endAttackers);
 			if (base.Owner.RunState.Players.Count > 1)
 			{
 				NCombatRoom.Instance?.SetWaitingForOtherPlayersOverlayVisible(visible: true);

@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Modding;
 
 namespace BaseLib.Utils;
+/// <summary>Marks the pools this port creates itself, whose membership the registry supplies directly.</summary>
+public interface CustomPoolMarker
+{
+}
 
 /// <summary>
 /// Answers "which cards belong to this pool" without reflection.
@@ -60,6 +65,17 @@ public static partial class WatcherRegistry
 		RegisterAll();
 	}
 
+	/// <summary>
+	/// Populate the registry eagerly.  Vanilla pools such as TokenCardPool cache the
+	/// result of <c>AllCards</c> the first time anything reads it, and anything added
+	/// afterwards is rejected with "it is too late", so this has to run before the
+	/// first pool lookup of the boot.
+	/// </summary>
+	public static void Populate()
+	{
+		EnsurePopulated();
+	}
+
 	private static void Add<TModel, TPool>() where TModel : AbstractModel
 	{
 		ModelDb.Inject(typeof(TModel));
@@ -71,6 +87,17 @@ public static partial class WatcherRegistry
 			_byPool[poolType] = items;
 		}
 		items.Add(model);
+		if (!typeof(CustomPoolMarker).IsAssignableFrom(poolType))
+		{
+			try
+			{
+				ModHelper.AddModelToPool(poolType, typeof(TModel));
+			}
+			catch (InvalidOperationException)
+			{
+				global::MegaCrit.Sts2.Core.Logging.Log.Warn($"[WatcherRegistry] could not add {typeof(TModel).Name} to {poolType.Name}: that pool was already frozen");
+			}
+		}
 	}
 
 	private static void AddCard<TModel, TPool>() where TModel : CardModel

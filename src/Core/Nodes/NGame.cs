@@ -735,6 +735,7 @@ public class NGame : Control
 	/// </summary>
 	private async Task GameStartup()
 	{
+		Log.Info($"[Startup] cmdline='{string.Join(" ", OS.GetCmdlineArgs())}' perf={Perf.Enabled} release={IsReleaseGame()}");
 		await OneTimeInitialization.ExecuteVeryEarly();
 		Node child = NDevConsole.Create();
 		this.AddChildSafely(child);
@@ -848,6 +849,10 @@ public class NGame : Control
 	/// </summary>
 	public static bool IsReleaseGame()
 	{
+		if (CommandLineHelper.HasArg("autoslay"))
+		{
+			return false;
+		}
 		return true;
 	}
 

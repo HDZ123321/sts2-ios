@@ -173,13 +173,13 @@ public sealed class GdCombatHookBridge : AbstractModel
 
 	public override decimal ModifyHandDraw(Player player, decimal count)
 	{
-		return GdModRuntime.DispatchAdditive("modify_hand_draw", 0m,
+		return GdModRuntime.DispatchChain("modify_hand_draw", count,
 			GdModRuntime.H(player), GdHookArgs.Amount(count));
 	}
 
 	public override int ModifyXValue(CardModel card, int originalValue)
 	{
-		return (int)GdModRuntime.DispatchAdditive("modify_x_value", originalValue,
+		return (int)GdModRuntime.DispatchChain("modify_x_value", originalValue,
 			GdModRuntime.H(card), Variant.From(originalValue));
 	}
 
@@ -187,13 +187,13 @@ public sealed class GdCombatHookBridge : AbstractModel
 
 	public override decimal ModifyMaxEnergy(Player player, decimal amount)
 	{
-		return GdModRuntime.DispatchAdditive("modify_max_energy", 0m,
+		return GdModRuntime.DispatchChain("modify_max_energy", amount,
 			GdModRuntime.H(player), GdHookArgs.Amount(amount));
 	}
 
 	public override decimal ModifyEnergyGain(Player player, decimal amount)
 	{
-		return GdModRuntime.DispatchAdditive("modify_energy_gain", 0m,
+		return GdModRuntime.DispatchChain("modify_energy_gain", amount,
 			GdModRuntime.H(player), GdHookArgs.Amount(amount));
 	}
 
@@ -217,13 +217,13 @@ public sealed class GdCombatHookBridge : AbstractModel
 
 	public override decimal ModifyOrbValue(OrbModel orb, decimal value)
 	{
-		return GdModRuntime.DispatchAdditive("modify_orb_value", 0m,
+		return GdModRuntime.DispatchChain("modify_orb_value", value,
 			GdModRuntime.H(orb), GdHookArgs.Amount(value));
 	}
 
 	public override decimal ModifySummonAmount(Player summoner, decimal amount, AbstractModel? source)
 	{
-		return GdModRuntime.DispatchAdditive("modify_summon_amount", 0m,
+		return GdModRuntime.DispatchChain("modify_summon_amount", amount,
 			GdModRuntime.H(summoner), GdHookArgs.Amount(amount));
 	}
 
@@ -336,7 +336,7 @@ public sealed class GdRunHookBridge : AbstractModel
 
 	public override decimal ModifyGoldGained(Player player, decimal amount)
 	{
-		return GdModRuntime.DispatchAdditive("modify_gold_gained", 0m,
+		return GdModRuntime.DispatchChain("modify_gold_gained", amount,
 			GdModRuntime.H(player), GdHookArgs.Amount(amount));
 	}
 
@@ -348,13 +348,13 @@ public sealed class GdRunHookBridge : AbstractModel
 
 	public override decimal ModifyMerchantPrice(Player player, MerchantEntry entry, decimal cost)
 	{
-		return GdModRuntime.DispatchAdditive("modify_merchant_price", 0m,
+		return GdModRuntime.DispatchChain("modify_merchant_price", cost,
 			GdModRuntime.H(player), GdModRuntime.H(entry), GdHookArgs.Amount(cost));
 	}
 
 	public override decimal ModifyRestSiteHealAmount(Creature creature, decimal amount)
 	{
-		return GdModRuntime.DispatchAdditive("modify_rest_site_heal_amount", 0m,
+		return GdModRuntime.DispatchChain("modify_rest_site_heal_amount", amount,
 			GdModRuntime.H(creature), GdHookArgs.Amount(amount));
 	}
 
