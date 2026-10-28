@@ -25,11 +25,24 @@ public static class AtlasManager
 
 	private record SpriteInfo(Texture2D Atlas, TpSheetSprite Sprite);
 
-	private static readonly string[] _knownAtlases = new string[12]
+	/// <summary>
+	/// Atlases that are cheap enough to keep resident from the first frame: every screen the player
+	/// can reach from the main menu draws from these.
+	/// </summary>
+	private static readonly string[] _menuAtlases = new string[10]
 	{
-		"ui_atlas", "compressed", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "power_atlas", "card_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
-		"intent_atlas", "era_atlas"
+		"ui_atlas", "compressed", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
+		"controller_atlas", "era_atlas"
 	};
+
+	/// <summary>
+	/// Atlases that only a run needs. <c>card_atlas</c> alone is three pages of 1920x1080-ish art
+	/// (41 megapixels, roughly 160 MB of VRAM once decompressed), so loading it eagerly spends that
+	/// memory on the main menu where no card is ever drawn. They are loaded when a run starts and
+	/// fall back to the lazy path in <see cref="T:MegaCrit.Sts2.Core.Assets.AtlasResourceLoader" /> if
+	/// something asks for a sprite before then.
+	/// </summary>
+	private static readonly string[] _runAtlases = new string[3] { "card_atlas", "power_atlas", "intent_atlas" };
 
 	private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
 	{
@@ -51,12 +64,25 @@ public static class AtlasManager
 	private static readonly string[] _essentialAtlases = new string[2] { "ui_atlas", "compressed" };
 
 	/// <summary>
-	/// Loads all known atlases. Call during initialization.
+	/// Loads every atlas that is kept resident outside of a run.
 	/// </summary>
 	public static void LoadAllAtlases()
 	{
-		string[] knownAtlases = _knownAtlases;
-		foreach (string atlasName in knownAtlases)
+		string[] menuAtlases = _menuAtlases;
+		foreach (string atlasName in menuAtlases)
+		{
+			LoadAtlas(atlasName);
+		}
+	}
+
+	/// <summary>
+	/// Loads the atlases that only a run draws from. Called when the first run scene is about to
+	/// load, so their memory is only paid while a run is in progress.
+	/// </summary>
+	public static void LoadRunAtlases()
+	{
+		string[] runAtlases = _runAtlases;
+		foreach (string atlasName in runAtlases)
 		{
 			LoadAtlas(atlasName);
 		}
@@ -117,6 +143,7 @@ public static class AtlasManager
 		}
 		Dictionary<string, Texture2D> dictionary = new Dictionary<string, Texture2D>();
 		Dictionary<string, SpriteInfo> dictionary2 = new Dictionary<string, SpriteInfo>();
+		long pixelCount = 0L;
 		foreach (TpSheetTexture texture in tpSheetData.Textures)
 		{
 			string text2 = "res://images/atlases/" + texture.Image;
@@ -126,6 +153,7 @@ public static class AtlasManager
 				Log.Warn("AtlasManager: Failed to load texture: " + text2);
 				continue;
 			}
+			pixelCount += (long)texture2D.GetWidth() * texture2D.GetHeight();
 			dictionary[texture.Image] = texture2D;
 			foreach (TpSheetSprite sprite in texture.Sprites)
 			{
@@ -140,7 +168,7 @@ public static class AtlasManager
 			SpriteMap = dictionary2
 		};
 		_atlases[atlasName] = value;
-		Log.Info($"AtlasManager: Loaded {atlasName} with {dictionary2.Count} sprites");
+		Log.Info($"AtlasManager: Loaded {atlasName} with {dictionary2.Count} sprites, {dictionary.Count} page(s), {pixelCount / 1024L / 1024L}MPx");
 	}
 
 	/// <summary>

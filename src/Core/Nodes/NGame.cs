@@ -737,6 +737,7 @@ public class NGame : Control
 	{
 		Log.Info($"[Startup] cmdline='{string.Join(" ", OS.GetCmdlineArgs())}' perf={Perf.Enabled} release={IsReleaseGame()}");
 		await OneTimeInitialization.ExecuteVeryEarly();
+		Perf.Mark("very early");
 		Node child = NDevConsole.Create();
 		this.AddChildSafely(child);
 		this.MoveChildSafely(child, GetChildCount() - 1);
@@ -746,12 +747,15 @@ public class NGame : Control
 		ProfileAccountScopeMigrator.MigrateToProfileScopedDirectories();
 		ProfileAccountScopeMigrator.ArchiveLegacyData();
 		Task cloudSavesTask = DoCloudSync();
+		Perf.Mark("user data migrations");
 		InitPools();
 		OneTimeInitialization.ExecuteEssential();
+		Perf.Mark("essential init");
 		if (!IsNodeReady())
 		{
 			await ToSignal(this, Node.SignalName.Ready);
 		}
+		Perf.Mark("node ready");
 		Callable.From(InitializeGraphicsPreferences).CallDeferred();
 		AudioManager.SetMasterVol(SaveManager.Instance.SettingsSave.VolumeMaster);
 		AudioManager.SetSfxVol(SaveManager.Instance.SettingsSave.VolumeSfx);
@@ -762,6 +766,7 @@ public class NGame : Control
 		LeaderboardManager.Initialize();
 		SteamStatsManager.Initialize();
 		TimeoutOverlay.Relocalize();
+		Perf.Mark("audio and platform services");
 		while (!cloudSavesTask.IsCompleted)
 		{
 			if (!SteamInitializer.Initialized)
@@ -771,9 +776,11 @@ public class NGame : Control
 			}
 			await this.AwaitProcessFrame();
 		}
+		Perf.Mark("cloud save sync");
 		SaveManager.Instance.InitProfileId();
 		ReadSaveResult<SerializableProgress> progressReadResult = SaveManager.Instance.InitProgressData();
 		ReadSaveResult<PrefsSave> prefsReadResult = SaveManager.Instance.InitPrefsData();
+		Perf.Mark("profile and save files");
 		SentryService.AfterGameInit(PlatformUtil.GetPlatformBranch().ToName(), SaveManager.Instance.Progress.UniqueId, GetTree().Root);
 		_screenShake.SetMultiplier(NScreenshakePaginator.GetShakeMultiplier(SaveManager.Instance.PrefsSave.ScreenShakeOptionIndex));
 		if (!OS.HasFeature("editor") && SaveManager.Instance.PrefsSave.FastMode == FastModeType.Instant)
@@ -1157,7 +1164,9 @@ public class NGame : Control
 			await Transition.FadeOut();
 		}
 		await LoadMainMenu();
+		Perf.Mark("main menu scene");
 		Log.Info($"[Startup] Time to main menu: {Time.GetTicksMsec():N0}ms");
+		Perf.StartFrameWatch();
 		ModManager.ResolveStartupWatchdog();
 		LogResourceStats("main menu loaded (essential)");
 		TaskHelper.RunSafely(LoadDeferredStartupAssetsAsync());
@@ -1171,7 +1180,9 @@ public class NGame : Control
 	private async Task LoadDeferredStartupAssetsAsync()
 	{
 		OneTimeInitialization.ExecuteDeferred();
+		Perf.Mark("deferred atlases and prewarm");
 		await PreloadManager.LoadCommonAndMainMenuAssets();
+		Perf.Mark("common and main menu assets");
 		LogResourceStats("main menu loaded (complete)");
 	}
 

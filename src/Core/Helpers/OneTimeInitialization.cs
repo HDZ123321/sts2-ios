@@ -48,6 +48,7 @@ public static class OneTimeInitialization
 			return;
 		}
 		_state = State.VeryEarly;
+		Perf.Mark("process start");
 		BakedContent.Mount();
 		if (TestMode.IsOn)
 		{
@@ -57,7 +58,9 @@ public static class OneTimeInitialization
 		{
 			SettingsReadResult = SaveManager.Instance.InitSettingsData();
 		}
+		Perf.Mark("settings load");
 		await ModManager.Initialize(new ModManagerFileIo(), SaveManager.Instance.SettingsSave.ModSettings, ReleaseInfoManager.Instance.SemVer);
+		Perf.Mark("mod manager");
 		UserDataPathProvider.IsRunningModded = ModManager.IsRunningModded();
 		SentryService.DisableGdExtensionIfModded();
 	}
@@ -77,17 +80,22 @@ public static class OneTimeInitialization
 		_atlasResourceLoader = new AtlasResourceLoader();
 		ResourceLoader.AddResourceFormatLoader(_atlasResourceLoader, atFront: true);
 		AtlasManager.LoadEssentialAtlases();
+		Perf.Mark("essential atlases");
 		LocManager.Initialize();
 		BakedContent.InjectLocEntries();
+		Perf.Mark("localization");
 		ModelDb.Init();
 		BaseLib.Utils.WatcherRegistry.Populate();
+		Perf.Mark("model db");
 		ModelIdSerializationCache.Init();
 		ModelDb.InitIds();
+		Perf.Mark("model ids");
 		// The Watcher stance models are per-player state rather than canonical models,
 		// so they subscribe to the combat hook chain on their own.
 		global::Watcher.Code.Events.WatcherSubscriber.Subscribe();
 		MessageTypes.Initialize();
 		ActionTypes.Initialize();
+		Perf.Mark("message and action types");
 	}
 
 	/// <summary>
@@ -103,10 +111,13 @@ public static class OneTimeInitialization
 		}
 		_state = State.Done;
 		AtlasManager.LoadAllAtlases();
+		Perf.Mark("all atlases");
 		if (!OS.HasFeature("editor"))
 		{
 			ModelDb.Preload();
+			Perf.Mark("model db preload");
 			PrewarmJit();
+			Perf.Mark("jit prewarm");
 			ConditionalFormatter conditionalFormatter = new ConditionalFormatter();
 		}
 	}

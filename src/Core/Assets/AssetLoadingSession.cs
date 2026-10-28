@@ -11,6 +11,14 @@ public class AssetLoadingSession
 {
 	private const int _batchSize = 128;
 
+	/// <summary>
+	/// How many frames the session may stay idle before it logs its progress again. Logging every
+	/// single frame allocates a formatted string 60 times a second for the whole duration of a
+	/// multi-second preload, which shows up as garbage-collection pressure right when the player is
+	/// waiting for the first screen.
+	/// </summary>
+	private const int _statusLogIntervalFrames = 60;
+
 	private readonly string _name;
 
 	private readonly ConcurrentDictionary<string, Resource> _cache;
@@ -50,9 +58,25 @@ public class AssetLoadingSession
 
 	private int _totalLoaded;
 
-	private bool _vfxLoading;
+	/// <summary>
+	/// How many VFX scenes may be in flight at once. They used to be loaded strictly one
+	/// at a time because concurrent loading was blamed for "Another resource is loaded from
+	/// path" errors on shared ext_resources, but that serialised 92 scenes into a tail that
+	/// cost four times more than every other asset in the same preload combined.
+	/// </summary>
+	private const int _vfxConcurrency = 6;
 
-	private string? _currentVfxPath;
+	private readonly Queue<string> _vfxInFlight = new Queue<string>();
+
+	private int _framesSinceStatusLog;
+
+	/// <summary>
+	/// Timestamps (in stopwatch milliseconds) marking when the parallel asset phase
+	/// drained, so the completion log can split the total into "assets" and "vfx".
+	/// </summary>
+	private long _assetsDrainedAtMs = -1L;
+
+	private int _vfxLoaded;
 
 	public Task<bool> Task => _completionSource.Task;
 
@@ -108,12 +132,23 @@ public class AssetLoadingSession
 		CheckLoadingStatus();
 		if (_toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0)
 		{
+			if (_assetsDrainedAtMs < 0L)
+			{
+				_assetsDrainedAtMs = _stopwatch.ElapsedMilliseconds;
+			}
 			ProcessVfxQueue();
 		}
-		Log.Debug($"Preloading '{_name}' Process: toLoad={_toLoad.Count} loading={_loading.Count} finalizing={_finalizing.Count} vfx={_vfxScenes.Count}");
-		if (_toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0 && _vfxScenes.Count == 0 && !_vfxLoading)
+		bool flag = _toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0 && _vfxScenes.Count == 0 && _vfxInFlight.Count == 0;
+		_framesSinceStatusLog++;
+		if (flag || _framesSinceStatusLog >= _statusLogIntervalFrames)
 		{
-			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms");
+			_framesSinceStatusLog = 0;
+			Log.Debug($"Preloading '{_name}' Process: toLoad={_toLoad.Count} loading={_loading.Count} finalizing={_finalizing.Count} vfx={_vfxScenes.Count}");
+		}
+		if (flag)
+		{
+			long assetsOnlyMs = ((_assetsDrainedAtMs >= 0L) ? _assetsDrainedAtMs : _stopwatch.ElapsedMilliseconds);
+			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} vfx={_vfxLoaded} asset_phase={assetsOnlyMs:N0}ms vfx_phase={_stopwatch.ElapsedMilliseconds - assetsOnlyMs:N0}ms time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms");
 			_stopwatch.Stop();
 			_completionSource.TrySetResult(result: true);
 		}
@@ -126,33 +161,45 @@ public class AssetLoadingSession
 	/// </summary>
 	private void ProcessVfxQueue()
 	{
-		if (_vfxLoading)
+		int count = _vfxInFlight.Count;
+		for (int i = 0; i < count; i++)
 		{
-			switch (ResourceLoader.LoadThreadedGetStatus(_currentVfxPath))
+			if (!_vfxInFlight.TryDequeue(out string current))
+			{
+				Log.Error("Failed to dequeue in-flight VFX scene!");
+				break;
+			}
+			switch (ResourceLoader.LoadThreadedGetStatus(current))
 			{
 			case ResourceLoader.ThreadLoadStatus.Loaded:
-				AddToCache(ResourceLoader.LoadThreadedGet(_currentVfxPath), _currentVfxPath);
-				_vfxLoading = false;
+				AddToCache(ResourceLoader.LoadThreadedGet(current), current);
+				_vfxLoaded++;
+				break;
+			case ResourceLoader.ThreadLoadStatus.InProgress:
+				_vfxInFlight.Enqueue(current);
 				break;
 			case ResourceLoader.ThreadLoadStatus.InvalidResource:
 			case ResourceLoader.ThreadLoadStatus.Failed:
-				Log.Error("Failed to load VFX scene: " + _currentVfxPath);
-				_vfxLoading = false;
+				Log.Error("Failed to load VFX scene: " + current);
+				break;
+			default:
+				Log.Error("Failed to load VFX scene: " + current);
 				break;
 			}
-			return;
 		}
 		string result;
-		while (_vfxScenes.TryDequeue(out result))
+		while (_vfxInFlight.Count < _vfxConcurrency && _vfxScenes.TryDequeue(out result))
 		{
-			if (!_cache.ContainsKey(result))
+			if (_cache.ContainsKey(result))
 			{
-				if (ResourceLoader.LoadThreadedRequest(result, "", useSubThreads: false, ResourceLoader.CacheMode.Reuse) == Error.Ok)
-				{
-					_currentVfxPath = result;
-					_vfxLoading = true;
-					break;
-				}
+				continue;
+			}
+			if (ResourceLoader.LoadThreadedRequest(result, "", useSubThreads: false, ResourceLoader.CacheMode.Reuse) == Error.Ok)
+			{
+				_vfxInFlight.Enqueue(result);
+			}
+			else
+			{
 				Log.Error("Error requesting VFX load for path: " + result);
 			}
 		}

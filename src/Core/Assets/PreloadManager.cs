@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.RestSite;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
@@ -78,6 +80,12 @@ public static class PreloadManager
 	{
 		if (!TestMode.IsOn)
 		{
+			long runAtlasStart = Perf.ElapsedMs;
+			AtlasManager.LoadRunAtlases();
+			if (Perf.Enabled)
+			{
+				Log.Info($"[Perf] run atlases: {Perf.ElapsedMs - runAtlasStart}ms", 3);
+			}
 			List<CharacterModel> list = characters.ToList();
 			bool isMultiplayer = RunManager.Instance.NetService.Type.IsMultiplayer();
 			AssetSets.RunSet = new HashSet<string>(GetRunAssetPaths(list, isMultiplayer));
@@ -141,7 +149,16 @@ public static class PreloadManager
 		}
 		HashSet<string> hashSet2 = hashSet;
 		await (await LoadAssetSets(roomName, AssetSets.CommonAssets, AssetSets.RunSet, AssetSets.Act, hashSet2)).WaitForCompletion();
-		GC.Collect();
+		if (Perf.Enabled)
+		{
+			long collectStart = Perf.ElapsedMs;
+			GC.Collect();
+			Log.Info($"[Perf] room gc after '{roomName}': {Perf.ElapsedMs - collectStart}ms (managed={GC.GetTotalMemory(forceFullCollection: false) / 1048576}MB)", 3);
+		}
+		else
+		{
+			GC.Collect();
+		}
 	}
 
 	/// <summary>
