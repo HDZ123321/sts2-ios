@@ -36,11 +36,12 @@ public static class AtlasManager
 	};
 
 	/// <summary>
-	/// Atlases that only a run needs. <c>card_atlas</c> alone is three pages of 1920x1080-ish art
-	/// (41 megapixels, roughly 160 MB of VRAM once decompressed), so loading it eagerly spends that
-	/// memory on the main menu where no card is ever drawn. They are loaded when a run starts and
-	/// fall back to the lazy path in <see cref="T:MegaCrit.Sts2.Core.Assets.AtlasResourceLoader" /> if
-	/// something asks for a sprite before then.
+	/// Atlases that only a run draws from. On desktop they are deferred until a run starts so the
+	/// main menu does not pay their VRAM - card_atlas alone is 41 MPx. On mobile they are kept
+	/// resident from the first frame instead: deferring them there means any scene that asks for one
+	/// of their sprites during the startup preload triggers a synchronous AtlasManager.LoadAtlas from
+	/// inside ResourceLoader's loader thread, which is new work on a thread that previously always
+	/// found the atlas resident and is the shape the phone crashed in.
 	/// </summary>
 	private static readonly string[] _runAtlases = new string[3] { "card_atlas", "power_atlas", "intent_atlas" };
 
@@ -64,14 +65,33 @@ public static class AtlasManager
 	private static readonly string[] _essentialAtlases = new string[2] { "ui_atlas", "compressed" };
 
 	/// <summary>
-	/// Loads every atlas that is kept resident outside of a run.
+	/// Loads every atlas that is kept resident outside of a run. On mobile this is all thirteen,
+	/// because deferring a run atlas there means the startup preload can ask for one of its sprites
+	/// while ResourceLoader is running on a loader thread, and that thread would then call
+	/// <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadAtlas" /> synchronously - new work on a
+	/// thread that previously always found the atlas resident. On desktop the run atlases stay
+	/// deferred and <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadRunAtlases" /> picks them up.
 	/// </summary>
 	public static void LoadAllAtlases()
 	{
-		string[] menuAtlases = _menuAtlases;
-		foreach (string atlasName in menuAtlases)
+		if (OS.HasFeature("mobile"))
 		{
-			LoadAtlas(atlasName);
+			string[] allAtlases = _menuAtlases;
+			foreach (string atlasName in allAtlases)
+			{
+				LoadAtlas(atlasName);
+			}
+			string[] deferredAtlases = _runAtlases;
+			foreach (string atlasName2 in deferredAtlases)
+			{
+				LoadAtlas(atlasName2);
+			}
+			return;
+		}
+		string[] menuAtlases = _menuAtlases;
+		foreach (string atlasName3 in menuAtlases)
+		{
+			LoadAtlas(atlasName3);
 		}
 	}
 

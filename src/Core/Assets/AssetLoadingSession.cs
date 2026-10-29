@@ -9,7 +9,14 @@ namespace MegaCrit.Sts2.Core.Assets;
 
 public class AssetLoadingSession
 {
-	private const int _batchSize = 512;
+	/// <summary>
+	/// How many threaded load requests may be in flight at once. A loaded resource is not
+	/// finalised until the next frame, so this number is also the peak count of fully decoded
+	/// scenes and textures the session holds at the same time. 512 was measured on desktop and
+	/// bought nothing (482/475/453 ms against 501 ms for 128, all inside the noise), while on a
+	/// phone it quadruples that peak right when iOS is deciding whether to keep the app alive.
+	/// </summary>
+	private const int _batchSize = 128;
 
 	/// <summary>
 	/// How many frames the session may stay idle before it logs its progress again. Logging every
@@ -62,9 +69,11 @@ public class AssetLoadingSession
 	/// How many VFX scenes may be in flight at once. They used to be loaded strictly one
 	/// at a time because concurrent loading was blamed for "Another resource is loaded from
 	/// path" errors on shared ext_resources, but that serialised 92 scenes into a tail that
-	/// cost four times more than every other asset in the same preload combined.
+	/// cost four times more than every other asset in the same preload combined. The window
+	/// is a desktop win only: mobile keeps the serial shape it last ran cleanly with, because
+	/// the shared-ext_resource race has never been re-verified on that platform.
 	/// </summary>
-	private const int _vfxConcurrency = 6;
+	private static readonly int _vfxConcurrency = OS.HasFeature("mobile") ? 1 : 6;
 
 	private readonly Queue<string> _vfxInFlight = new Queue<string>();
 
@@ -99,7 +108,7 @@ public class AssetLoadingSession
 			}
 		}
 		_stopwatch.Start();
-		Log.Info($"Preloading '{name}' assets... count={_toLoad.Count} vfx={_vfxScenes.Count}");
+		Log.Info($"Preloading '{name}' assets... count={_toLoad.Count} vfx={_vfxScenes.Count} batch={_batchSize} vfx_window={_vfxConcurrency}");
 	}
 
 	private AssetLoadingSession()
@@ -148,7 +157,8 @@ public class AssetLoadingSession
 		if (flag)
 		{
 			long assetsOnlyMs = ((_assetsDrainedAtMs >= 0L) ? _assetsDrainedAtMs : _stopwatch.ElapsedMilliseconds);
-			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} vfx={_vfxLoaded} asset_phase={assetsOnlyMs:N0}ms vfx_phase={_stopwatch.ElapsedMilliseconds - assetsOnlyMs:N0}ms time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms");
+			long peakStatic = (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} vfx={_vfxLoaded} asset_phase={assetsOnlyMs:N0}ms vfx_phase={_stopwatch.ElapsedMilliseconds - assetsOnlyMs:N0}ms time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms static_mem={peakStatic / 1048576L}MB");
 			_stopwatch.Stop();
 			_completionSource.TrySetResult(result: true);
 		}
