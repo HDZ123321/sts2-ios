@@ -258,7 +258,7 @@ jobs:
           print("release_info.json verified:", d["version"], d["commit"][:12])
           PY
 
-      - name: Copy the ported Watcher content pack into the bundle
+      - name: Copy the baked content packs into the bundle
         run: |
           set -euo pipefail
           APP="build/sts2.xcarchive/Products/Applications/sts2.app"
@@ -279,6 +279,23 @@ jobs:
           assert size > 1000000, 'Watcher.pck looks truncated: %d bytes' % size
           print('Watcher.pck ok: %d bytes' % size)
           PY
+          # The Regent card-art rework is the same deal: a Harmony DLL upstream, so the
+          # replacement portraits travel as their own pack and RegentCardArt.Mount()
+          # loads it. Only textures and their .import remaps are inside; the upstream
+          # pack's res://.godot caches are dropped at build time on purpose.
+          test -f res/RegentArt.pck
+          cp res/RegentArt.pck "$APP/RegentArt.pck"
+          ls -lh "$APP/RegentArt.pck"
+          python3 - "$APP/RegentArt.pck" <<'PY'
+          import os, sys
+          path = sys.argv[1]
+          with open(path, 'rb') as f:
+              head = f.read(4)
+          assert head == b'GDPC', 'RegentArt.pck is not a Godot PCK: %r' % head
+          size = os.path.getsize(path)
+          assert size > 1000000, 'RegentArt.pck looks truncated: %d bytes' % size
+          print('RegentArt.pck ok: %d bytes' % size)
+          PY
 
       - name: Package unsigned IPA
         run: |
@@ -292,10 +309,11 @@ jobs:
 
       - name: Sanity check IPA
         run: |
-          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Watcher.pck|release_info.json|Frameworks/)' || true
+          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Watcher.pck|RegentArt.pck|release_info.json|Frameworks/)' || true
           test -f build/Payload/sts2.app/sts2
           test -f build/Payload/sts2.app/sts2.pck
           test -f build/Payload/sts2.app/Watcher.pck
+          test -f build/Payload/sts2.app/RegentArt.pck
           test -f build/Payload/sts2.app/release_info.json
           du -sh build/Payload/sts2.app
 

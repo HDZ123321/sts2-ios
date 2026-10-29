@@ -18,6 +18,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Helpers.Models;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Pooling;
@@ -1248,8 +1249,41 @@ public class NCard : Control, IPoolable
 			_ancientPortrait.Texture = portrait;
 			_banner.Material = null;
 		}
+		ApplyPortraitPresentation();
 		_frame.Material = Model.FrameMaterial;
 		ReloadOverlay();
+	}
+
+	private bool _portraitDefaultsCaptured;
+
+	private TextureRect.StretchModeEnum _portraitDefaultStretchMode;
+
+	private CanvasItem.TextureFilterEnum _portraitDefaultTextureFilter;
+
+	private TextureRect.StretchModeEnum _ancientPortraitDefaultStretchMode;
+
+	private CanvasItem.TextureFilterEnum _ancientPortraitDefaultTextureFilter;
+
+	/// <summary>
+	/// The baked-in art rework ships full-size portraits instead of atlas sprites, so the slot
+	/// has to cover-crop them rather than letterbox, and they read better with mipmaps. Cards
+	/// without a replacement keep whatever the scene set up.
+	/// </summary>
+	private void ApplyPortraitPresentation()
+	{
+		if (!_portraitDefaultsCaptured)
+		{
+			_portraitDefaultsCaptured = true;
+			_portraitDefaultStretchMode = _portrait.StretchMode;
+			_portraitDefaultTextureFilter = _portrait.TextureFilter;
+			_ancientPortraitDefaultStretchMode = _ancientPortrait.StretchMode;
+			_ancientPortraitDefaultTextureFilter = _ancientPortrait.TextureFilter;
+		}
+		bool flag = RegentCardArt.HasReplacement(Model.GetType());
+		_portrait.StretchMode = (flag ? TextureRect.StretchModeEnum.KeepAspectCovered : _portraitDefaultStretchMode);
+		_portrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _portraitDefaultTextureFilter);
+		_ancientPortrait.StretchMode = (flag ? TextureRect.StretchModeEnum.KeepAspectCovered : _ancientPortraitDefaultStretchMode);
+		_ancientPortrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _ancientPortraitDefaultTextureFilter);
 	}
 
 	private void UpdateTypePlaque()

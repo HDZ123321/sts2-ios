@@ -19,6 +19,7 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Nodes.Cards;
@@ -139,7 +140,21 @@ public abstract class CardModel : AbstractModel
 		}
 	}
 
-	public virtual string PortraitPath => ImageHelper.GetImagePath($"atlases/card_atlas.sprites/{Pool.Title.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}.tres");
+	/// <summary>
+	/// Portraits from the baked-in art rework win over the atlas sprite. The lookup is by
+	/// CLR type name, so a ported character that reuses a vanilla class name is unaffected.
+	/// </summary>
+	public virtual string PortraitPath
+	{
+		get
+		{
+			if (RegentCardArt.TryGetPath(GetType(), out string replacementPath))
+			{
+				return replacementPath;
+			}
+			return ImageHelper.GetImagePath($"atlases/card_atlas.sprites/{Pool.Title.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}.tres");
+		}
+	}
 
 	public virtual string BetaPortraitPath => ImageHelper.GetImagePath($"atlases/card_atlas.sprites/{Pool.Title.ToLowerInvariant()}/beta/{base.Id.Entry.ToLowerInvariant()}.tres");
 

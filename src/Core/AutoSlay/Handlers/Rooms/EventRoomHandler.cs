@@ -18,6 +18,7 @@ using MegaCrit.Sts2.Core.Nodes.Events.Custom;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
+using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -287,12 +288,33 @@ public class EventRoomHandler : IRoomHandler, IHandler
 	private async Task HandleFakeMerchantEvent(NFakeMerchant fakeMerchant, CancellationToken ct)
 	{
 		AutoSlayLog.Action("Handling FakeMerchant event");
+		// The proceed button is only enabled while the shop screen is the active screen context, and
+		// the merchant only opens the inventory on an explicit click. Close the inventory first, then
+		// poll for the button instead of giving up after a fixed ten seconds.
+		NMerchantInventory inventory = UiHelper.FindFirst<NMerchantInventory>(fakeMerchant);
+		if (inventory != null && inventory.IsOpen)
+		{
+			AutoSlayLog.Action("Closing the FakeMerchant inventory");
+			NBackButton backButton = UiHelper.FindFirst<NBackButton>(inventory);
+			if (backButton != null && backButton.IsEnabled)
+			{
+				await UiHelper.Click(backButton);
+			}
+			else
+			{
+				inventory.EmitSignal(NMerchantInventory.SignalName.InventoryClosed);
+			}
+			await Task.Delay(200, ct);
+		}
 		NProceedButton proceedButton = null;
 		await WaitHelper.Until(delegate
 		{
-			proceedButton = UiHelper.FindFirst<NProceedButton>(fakeMerchant);
+			if (proceedButton == null || !GodotObject.IsInstanceValid(proceedButton))
+			{
+				proceedButton = UiHelper.FindFirst<NProceedButton>(fakeMerchant);
+			}
 			return proceedButton != null && proceedButton.IsEnabled && proceedButton.Visible;
-		}, ct, TimeSpan.FromSeconds(10L), "FakeMerchant proceed button not available");
+		}, ct, TimeSpan.FromSeconds(30L), "FakeMerchant proceed button not available");
 		AutoSlayLog.Action("Clicking FakeMerchant proceed button");
 		await UiHelper.Click(proceedButton);
 	}

@@ -50,6 +50,7 @@ public static class OneTimeInitialization
 		_state = State.VeryEarly;
 		Perf.Mark("process start");
 		BakedContent.Mount();
+		RegentCardArt.Mount();
 		if (TestMode.IsOn)
 		{
 			SettingsReadResult = SaveManager.Instance.InitSettingsDataForTest();
