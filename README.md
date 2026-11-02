@@ -103,6 +103,20 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 音效因此静音（FMOD bank 未打包）。要恢复得自己搞到 FMOD for Godot 的 iOS xcframework。
 
+### 2.8 卡图替换：两套 Regent 立绘，启动时选一套
+储君（Regent）的卡图有两条上游 mod，都是 Harmony DLL，AOT 里跑不了，所以由工具把美术从它们的 PCK 里抽出来重新烤成两个独立包，跟着 App 一起发：
+
+| 包 | 上游 mod | 卡数 | 包内命名空间 | 重烤工具 |
+|---|---|---|---|---|
+| `res/RegentArt.pck` | RegentCardsAnimeRework 1.0（动漫风） | 94 | `res://generated/assets/card_art/` | `tools/regent/build_regent_art.py` |
+| `res/RegentFemArt.pck` | RegentFemPortraits 1.0（娘化，Regent 760） | 60 | `res://RegentFemPortraits/card_portraits/` | `tools/regent/build_regent_fem_art.py` |
+
+两个包各自的 `res://` 命名空间不重叠，所以能同时躺在 bundle 里；`src/Core/Modding/RegentCardArt.cs` 在 `OneTimeInitialization.ExecuteVeryEarly` 里一次挂载，`CardModel.PortraitPath` 按 CLR 全名查当前那套的表，没覆盖到的卡继续用原版图集精灵。
+
+切换靠 `user://regent_art.txt`（iOS 上就是 App 的「文稿」目录，用「文件」App 可改）。第一行 `fem`（默认）或 `anime`，改完重启生效；文件不存在、内容不认识、或者对应的包没打进 bundle，都会退回默认那套。
+
+上游包里那两份 `res://.godot/uid_cache.bin` / `global_script_class_cache.cfg` 必须在烤包时丢掉——挂载带它们的包会让引擎从包里重读 UID 缓存，把本体的 `uid://` 引用全部盖掉。
+
 ---
 
 ## 3. 构建方式 A：本地 Mac

@@ -296,6 +296,23 @@ jobs:
           assert size > 1000000, 'RegentArt.pck looks truncated: %d bytes' % size
           print('RegentArt.pck ok: %d bytes' % size)
           PY
+          # The 娘化 set (RegentFemPortraits 1.0) is the second art pack, baked by
+          # tools/regent/build_regent_fem_art.py under its own res://RegentFemPortraits/
+          # namespace so both packs can sit in the bundle at once. user://regent_art.txt
+          # picks between them at startup; 'fem' is the default.
+          test -f res/RegentFemArt.pck
+          cp res/RegentFemArt.pck "$APP/RegentFemArt.pck"
+          ls -lh "$APP/RegentFemArt.pck"
+          python3 - "$APP/RegentFemArt.pck" <<'PY'
+          import os, sys
+          path = sys.argv[1]
+          with open(path, 'rb') as f:
+              head = f.read(4)
+          assert head == b'GDPC', 'RegentFemArt.pck is not a Godot PCK: %r' % head
+          size = os.path.getsize(path)
+          assert size > 1000000, 'RegentFemArt.pck looks truncated: %d bytes' % size
+          print('RegentFemArt.pck ok: %d bytes' % size)
+          PY
 
       - name: Package unsigned IPA
         run: |
@@ -309,11 +326,12 @@ jobs:
 
       - name: Sanity check IPA
         run: |
-          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Watcher.pck|RegentArt.pck|release_info.json|Frameworks/)' || true
+          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Watcher.pck|RegentArt.pck|RegentFemArt.pck|release_info.json|Frameworks/)' || true
           test -f build/Payload/sts2.app/sts2
           test -f build/Payload/sts2.app/sts2.pck
           test -f build/Payload/sts2.app/Watcher.pck
           test -f build/Payload/sts2.app/RegentArt.pck
+          test -f build/Payload/sts2.app/RegentFemArt.pck
           test -f build/Payload/sts2.app/release_info.json
           du -sh build/Payload/sts2.app
 
