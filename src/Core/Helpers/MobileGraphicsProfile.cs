@@ -18,7 +18,7 @@ namespace MegaCrit.Sts2.Core.Helpers;
 /// single most expensive thing this client was doing per frame.
 /// </para>
 /// <para>
-/// <see cref="M:MegaCrit.Sts2.Core.Helpers.MobileGraphicsProfile.ApplyRenderScale(Godot.Window,MegaCrit.Sts2.Core.Saves.SettingsSave)" />
+/// <see cref="M:MegaCrit.Sts2.Core.Helpers.MobileGraphicsProfile.ApplyRenderScale(Godot.Window)" />
 /// is the opt-in second half: it can render the frame at the 1920x1080 design canvas instead of
 /// the phone's native pixel grid. Godot's <c>canvas_items</c> stretch mode - which this project
 /// uses - always rasterises at the full physical resolution no matter what ContentScaleSize says
@@ -152,7 +152,7 @@ public static class MobileGraphicsProfile
 		}
 		window.ContentScaleAspect = Window.ContentScaleAspectEnum.Expand;
 		window.ContentScaleFactor = 1f;
-		window.ContentScaleSize = new Vector2I(1920, 1080);
+		window.ContentScaleSize = new Vector2I(DesignWidth, DesignHeight);
 		window.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
 		Log.Info($"{LogPrefix} render scale: design canvas {window.ContentScaleSize} upscaled to {DisplayServer.WindowGetSize()} (viewport)", 3);
 	}
