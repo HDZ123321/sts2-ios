@@ -869,7 +869,7 @@ public class NGame : Control
 	private void InitializeGraphicsPreferences()
 	{
 		SettingsSave settings = SaveManager.Instance.SettingsSave;
-		if (MobileGraphicsProfile.ApplyOnce(settings, SaveManager.Instance.SaveSettings))
+		if (MobileGraphicsProfile.ApplyOnce(settings))
 		{
 			SaveManager.Instance.SaveSettings();
 		}
@@ -877,7 +877,7 @@ public class NGame : Control
 		{
 			ApplyDisplaySettings();
 			ApplySyncSetting();
-			MobileGraphicsProfile.ApplyRenderScale(_window, settings);
+			MobileGraphicsProfile.ApplyRenderScale(_window);
 		}
 		ApplyMsaa();
 		ApplyFontOversampling();
@@ -915,7 +915,9 @@ public class NGame : Control
 		{
 			return;
 		}
-		float ratio = MobileDevice.CanvasPixelRatio;
+		// On the design-canvas path the drawable is one pixel per canvas unit already, so
+		// oversampling above 1x would rasterise glyphs into pixels the framebuffer does not have.
+		float ratio = MobileGraphicsProfile.DesignCanvasRendering ? 1f : MobileDevice.CanvasPixelRatio;
 		_window.SetUseFontOversampling(true);
 		_window.OversamplingOverride = ratio;
 		Log.Info($"[Display] Font oversampling: {ratio:0.##}x (canvas {GetViewport().GetVisibleRect().Size} screen {MobileDevice.ScreenSize})");

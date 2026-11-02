@@ -67,7 +67,7 @@ public static class MobileGraphicsProfile
 	/// anything changed so a player who deliberately re-enables MSAA keeps it.
 	/// </summary>
 	/// <returns>True when the saved settings were changed and need persisting.</returns>
-	public static bool ApplyOnce(SettingsSave settings, Action persist)
+	public static bool ApplyOnce(SettingsSave settings)
 	{
 		if (settings == null || _appliedOnce)
 		{
@@ -135,7 +135,7 @@ public static class MobileGraphicsProfile
 	/// canvas (<c>viewport</c> at 1920x1080). Both keep the same canvas coordinate space, so layout
 	/// and touch targets do not move; only the size of the drawable changes.
 	/// </summary>
-	public static void ApplyRenderScale(Window window, SettingsSave settings)
+	public static void ApplyRenderScale(Window window)
 	{
 		if (window == null || !MobileDevice.IsMobile)
 		{
