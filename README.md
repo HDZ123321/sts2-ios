@@ -93,15 +93,15 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 已注册为 autoload（`project.godot` 第 35 行）。
 
-### 2.7 已剥离的组件（iOS 上不可用）
-| 组件 | 原因 | 处理 |
+### 2.7 外部组件（哪些进了 App，哪些还是降级）
+| 组件 | 状态 | 处理 |
 |---|---|---|
-| **Sentry** | gdextension 清单里根本没有 ios 条目 | 从 `[autoload]` 移除 |
-| **FMOD** | 有 ios 清单，但 `.xcframework` 不在 PCK 里，需 Firelight 授权 | 从 `[autoload]` 移除；C# 侧只用到 `FmodSfx.cs` 的字符串常量，不影响逻辑 |
-| **Spine** | 同上，需 Esoteric 授权 | 移除；C# 侧全是字符串反射（`SpineSprite`），动画降级不崩 |
+| **Spine** | **已恢复**（v6 起） | `spine-godot` framework 随 `sts2-frameworks.zip` 一起发并链接进 App；C# 侧本来就是字符串反射，缺了只是动画降级，不崩 |
+| **FMOD** | **已恢复**（v7 起） | fmod iOS framework 随 frameworks.zip 发；`LC_LOAD_DYLIB` 改 `LC_LOAD_WEAK_DYLIB` 指向 `@rpath/fmod-disabled.framework/fmod-disabled`（`tools/disable_dylib_path.py`），再把 flat-namespace 的 30 个 import 改弱绑定（`tools/weaken_fmod_bind.py`，bind opcode `0x40→0x41`）。framework 缺失或版本不匹配时是静音，不是启动即 dyld 崩 |
+| **Sentry** | 仍然关闭 | `SentryService` 在 `OS.HasFeature("mobile")` 时直接 return——原生 sentry 库不在这个 build 里 |
 | **Steam** | 无 iOS SDK | 走 `Platform.Null` 分支，单机可用 |
 
-音效因此静音（FMOD bank 未打包）。要恢复得自己搞到 FMOD for Godot 的 iOS xcframework。
+`N_WEAK_REF` 那条路走不通：dyld4 只认 bind opcode 的弱绑定位，改 Mach-O 符号表没用——这是当时连续几次启动崩溃的根因。
 
 ### 2.8 卡图替换：两套 Regent 立绘，启动时选一套
 储君（Regent）的卡图有两条上游 mod，都是 Harmony DLL，AOT 里跑不了，所以由工具把美术从它们的 PCK 里抽出来重新烤成两个独立包，跟着 App 一起发：
@@ -116,6 +116,34 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 切换靠 `user://regent_art.txt`（iOS 上就是 App 的「文稿」目录，用「文件」App 可改）。第一行 `fem`（默认）或 `anime`，改完重启生效；文件不存在、内容不认识、或者对应的包没打进 bundle，都会退回默认那套。
 
 上游包里那两份 `res://.godot/uid_cache.bin` / `global_script_class_cache.cfg` 必须在烤包时丢掉——挂载带它们的包会让引擎从包里重读 UID 缓存，把本体的 `uid://` 引用全部盖掉。
+
+### 2.9 手机上的发热与帧率：一次性的省电档
+
+抓日志看到的现象是这台机器在 120 Hz 屏上跑满帧、机身发烫。原因不在 C# 每帧逻辑（全工程的 `_Process` 方法体都扫过，最长的 1.5 KB，`_PhysicsProcess` 一个都没有），而在**渲染带宽**，且历史构建从来没动过 steady-state 帧循环。三处改动：
+
+| 改动 | 位置 | 为什么 |
+|---|---|---|
+| **MSAA 关掉**（`Msaa: 2 → 0`） | `src/Core/Helpers/MobileGraphicsProfile.cs` | 2D 渲染器开 MSAA 只是把采样带宽翻倍，没有可见收益。原来 `SettingsSaveManager.ApplyPlatformDefaults` 只在**新建存档**时设 `Msaa=2`，老存档永远带着它 |
+| **帧率钳到 [30, 60]** | 同上 + `NFpsPaginator` | 设置界面的档位到 500，ProMotion 会真的去追；`Engine.MaxFps` 在 iOS 上经 swapchain 生效，不是空设 |
+| **VSync 固定 On** | 同上 | 原来是 `Adaptive`，帧时抖动时白烧功耗 |
+
+`ApplyOnce` 写在 `user://mobile_profile_v1.txt` 里的标记只写一次：**升级后第一次启动改一次，之后玩家自己把 MSAA 开回去就不会再被覆盖**。想重跑就把那个文件删掉。
+
+#### 可选：按设计画布渲染（默认关）
+
+`user://render_scale.txt` 第一行写 `design`（或 `canvas`，或任意 `0 < x < 1` 的浮点数），重启后从 `canvas_items` 切到 `viewport` 拉伸，**渲染目标就是 1920×1080 设计画布，再双线性放大到屏幕**；iPhone 2796×1290 上相当于 0.70× 像素。
+
+要点：`canvas_items` 下怎么设 `ContentScaleSize` 都不省像素——`Window::_update_viewport_size()` 里 `final_size = screen_size`，永远物理分辨率；只有 `viewport` 模式才 `final_size = (viewport_size / content_scale_factor).floor()`。切过去之后 **canvas 坐标系不变**（两边都是 `viewport_size`），所以布局和触摸目标一动不动，代价只是 1.19× 的轻微软化。写 `1` 或删文件即回原样。
+
+#### 怎么量
+
+手机上 `Perf` 是自动开的（`MobileDevice.IsMobile` 即启用），每 1800 帧（约 30 秒）打一行：
+
+```
+[Perf] frames=1800 avg=8.31ms fps=120.4 max=19.7ms hitch=0 proc=1.92ms phys=0.00ms draw=84 obj=612 nodes=2174 gc0=0 gc1=0 gc2=0 managed=61MB vram=214MB
+```
+
+`proc`（C# 每帧时间）远小于 `avg` 就是 GPU 受限；`draw`/`obj` 高则先砍绘制批次。想看更密的报表用 `--perf` 启动（600 帧一行），想彻底关掉用 `--noperf`。桌面端默认不开，`--perf` 才开。
 
 ---
 
@@ -213,8 +241,8 @@ workflow 里已经开了 `with: lfs: true`。
 
 ## 6. 已知限制
 
-1. **无音效** —— FMOD bank 未打包，FMOD/Spine/Sentry 三个 gdextension 都摘掉了
-2. **无 Spine 动画** —— 骨骼动画缺失，静态帧正常
+1. **音效取决于 framework 落位** —— FMOD framework 没进 bundle 时静音（弱链接，不崩）
+2. **Spine 动画同理** —— framework 缺失只是退化到静态帧
 3. **无多人联机** —— Steam 传输层不可用，单机全功能
 4. **模拟器跑不了** —— 需要 `compatibility` 渲染器；当前工程用默认 `forward_plus`。
    真机 arm64 没问题

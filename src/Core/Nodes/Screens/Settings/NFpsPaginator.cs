@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Saves;
 
@@ -75,7 +76,13 @@ public class NFpsPaginator : NPaginator, IResettableSettingNode
 	{
 		_currentIndex = index;
 		_label.SetTextAutoSize(_options[index]);
-		SaveManager.Instance.SettingsSave.FpsLimit = int.Parse(_options[index]);
+		int requested = int.Parse(_options[index]);
+		int frameRate = MobileGraphicsProfile.ClampFrameRate(requested);
+		if (frameRate != requested)
+		{
+			Log.Info($"FPS Limit: {requested} clamped to {frameRate} on this device");
+		}
+		SaveManager.Instance.SettingsSave.FpsLimit = frameRate;
 		Log.Info($"FPS Limit: {SaveManager.Instance.SettingsSave.FpsLimit}");
 		Engine.MaxFps = SaveManager.Instance.SettingsSave.FpsLimit;
 	}

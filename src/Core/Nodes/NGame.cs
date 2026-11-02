@@ -868,14 +868,20 @@ public class NGame : Control
 	/// </summary>
 	private void InitializeGraphicsPreferences()
 	{
+		SettingsSave settings = SaveManager.Instance.SettingsSave;
+		if (MobileGraphicsProfile.ApplyOnce(settings, SaveManager.Instance.SaveSettings))
+		{
+			SaveManager.Instance.SaveSettings();
+		}
 		if (!DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase))
 		{
 			ApplyDisplaySettings();
 			ApplySyncSetting();
+			MobileGraphicsProfile.ApplyRenderScale(_window, settings);
 		}
 		ApplyMsaa();
 		ApplyFontOversampling();
-		Engine.MaxFps = SaveManager.Instance.SettingsSave.FpsLimit;
+		Engine.MaxFps = MobileGraphicsProfile.ClampFrameRate(settings.FpsLimit);
 	}
 
 	/// <summary>
