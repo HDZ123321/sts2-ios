@@ -140,7 +140,22 @@ jobs:
           find sts2_aot.xcframework -maxdepth 3 | head -20
 
       - name: Link AOT framework into pbxproj
-        run: python3 tools/patch_pbxproj.py sts2.xcodeproj/project.pbxproj
+        run: |
+          python3 tools/patch_pbxproj.py sts2.xcodeproj/project.pbxproj
+          python3 tools/patch_app_sources.py sts2.xcodeproj/project.pbxproj
+          grep -c 'SWIFT_VERSION' sts2.xcodeproj/project.pbxproj
+          grep -c 'Sts2IslandBridge.swift in Sources' sts2.xcodeproj/project.pbxproj
+
+      - name: Verify Swift is wired into the app target
+        run: |
+          set -euo pipefail
+          # ActivityKit 只有 Swift 接口，灵动岛桥必须真的编进 app；这几项任一缺失
+          # xcodebuild 要么报 "SWIFT_VERSION not set"，要么链接成强引用（旧系统起不来）。
+          test "$(grep -c 'SWIFT_VERSION = 5.0;' sts2.xcodeproj/project.pbxproj)" -ge 2
+          test "$(grep -c 'disable-autolink-framework' sts2.xcodeproj/project.pbxproj)" -ge 2
+          test "$(grep -c 'weak_framework ActivityKit' sts2.xcodeproj/project.pbxproj)" -ge 2
+          test "$(grep -c 'Sts2IslandBootstrap.m in Sources' sts2.xcodeproj/project.pbxproj)" -eq 1
+          test "$(grep -c 'Sts2RunActivityAttributes.swift in Sources' sts2.xcodeproj/project.pbxproj)" -eq 1
 
       - name: Archive (unsigned)
         run: |
@@ -314,6 +329,32 @@ jobs:
           print('RegentFemArt.pck ok: %d bytes' % size)
           PY
 
+      - name: Build and embed the Dynamic Island widget extension
+        run: |
+          set -euo pipefail
+          APP="build/sts2.xcarchive/Products/Applications/sts2.app"
+          # 扩展是手工用 swiftc 组装的 .appex（见 tools/build_island_extension.py 顶部注释），
+          # 版本号从主 app 的 Info.plist 回填，所以两边永远一致。
+          python3 tools/build_island_extension.py --app "$APP"
+          test -f "$APP/PlugIns/Sts2Island.appex/Sts2Island"
+          test -f "$APP/PlugIns/Sts2Island.appex/Info.plist"
+          python3 - "$APP" <<'PY'
+          import os, plistlib, sys
+          app = sys.argv[1]
+          with open(os.path.join(app, 'Info.plist'), 'rb') as f:
+              app_info = plistlib.load(f)
+          assert app_info.get('NSSupportsLiveActivities') is True, 'NSSupportsLiveActivities missing'
+          appex = os.path.join(app, 'PlugIns', 'Sts2Island.appex')
+          with open(os.path.join(appex, 'Info.plist'), 'rb') as f:
+              ext = plistlib.load(f)
+          assert ext['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.widgetkit-extension'
+          assert ext['CFBundleIdentifier'] == app_info['CFBundleIdentifier'] + '.island', ext['CFBundleIdentifier']
+          assert ext['CFBundleShortVersionString'] == app_info['CFBundleShortVersionString']
+          assert ext['CFBundleVersion'] == app_info['CFBundleVersion']
+          total = sum(os.path.getsize(os.path.join(r, n)) for r, _d, fs in os.walk(appex) for n in fs)
+          print('island extension ok: %d bytes' % total)
+          PY
+
       - name: Package unsigned IPA
         run: |
           mkdir -p build/Payload
@@ -327,12 +368,14 @@ jobs:
       - name: Sanity check IPA
         run: |
           unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/(sts2|sts2.pck|Watcher.pck|RegentArt.pck|RegentFemArt.pck|release_info.json|Frameworks/)' || true
+          unzip -l build/sts2-unsigned.ipa | grep -E 'Payload/sts2.app/PlugIns/Sts2Island.appex/(Sts2Island|Info.plist)'
           test -f build/Payload/sts2.app/sts2
           test -f build/Payload/sts2.app/sts2.pck
           test -f build/Payload/sts2.app/Watcher.pck
           test -f build/Payload/sts2.app/RegentArt.pck
           test -f build/Payload/sts2.app/RegentFemArt.pck
           test -f build/Payload/sts2.app/release_info.json
+          test -f build/Payload/sts2.app/PlugIns/Sts2Island.appex/Sts2Island
           du -sh build/Payload/sts2.app
 
       - name: Upload unsigned IPA
