@@ -183,12 +183,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          test -f build/archive.log || exit 0
-          # The run log needs a token to read; a release asset does not. Keep the tail only.
-          tail -c 120000 build/archive.log > build/archive-failure.log
-          gh release upload "${PCK_TAG}" build/archive-failure.log --clobber --repo "${GITHUB_REPOSITORY}"
-          grep -E 'error:|fatal error:' build/archive.log | head -40 || true
+          set -uo pipefail
+          # The job log needs a token to read, so the error goes out on two channels that do not:
+          # check-run annotations (public checks API) and a release asset.
+          log=build/archive.log
+          if [ ! -f "$log" ]; then
+            echo "::error::build/archive.log was never written"
+            exit 0
+          fi
+          echo "::error::archive.log is $(wc -c < "$log") bytes"
+          grep -nE 'error:|fatal error:|Undefined symbol|ld: |clang: error' "$log" | head -12 |
+            while IFS= read -r line; do
+              echo "::error::$(printf '%s' "$line" | cut -c1-900)"
+            done
+          tail -c 120000 "$log" > build/archive-failure.log
+          gh release upload "${PCK_TAG}" build/archive-failure.log --clobber --repo "${GITHUB_REPOSITORY}" ||
+            echo "::error::could not upload the archive log to the release"
 
       - name: Detach the fmod dylib from launch-time loading
         run: |
