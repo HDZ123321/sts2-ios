@@ -161,22 +161,7 @@ jobs:
           grep -q 'SWIFT_VERSION' sts2.xcodeproj/project.pbxproj
 
       - name: Archive (unsigned)
-        run: |
-          set -o pipefail
-          rm -rf build/sts2.xcarchive
-          xcodebuild archive \
-            -project sts2.xcodeproj \
-            -scheme sts2 \
-            -configuration Release \
-            -sdk iphoneos \
-            -arch arm64 \
-            -archivePath "$PWD/build/sts2.xcarchive" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            -quiet 2>&1 | tee build/archive.log
+        run: bash tools/archive_unsigned.sh "$BUNDLE_ID"
 
       - name: Publish the archive log when the archive fails
         if: failure()
