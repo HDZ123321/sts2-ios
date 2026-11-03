@@ -163,28 +163,6 @@ jobs:
       - name: Archive (unsigned)
         run: bash tools/archive_unsigned.sh "$BUNDLE_ID"
 
-      - name: Publish the archive log when the archive fails
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          # The job log needs a token to read, so the error goes out on two channels that do not:
-          # check-run annotations (public checks API) and a release asset.
-          log=build/archive.log
-          if [ ! -f "$log" ]; then
-            echo "::error::build/archive.log was never written"
-            exit 0
-          fi
-          echo "::error::archive.log is $(wc -c < "$log") bytes"
-          grep -nE 'error:|fatal error:|Undefined symbol|ld: |clang: error' "$log" | head -12 |
-            while IFS= read -r line; do
-              echo "::error::$(printf '%s' "$line" | cut -c1-900)"
-            done
-          tail -c 120000 "$log" > build/archive-failure.log
-          gh release upload "${PCK_TAG}" build/archive-failure.log --clobber --repo "${GITHUB_REPOSITORY}" ||
-            echo "::error::could not upload the archive log to the release"
-
       - name: Detach the fmod dylib from launch-time loading
         run: |
           set -euo pipefail
@@ -346,7 +324,9 @@ jobs:
           APP="build/sts2.xcarchive/Products/Applications/sts2.app"
           # 扩展是手工用 swiftc 组装的 .appex（见 tools/build_island_extension.py 顶部注释），
           # 版本号从主 app 的 Info.plist 回填，所以两边永远一致。
-          python3 tools/build_island_extension.py --app "$APP"
+          set -o pipefail
+          mkdir -p build
+          python3 tools/build_island_extension.py --app "$APP" 2>&1 | tee build/island-build.log
           test -f "$APP/PlugIns/Sts2Island.appex/Sts2Island"
           test -f "$APP/PlugIns/Sts2Island.appex/Info.plist"
           python3 - "$APP" <<'PY'
@@ -365,6 +345,27 @@ jobs:
           total = sum(os.path.getsize(os.path.join(r, n)) for r, _d, fs in os.walk(appex) for n in fs)
           print('island extension ok: %d bytes' % total)
           PY
+
+      - name: Publish the build log when a build step fails
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          # The job log needs a token to read, so the error goes out on two channels that do not:
+          # check-run annotations (public checks API) and a release asset.
+          for log in build/archive.log build/island-build.log; do
+            [ -f "$log" ] || continue
+            echo "::error::$log is $(wc -c < "$log") bytes"
+            grep -nE 'error:|fatal error:|Undefined symbol|ld: |clang: error' "$log" | head -12 |
+              while IFS= read -r line; do
+                echo "::error::$(printf '%s' "$line" | cut -c1-900)"
+              done
+            out="build/$(basename "$log" .log)-failure.log"
+            tail -c 120000 "$log" > "$out"
+            gh release upload "${PCK_TAG}" "$out" --clobber --repo "${GITHUB_REPOSITORY}" ||
+              echo "::error::could not upload $log to the release"
+          done
 
       - name: Package unsigned IPA
         run: |
