@@ -91,7 +91,7 @@ private final class Sts2IslandPoller {
 		if let existing = Activity<Sts2RunActivityAttributes>.activities.first {
 			lastActiveRunId = existing.attributes.runId
 			Task {
-				await existing.update(state)
+				await existing.update(using: state)
 			}
 			return
 		}
@@ -120,7 +120,7 @@ private final class Sts2IslandPoller {
 		for activity in activities {
 			let state = activity.contentState
 			Task {
-				await activity.end(state, dismissalPolicy: .immediate)
+				await activity.end(using: state, dismissalPolicy: .immediate)
 			}
 		}
 		lastActiveRunId = nil
