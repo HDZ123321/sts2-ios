@@ -878,6 +878,13 @@ public class NGame : Control
 			ApplyDisplaySettings();
 			ApplySyncSetting();
 			MobileGraphicsProfile.ApplyRenderScale(_window);
+			if (MobileDevice.IsMobile)
+			{
+				// The one line that tells us which phone we are actually running on: safe-area
+				// insets in both pixels and points, the refresh rate, and the canvas rect the
+				// layout ends up using. Everything iPhone-17-Pro-Max specific is inferred from it.
+				Log.Info($"[Display] {MobileDevice.Describe()}");
+			}
 		}
 		ApplyMsaa();
 		ApplyFontOversampling();
@@ -1175,6 +1182,7 @@ public class NGame : Control
 		Perf.Mark("main menu scene");
 		Log.Info($"[Startup] Time to main menu: {Time.GetTicksMsec():N0}ms");
 		Perf.StartFrameWatch();
+		DynamicIslandReporter.Start(GetTree());
 		ModManager.ResolveStartupWatchdog();
 		LogResourceStats("main menu loaded (essential)");
 		TaskHelper.RunSafely(LoadDeferredStartupAssetsAsync());

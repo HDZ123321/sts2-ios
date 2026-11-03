@@ -34,8 +34,13 @@ void godot_apple_embedded_plugins_initialize();
 void godot_apple_embedded_plugins_deinitialize();
 // Exported Plugins
 
+// sts2: the Dynamic Island Live Activity bridge (sts2/island/*.swift). Started from the
+// Sts2IslandBootstrap +load too, so this is only a second, later trigger; both are idempotent.
+extern "C" void sts2_island_bootstrap(void);
+
 // Use Plugins
 void godot_apple_embedded_plugins_initialize() {
+	sts2_island_bootstrap();
 }
 
 void godot_apple_embedded_plugins_deinitialize() {

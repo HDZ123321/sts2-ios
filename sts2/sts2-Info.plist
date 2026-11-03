@@ -59,6 +59,8 @@
 	<key>UILaunchStoryboardName</key>
 <string>Launch Screen</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key><true/>
+	<key>NSSupportsLiveActivities</key><true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key><true/>
 </dict>
 </plist>
 

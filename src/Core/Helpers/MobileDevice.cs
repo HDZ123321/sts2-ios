@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Godot;
 using MegaCrit.Sts2.Core.Logging;
 
@@ -42,6 +43,8 @@ public static class MobileDevice
 	private static Vector2I _screenSize;
 
 	private static float _screenScale = 1f;
+
+	private static float _refreshRate;
 
 	/// <summary>
 	/// True when the game runs on a touch-first platform (iOS, Android).
@@ -101,6 +104,54 @@ public static class MobileDevice
 	}
 
 	/// <summary>
+	/// The panel refresh rate in Hz (60 on older phones, 120 on ProMotion hardware). Used for the
+	/// startup log only - the frame cap is applied through <c>Engine.MaxFps</c>.
+	/// </summary>
+	public static float RefreshRate
+	{
+		get
+		{
+			Probe();
+			return _refreshRate;
+		}
+	}
+
+	/// <summary>
+	/// The safe area the system reports, in screen pixels. On a Dynamic Island phone in landscape
+	/// this is what keeps the HUD clear of the island and the rounded corners.
+	/// </summary>
+	public static Rect2I SafeAreaPixels
+	{
+		get
+		{
+			Rect2I result = GetSafeAreaPixels();
+			return result;
+		}
+	}
+
+	/// <summary>
+	/// One-line description of the display the game is drawing into, for the startup log and for
+	/// bug reports from a specific device.
+	/// </summary>
+	public static string Describe()
+	{
+		Rect2 canvas = GetCanvasRect();
+		Vector2I screen = ScreenSize;
+		Rect2I safe = GetSafeAreaPixels();
+		int insetLeft = (safe.Size.X > 0) ? safe.Position.X : 0;
+		int insetTop = (safe.Size.Y > 0) ? safe.Position.Y : 0;
+		int insetRight = (safe.Size.X > 0) ? screen.X - (safe.Position.X + safe.Size.X) : 0;
+		int insetBottom = (safe.Size.Y > 0) ? screen.Y - (safe.Position.Y + safe.Size.Y) : 0;
+		float points = (ScreenScale > 0f) ? ScreenScale : 1f;
+		return string.Format(CultureInfo.InvariantCulture,
+			"model={0} screen={1}x{2} points={3:0.#}x{4:0.#} canvas={5:0}x{6:0} refresh={7:0.#}Hz form={8} safeInsetsPx=l{9} t{10} r{11} b{12} safeInsetsPt=l{13:0.#} t{14:0.#} r{15:0.#} b{16:0.#}",
+			OS.GetModelName() ?? string.Empty, screen.X, screen.Y, screen.X / points, screen.Y / points,
+			canvas.Size.X, canvas.Size.Y, RefreshRate, DeviceFormFactor,
+			insetLeft, insetTop, insetRight, insetBottom,
+			insetLeft / points, insetTop / points, insetRight / points, insetBottom / points);
+	}
+
+	/// <summary>
 	/// Converts a size in points into canvas units at the current content scale, clamped so that
 	/// a hit target never shrinks below what the designer authored.
 	/// </summary>
@@ -140,6 +191,31 @@ public static class MobileDevice
 			}
 			float ratio = Mathf.Max(ScreenSize.X / visible.Size.X, ScreenSize.Y / visible.Size.Y);
 			return Mathf.Clamp(ratio, 1f, 2f);
+		}
+	}
+
+	/// <summary>
+	/// The safe area in screen pixels, or a zero rect when the display server cannot report one
+	/// (desktop, or a window that is momentarily 0-sized while the device rotates).
+	/// </summary>
+	private static Rect2I GetSafeAreaPixels()
+	{
+		if (!IsMobile)
+		{
+			return default(Rect2I);
+		}
+		try
+		{
+			Rect2I safeArea = DisplayServer.GetDisplaySafeArea();
+			if (safeArea.Size.X <= 0 || safeArea.Size.Y <= 0)
+			{
+				return default(Rect2I);
+			}
+			return safeArea;
+		}
+		catch (Exception)
+		{
+			return default(Rect2I);
 		}
 	}
 
@@ -201,7 +277,16 @@ public static class MobileDevice
 		}
 		string model = OS.GetModelName() ?? string.Empty;
 		_formFactor = ClassifyModel(model, _screenSize);
-		Log.Info($"[MobileDevice] model={model} screen={_screenSize} scale={_screenScale} form={_formFactor}");
+		try
+		{
+			_refreshRate = DisplayServer.ScreenGetRefreshRate(DisplayServer.GetPrimaryScreen());
+		}
+		catch (Exception ex3)
+		{
+			Log.Warn("[MobileDevice] Could not read the refresh rate: " + ex3.Message);
+			_refreshRate = 0f;
+		}
+		Log.Info($"[MobileDevice] model={model} screen={_screenSize} scale={_screenScale} refresh={_refreshRate:0.#}Hz form={_formFactor}");
 	}
 
 	private static FormFactor ClassifyModel(string model, Vector2I screenSize)
