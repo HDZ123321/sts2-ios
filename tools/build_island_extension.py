@@ -131,6 +131,11 @@ def build_extension(app, bundle_id, short_version, build_version, min_os, keep):
     if not binary.is_file() or binary.stat().st_size == 0:
         die("swiftc produced no executable")
 
+    # ld on the macos-14 runner ignores the -application_extension flag we pass through
+    # -Xlinker (the linked image came back without MH_APP_EXTENSION), so stamp the bit
+    # ourselves instead of losing a whole CI cycle per attempt.
+    set_app_extension_flag(binary)
+
     # Info.plist：模板里的 $(ISLAND_*) 由主 app 的名义回填
     plist = read_plist(PLIST_TEMPLATE)
     substitutions = {
@@ -185,7 +190,7 @@ def verify_binary(binary, min_os):
     if arch != "arm64":
         die("extension is not a single arm64 slice: %s" % arch)
     if not _has_app_extension_flag(binary):
-        die("Mach-O is missing MH_APP_EXTENSION (built without -application_extension)")
+        die("Mach-O is still missing MH_APP_EXTENSION after the header stamp")
     load_commands = run(["otool", "-l", binary])
     if "LC_MAIN" not in load_commands:
         die("extension has no LC_MAIN entry point (NSExtensionMain was not linked)")
@@ -194,6 +199,30 @@ def verify_binary(binary, min_os):
         die("extension is not built for the iOS platform:\n" + build)
     if "minos " + min_os not in build:
         log("warning: expected minos %s, got:\n%s" % (min_os, build.strip()))
+
+
+def set_app_extension_flag(binary):
+    """OR MH_APP_EXTENSION (0x00800000) into the Mach-O header flags in place.
+
+    ld is supposed to do this for -application_extension, but the Xcode 15.4 toolchain on
+    the macos-14 runner drops the flag, and an extension image without it makes dyld skip
+    the extension-safe library checks. The appex is unsigned at this point, so rewriting
+    the header costs nothing.
+    """
+    path = Path(binary)
+    data = bytearray(path.read_bytes())
+    if len(data) < 32:
+        die("Mach-O is too short to carry a header")
+    magic = int.from_bytes(data[:4], "little")
+    if magic not in (0xFEEDFACF, 0xFEEDFACE):
+        die("not a Mach-O image: magic 0x%X" % magic)
+    flags = int.from_bytes(data[24:28], "little")
+    if flags & 0x800000:
+        return False
+    data[24:28] = (flags | 0x800000).to_bytes(4, "little")
+    path.write_bytes(bytes(data))
+    log("stamped MH_APP_EXTENSION into the header (ld did not)")
+    return True
 
 
 def _has_app_extension_flag(binary):
