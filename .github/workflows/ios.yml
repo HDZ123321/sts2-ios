@@ -151,11 +151,14 @@ jobs:
           set -euo pipefail
           # ActivityKit 只有 Swift 接口，灵动岛桥必须真的编进 app；这几项任一缺失
           # xcodebuild 要么报 "SWIFT_VERSION not set"，要么链接成强引用（旧系统起不来）。
+          # 每个源文件出现两次：PBXBuildFile 里的声明 + Sources 阶段的条目。
           test "$(grep -c 'SWIFT_VERSION = 5.0;' sts2.xcodeproj/project.pbxproj)" -ge 2
           test "$(grep -c 'disable-autolink-framework' sts2.xcodeproj/project.pbxproj)" -ge 2
           test "$(grep -c 'weak_framework ActivityKit' sts2.xcodeproj/project.pbxproj)" -ge 2
-          test "$(grep -c 'Sts2IslandBootstrap.m in Sources' sts2.xcodeproj/project.pbxproj)" -eq 1
-          test "$(grep -c 'Sts2RunActivityAttributes.swift in Sources' sts2.xcodeproj/project.pbxproj)" -eq 1
+          test "$(grep -c 'Sts2IslandBootstrap.m in Sources' sts2.xcodeproj/project.pbxproj)" -eq 2
+          test "$(grep -c 'Sts2IslandBridge.swift in Sources' sts2.xcodeproj/project.pbxproj)" -eq 2
+          test "$(grep -c 'Sts2RunActivityAttributes.swift in Sources' sts2.xcodeproj/project.pbxproj)" -eq 2
+          grep -q 'SWIFT_VERSION' sts2.xcodeproj/project.pbxproj
 
       - name: Archive (unsigned)
         run: |
