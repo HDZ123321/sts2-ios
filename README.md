@@ -145,6 +145,40 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 `proc`（C# 每帧时间）远小于 `avg` 就是 GPU 受限；`draw`/`obj` 高则先砍绘制批次。想看更密的报表用 `--perf` 启动（600 帧一行），想彻底关掉用 `--noperf`。桌面端默认不开，`--perf` 才开。
 
+### 2.10 灵动岛：跑图状态挂在 Live Activity 上
+
+iPhone 14 Pro 以后的机型（含 17 Pro Max）在 App 外能看到一条「第 X 幕 第 Y 层 · HP 32/80」的实时活动。实现刻意避开两处最容易翻车的地方：
+
+**C# 不直接调 Swift。** NativeAOT 镜像里 `DllImport` 打到主镜像的 Swift 符号，这条路在本机完全无法验证（成了就是成了，不成就整个启动段崩），所以走文件通道：
+
+```
+C#  DynamicIslandReporter  每秒（只在内容变化时）写 user://island_state.json
+                                 ↓  0.5 s 轮询
+Swift Sts2IslandBridge     读文件 → Activity.update() / Activity.request()
+```
+
+写失败只丢灵动岛，一帧都不影响。文件内容是一行 JSON：`{"seq":12,"active":true,"hp":32,"maxHp":80,"floor":7,"act":2,"gold":143,"character":"铁甲战士"}`；不在跑图时 `active` 为 false，扩展收到就把活动结束掉。
+
+**扩展不建 Xcode target。** `tools/build_island_extension.py` 用 `swiftc` 直接编出 `.appex` 塞进 `sts2.app/PlugIns/`，版本号从主 app 的 `Info.plist` 回填。值得记的三件事：
+
+| 细节 | 为什么 |
+|---|---|
+| `-Xlinker -e -Xlinker _NSExtensionMain` | 扩展入口不是 `main()`；不指定的话系统启动扩展时立刻崩 |
+| `-Xlinker -application_extension` | 缺 `MH_APP_EXTENSION` 标记，系统以 "not a valid extension" 拒掉整个 bundle |
+| `IPHONEOS_DEPLOYMENT_TARGET` 保持 14.0，但 `-weak_framework ActivityKit` + `-Xfrontend -disable-autolink-framework -Xfrontend ActivityKit` | ActivityKit 是 16.1 才有的库。强链接会让 dyld 在旧系统上拒绝启动 App；Swift 的 autolink 会把它链接成强引用，所以必须从两头掐掉。代价只是旧系统没有灵动岛 |
+
+app 侧因此必须开 Swift：`tools/patch_app_sources.py` 往 `project.pbxproj` 里补三个源文件、`SWIFT_VERSION = 5.0`、上面那两个链接设置（跑两遍结果一样）。`sts2/dummy.cpp` 的 `godot_apple_embedded_plugins_initialize()` 与 `Sts2IslandBootstrap.m` 的 `+load` 各触发一次 `sts2_island_bootstrap()`，两处都幂等。
+
+排查时先看 `user://island_status.txt`（和日志同目录）：扩展侧拿不到授权、请求失败、活动结束都会在那里留一行带时间戳的记录，同时进 `NSLog`。
+
+### 2.11 iPhone 17 Pro Max（6.9"，1320×2868）
+
+这块屏不需要单独的代码路径——布局全走 canvas 坐标系——但有三件事值得写下来：
+
+- **横向安全区**：灵动岛在横屏时压住一侧，`DisplayServer.GetDisplaySafeArea()` 报的 insets 会非零，`NGame.ApplySafeArea()` 已经按 `uniformScale` 换算成 canvas 单位并缩进 UI。启动日志里那行 `[Display] model=... safeInsetsPx=... safeInsetsPt=...` 就是这件事的自证，换机型后先看它。
+- **帧率**：这块 120 Hz 屏正是 §2.9 那套省电档的目标，`Engine.MaxFps` 被钳在 60，MSAA 关掉。
+- **分辨率**：原生渲染是 3.8 MPx。想要更省电就在 `user://render_scale.txt` 写 `design`（见 §2.9），画面从 1920×1080 放大，布局与触摸目标不动。
+
 ---
 
 ## 3. 构建方式 A：本地 Mac
@@ -211,8 +245,10 @@ workflow 里已经开了 `with: lfs: true`。
 ├── RiderTestRunner/     # 2 个 .cs
 ├── tools/BfiPatch/      # beforefieldinit 回填工具
 ├── tools/patch_pbxproj.py
+├── tools/patch_app_sources.py          # 把灵动岛的 Swift/ObjC 挂进 app target
+├── tools/build_island_extension.py     # swiftc 手工组装 .appex
 ├── sts2.xcodeproj/
-├── sts2/
+├── sts2/                # 导出模板 + island/（灵动岛源码与扩展 Info.plist）
 ├── PrivacyInfo.xcprivacy
 └── sts2.pck
 ```
@@ -249,6 +285,9 @@ workflow 里已经开了 `with: lfs: true`。
 5. **首次加载慢** —— 1.5 GB PCK + 解压纹理，A15 上约 20–40 秒
 6. **`audio_manager_proxy.gd` 报 Parse error** —— `.gdc` 字节码重新加载的问题，
    该脚本只服务 FMOD，不影响 C# 主流程
+7. **灵动岛要 iOS 16.1+** —— ActivityKit 的下限；旧系统上 App 正常跑（弱链接），
+   只是没有实时活动。另外必须在「设置 → 杀戮尖塔 2 → 实时活动」里允许，
+   扩展侧被拒时会在 `user://island_status.txt` 里写明原因
 
 ---
 
