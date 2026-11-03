@@ -117,8 +117,8 @@ private final class Sts2IslandPoller {
 			lastActiveRunId = nil
 			return
 		}
-		let state = activities.first?.contentState
 		for activity in activities {
+			let state = activity.contentState
 			Task {
 				await activity.end(state, dismissalPolicy: .immediate)
 			}
