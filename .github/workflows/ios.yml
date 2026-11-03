@@ -180,13 +180,15 @@ jobs:
 
       - name: Publish the archive log when the archive fails
         if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           test -f build/archive.log || exit 0
           # The run log needs a token to read; a release asset does not. Keep the tail only.
           tail -c 120000 build/archive.log > build/archive-failure.log
-          gh release upload "${PCK_TAG}" build/archive-failure.log --clobber || true
-          grep -E 'error:|warning: .*\.swift|fatal error:' build/archive.log | head -40 || true
+          gh release upload "${PCK_TAG}" build/archive-failure.log --clobber --repo "${GITHUB_REPOSITORY}"
+          grep -E 'error:|fatal error:' build/archive.log | head -40 || true
 
       - name: Detach the fmod dylib from launch-time loading
         run: |
