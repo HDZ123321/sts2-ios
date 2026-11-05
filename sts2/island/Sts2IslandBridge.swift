@@ -146,14 +146,14 @@ private final class Sts2IslandPoller {
 		let url = dir.appendingPathComponent(name)
 		let stamp = fileStamp(url)
 		if stamp.isEmpty {
-			if avatarCache?.name != name || avatarCache?.data != nil {
+			if avatarCache.name != name || avatarCache.data != nil {
 				status("avatar '\(name)' is missing next to the state file")
 			}
 			avatarCache = (name, "", nil)
 			return nil
 		}
-		if let cached = avatarCache, cached.name == name, cached.stamp == stamp {
-			return cached.data
+		if avatarCache.name == name, avatarCache.stamp == stamp {
+			return avatarCache.data
 		}
 		guard let data = try? Data(contentsOf: url) else {
 			avatarCache = (name, stamp, nil)
