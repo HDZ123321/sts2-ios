@@ -323,11 +323,6 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	public event Action? ProceedButtonPressed;
 
 	/// <summary>
-	/// Create a new combat room node.
-	/// </summary>
-	/// <param name="visuals">Data used to determine what visuals should appear in the combat room.</param>
-	/// <param name="mode">The mode that the combat room should start in.</param>
-	/// <summary>
 	/// Creature nodes built a frame or two before the room exists, keyed by the creature they belong to.
 	/// Instantiating <see cref="NCreature" /> is the expensive half of adding an enemy - the packed
 	/// scene, its visuals scene and their textures all get instantiated there - and it happens for every
@@ -337,13 +332,19 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// </summary>
 	private static readonly Dictionary<Creature, NCreature> _preparedCreatureNodes = new Dictionary<Creature, NCreature>();
 
+	private static NCombatRoom? _preparedRoom;
+
+	private static ICombatRoomVisuals? _preparedRoomVisuals;
+
+	private static CombatRoomMode _preparedRoomMode;
+
 	private static bool? _prewarmEnabled;
 
 	/// <summary>
-	/// Whether creature nodes are built ahead of the room. On by default; a <c>user://combat_prewarm.txt</c>
+	/// Whether the room node and its creature nodes are built ahead of time. On by default; a <c>user://combat_prewarm.txt</c>
 	/// containing <c>off</c> turns it back off, for comparing a run against the old single-frame build.
 	/// </summary>
-	public static bool CreaturePrewarmEnabled
+	public static bool PrewarmEnabled
 	{
 		get
 		{
@@ -375,7 +376,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	public static async Task PrepareCreatureNodes(ICombatState combatState)
 	{
 		ClearPreparedCreatureNodes();
-		if (!CreaturePrewarmEnabled || TestMode.IsOn)
+		if (!PrewarmEnabled || TestMode.IsOn)
 		{
 			return;
 		}
@@ -406,22 +407,81 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			if (GodotObject.IsInstanceValid(node))
 			{
-				node.QueueFree();
+				DiscardNode(node);
 			}
 		}
 		_preparedCreatureNodes.Clear();
 	}
 
+	/// <summary>
+	/// Create a new combat room node, reusing the one <see cref="PrepareRoom" /> built ahead of time
+	/// when it belongs to the same room.
+	/// </summary>
+	/// <param name="visuals">Data used to determine what visuals should appear in the combat room.</param>
+	/// <param name="mode">The mode that the combat room should start in.</param>
 	public static NCombatRoom? Create(ICombatRoomVisuals visuals, CombatRoomMode mode)
 	{
 		if (TestMode.IsOn)
 		{
+			DiscardPreparedRoom();
 			return null;
 		}
-		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene("res://scenes/rooms/combat_room.tscn").Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
+		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom) && _preparedRoomMode == mode && ReferenceEquals(_preparedRoomVisuals, visuals))
+		{
+			NCombatRoom nCombatRoom = _preparedRoom;
+			_preparedRoom = null;
+			_preparedRoomVisuals = null;
+			return nCombatRoom;
+		}
+		DiscardPreparedRoom();
+		NCombatRoom fresh = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
+		fresh._visuals = visuals;
+		fresh.Mode = mode;
+		return fresh;
+	}
+
+	/// <summary>
+	/// Instantiates the room's own node tree before the room is needed. Building it is what used to
+	/// make the fight appear late - two thousand nodes, all in the frame that swaps the map out - and
+	/// it cannot be split across frames, so instead it happens while the map is still on screen.
+	/// </summary>
+	public static void PrepareRoom(ICombatRoomVisuals visuals, CombatRoomMode mode)
+	{
+		DiscardPreparedRoom();
+		if (!PrewarmEnabled || TestMode.IsOn)
+		{
+			return;
+		}
+		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
 		nCombatRoom._visuals = visuals;
 		nCombatRoom.Mode = mode;
-		return nCombatRoom;
+		_preparedRoom = nCombatRoom;
+		_preparedRoomVisuals = visuals;
+		_preparedRoomMode = mode;
+	}
+
+	/// <summary>Drops the room built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
+	public static void DiscardPreparedRoom()
+	{
+		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom))
+		{
+			DiscardNode(_preparedRoom);
+		}
+		_preparedRoom = null;
+		_preparedRoomVisuals = null;
+	}
+
+	/// <summary>Frees a node that may never have entered the tree, where <c>QueueFree</c> has nothing to hook.</summary>
+	private static void DiscardNode(Node node)
+	{
+		if (node.IsInsideTree())
+		{
+			node.QueueFree();
+		}
+		else
+		{
+			node.Free();
+		}
 	}
 
 	public override void _Ready()

@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
@@ -145,6 +146,8 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 
 	public override Task Exit(IRunState? runState)
 	{
+		NCombatRoom.DiscardPreparedRoom();
+		NCombatRoom.ClearPreparedCreatureNodes();
 		CombatManager.Instance.Reset(graceful: true);
 		if (IsPreFinished)
 		{
@@ -225,6 +228,15 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 			// scene and visuals get instantiated in that one frame.
 			Perf.Phase("combat.prepare-nodes");
 			await NCombatRoom.PrepareCreatureNodes(CombatState);
+			// The room tree itself is two thousand nodes and cannot be split up, so it gets
+			// its own frame while the map is still on screen.
+			Perf.Phase("combat.prepare-room");
+			NGame? game = NGame.Instance;
+			if (game != null)
+			{
+				await game.AwaitProcessFrame();
+			}
+			NCombatRoom.PrepareRoom(this, CombatRoomMode.ActiveCombat);
 			Perf.Phase("combat.create-room");
 			NRun.Instance?.SetCurrentRoom(NCombatRoom.Create(this, CombatRoomMode.ActiveCombat));
 		}

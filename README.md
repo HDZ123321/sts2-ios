@@ -181,7 +181,9 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 `NCombatRoom._Ready` 建房间时，每只怪的 `NCreature.Create` 都在同一帧里跑 —— PackedScene、visuals 子场景、纹理全都要在那里实例化，敌人越多这一帧越重。现在这部分搬到 `CombatRoom.StartCombat` 的 `combat.prepare-nodes` 阶段：`NCombatRoom.PrepareCreatureNodes(CombatState)` 在**地图还在屏幕上**的时候，每帧建一只，先不挂进树；等房间真正创建时，`AddCreature` 直接从预备表里取，只做挂载。
 
-时序没变：`_Ready` 仍然在 `SetCurrentRoom` 那一帧跑，入场动画、血条 `SpawnedAtCombatStart` 判定都照旧。变的只是「资源实例化」提前了几帧，并且分散开了。没用掉的预备节点在 `_Ready` 末尾统一 `QueueFree`。
+房间本身也一样：`combat_room.tscn` 有两千多个节点，`Instantiate()` 是原子的、拆不开，所以给它单独一帧——`NCombatRoom.PrepareRoom` 在地图还在的时候就把房间树建好，`NCombatRoom.Create` 直接取走。`combat.create-room` 那一步于是只剩「换场景」。
+
+时序没变：`_Ready` 仍然在 `SetCurrentRoom` 那一帧跑，入场动画、血条 `SpawnedAtCombatStart` 判定都照旧。变的只是「资源实例化」提前了几帧，并且分散开了。没用掉的预备节点在 `_Ready` 末尾统一释放，房间退出时 `CombatRoom.Exit` 再兜一次底。
 
 关掉它做对照：写 `user://combat_prewarm.txt`，内容 `off`（大小写不敏感），下次进战就退回老的单帧路径。
 
