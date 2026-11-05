@@ -51,7 +51,39 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完；`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）。
 
-## 这一版（v16）：灵动岛 + iPhone 17 Pro Max
+## 这一版（v17）：角色立绘上岛 + 进战卡顿归因
+
+### 灵动岛显示角色 2D 形象
+
+灵动岛的展开态左侧、紧凑左侧、最小态、锁屏左侧现在都是**当前角色的立绘**（圆形裁切 + 血量配色描边），没有图时回退成一个小人符号。
+
+立绘不是扩展自己去读的——`.appex` 是独立沙盒，读不到 Godot 的 `user://`，而自签名没有 App Group 可以共享目录。所以走的是唯一能跨进程的通道：**Live Activity 的 content state**。
+
+```
+IslandAvatar.Ensure()  →  user://island_avatar.png（132px，RGBA8，≤48 KB）
+                       →  island_state.json 里写文件名
+Sts2IslandBridge       →  按 size+mtime 缓存读盘，塞进 ContentState.avatar
+Sts2IslandWidget       →  UIImage(data:) → 圆形 Image
+```
+
+每个角色只编码一次（换角色才重编码），`48 KB / 72–132 px` 之间会自动降级；实在编不出来就退回符号，不影响灵动岛的其他内容。
+
+### 进战卡顿：先归因，再修
+
+之前只知道「刚开始打怪会卡一下」，但帧报表说不出卡在哪。现在超过 33 ms 的帧会单独打一行带阶段标签：
+
+```
+[Perf] hitch 187.4ms phase=combat.enemies scene=NCombatRoom proc=41.2ms nodes=2310 draw=126 vram=268MB managed=64MB
+```
+
+`phase` 覆盖进战全链路（`combat.generate` / `preload` / `creatures` / `create-room` / `room-ready` / `allies` / `enemies` / `creature-node` / `populate` / `ui-activate` / `background` / `bgm`），另有 `spine.ready`（某只怪骨架建完、图集上传完的那一帧）和 `combat.banner`（「战斗开始」横幅的自适应字号二分重排）。判读口径：`proc` 小、`draw`/`vram` 跳高就是 GPU 侧；`proc` 大就是主线程同步干活。
+
+顺着这条链已经改掉两处：
+
+- **房间加载后的全量 `GC.Collect()` 在移动端不再阻塞当前帧**（`GC.Collect(2, Forced, blocking: false)`）。它原来正落在进房间的转场帧上，5–20 ms 的停顿直接可感知。
+- **意图动画帧并入 run 资产集**。`AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，每帧走 `AssetCache` 的同步 `ResourceLoader.Load`；现在进第一场战斗前就已经常驻。
+
+## 上一版（v16）：灵动岛 + iPhone 17 Pro Max
 
 ### 灵动岛实时活动
 
@@ -59,11 +91,11 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 | 区域 | 内容 |
 |---|---|
-| 紧凑左侧 | 地图图标 + 当前层数 |
+| 紧凑左侧 | 角色立绘 + 当前层数 |
 | 紧凑右侧 | 红心 + `当前血量` |
-| 最小态 | 血量数字 |
-| 展开 | `A<幕> · <层>`、`hp/maxHp`、血条、角色名、金币，边框颜色随血量绿→黄→红 |
-| 锁屏 | 圆底血心 + 角色名 + 「第 X 幕 第 Y 层」+ 血条 + HP/金币 |
+| 最小态 | 角色立绘 |
+| 展开 | 角色立绘、`A<幕> · <层>`、`hp/maxHp`、血条、角色名、金币，描边颜色随血量绿→黄→红 |
+| 锁屏 | 角色立绘 + 角色名 + 「第 X 幕 第 Y 层」+ 血条 + HP/金币 |
 
 数据流不经过任何 RPC：C# 每秒组一次 `user://island_state.json`（内容没变就不写盘），Swift 侧每 0.5 秒轮询这个文件，驱动 `ActivityKit` 的请求 / 更新 / 结束。写文件失败只丢灵动岛，不影响帧率。
 
