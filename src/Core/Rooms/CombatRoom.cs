@@ -236,6 +236,7 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 			await Hook.AfterRoomEntered(runState, this);
 		}
 		CombatManager.Instance.AfterCombatRoomLoaded();
+		Perf.ReportPhases("combat entry");
 	}
 
 	public void OnCombatEnded()
@@ -264,6 +265,7 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 		{
 			await nCombatRoom.Ui.ProceedWithoutRewards();
 		}
+		Perf.ReportPhases("pre-finished combat entry");
 	}
 
 	public async Task OfferRoomEndRewards()

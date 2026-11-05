@@ -54,15 +54,12 @@ public static class SpineNodeExtensions
 			// itself. Label it, and hold the label until the frame has been
 			// reported, so a hitch here is attributed to spine rather than to
 			// whatever the room was doing when it started waiting.
-			string previousPhase = Perf.CurrentPhase;
-			Perf.Phase("spine.ready");
+			Perf.PhaseForThisFrame(host, "spine.ready");
 			if (Perf.Enabled && framesWaited > 0)
 			{
 				Log.Info($"[Perf] {host.Name}: spine skeleton ready after {framesWaited} frames", 3);
 			}
 			onReady(sprite.GetAnimationState());
-			await host.AwaitProcessFrame();
-			Perf.Phase(previousPhase);
 		}
 	}
 }

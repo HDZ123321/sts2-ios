@@ -171,6 +171,14 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 另有两个不在调用链上、但仍会出现在进战后几帧里的标签：`spine.ready`（某只怪的 SpineSprite 把骨架建完、图集页上传完的那一帧，之前是空白）和 `combat.banner`（「战斗开始」横幅的 `MegaLabel` 自适应字号二分重排）。
 
+`hitch` 只在某一帧真的超过 33 ms 时才有输出，而进战卡顿常常是**一串**二十几毫秒的帧叠出来的。所以进战这条链跑完时还会多打一行阶段总账（`Perf.ReportPhases`，在 `CombatRoom.StartCombat` 末尾和 `StartPreFinishedCombat` 末尾各调一次）：
+
+```
+[Perf] combat entry total=1120ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.creature-node=11ms combat.ui-activate=26ms combat.background=31ms combat.bgm=4ms combat.after-creature-added=18ms
+```
+
+读法：`total` 是整段真实墙钟（含 await 的空帧），每项是**两个标签之间**的时间。`combat.preload` 里包含后台加载让出的帧，所以它大不代表卡；真正要看的是**同一帧里干完的那几项**——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node` 加起来接近某次 `hitch` 的毫秒数，就是它。这样即使一帧都没超过 33 ms，也能看出时间被谁吃了。
+
 已经因此改掉的两处（同一提交）：
 
 | 改动 | 位置 | 为什么 |

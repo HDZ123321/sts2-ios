@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Godot;
 using MegaCrit.Sts2.Core.Helpers;
@@ -76,6 +78,11 @@ public static class Perf
 	/// </summary>
 	private static string _phase = "boot";
 
+	/// <summary>Wall time per closed phase, see <see cref="ReportPhases" />.</summary>
+	private static readonly List<(string phase, long milliseconds)> _phaseTimings = new List<(string phase, long milliseconds)>();
+
+	private static long _phaseStart;
+
 	/// <summary>
 	/// True when the run was started with <c>--perf</c>, or when this is a mobile build that was
 	/// not explicitly silenced with <c>--noperf</c>.
@@ -128,9 +135,52 @@ public static class Perf
 	/// Names the work about to happen, so a long frame inside it is attributable. Costs one string
 	/// reference assignment; pass a literal, never an interpolated string.
 	/// </summary>
+	/// <summary>
+	/// Marks the start of a labelled piece of work. Whatever phase was current is closed and
+	/// its wall time is kept, so <see cref="ReportPhases" /> can print the breakdown of a
+	/// sequence - the frame report only says a frame was long, this says where the time went
+	/// even when no single frame crosses the hitch threshold.
+	/// </summary>
 	public static void Phase(string phase)
 	{
+		long now = ElapsedMs;
+		if (_phaseStart != 0 && _phase != null)
+		{
+			_phaseTimings.Add((_phase, now - _phaseStart));
+		}
 		_phase = phase;
+		_phaseStart = now;
+	}
+
+	/// <summary>
+	/// Closes the current phase and writes one line with every phase recorded since the last
+	/// call, then clears them. Cheap: it only runs at the end of a sequence like entering a room.
+	/// </summary>
+	public static void ReportPhases(string label)
+	{
+		if (!Enabled)
+		{
+			_phaseTimings.Clear();
+			_phaseStart = 0L;
+			return;
+		}
+		if (_phaseStart != 0 && _phase != null)
+		{
+			_phaseTimings.Add((_phase, ElapsedMs - _phaseStart));
+		}
+		_phaseStart = 0L;
+		if (_phaseTimings.Count == 0)
+		{
+			return;
+		}
+		StringBuilder builder = new StringBuilder();
+		builder.Append("[Perf] ").Append(label).Append(" total=").Append(_phaseTimings.Sum((ValueTuple<string, long> p) => p.Item2)).Append("ms");
+		foreach ((string phase, long milliseconds) in _phaseTimings)
+		{
+			builder.Append(' ').Append(phase).Append('=').Append(milliseconds).Append("ms");
+		}
+		Log.Info(builder.ToString(), 3);
+		_phaseTimings.Clear();
 	}
 
 	/// <summary>The label a hitch in the current frame would be reported under.</summary>
