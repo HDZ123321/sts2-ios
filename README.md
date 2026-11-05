@@ -177,6 +177,14 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 [Perf] combat entry total=1120ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.creature-node=11ms combat.ui-activate=26ms combat.background=31ms combat.bgm=4ms combat.after-creature-added=18ms
 ```
 
+### 2.9.1 进战预热：怪物节点提前一帧一个建好
+
+`NCombatRoom._Ready` 建房间时，每只怪的 `NCreature.Create` 都在同一帧里跑 —— PackedScene、visuals 子场景、纹理全都要在那里实例化，敌人越多这一帧越重。现在这部分搬到 `CombatRoom.StartCombat` 的 `combat.prepare-nodes` 阶段：`NCombatRoom.PrepareCreatureNodes(CombatState)` 在**地图还在屏幕上**的时候，每帧建一只，先不挂进树；等房间真正创建时，`AddCreature` 直接从预备表里取，只做挂载。
+
+时序没变：`_Ready` 仍然在 `SetCurrentRoom` 那一帧跑，入场动画、血条 `SpawnedAtCombatStart` 判定都照旧。变的只是「资源实例化」提前了几帧，并且分散开了。没用掉的预备节点在 `_Ready` 末尾统一 `QueueFree`。
+
+关掉它做对照：写 `user://combat_prewarm.txt`，内容 `off`（大小写不敏感），下次进战就退回老的单帧路径。
+
 读法：`total` 是整段真实墙钟（含 await 的空帧），每项是**两个标签之间**的时间。`combat.preload` 里包含后台加载让出的帧，所以它大不代表卡；真正要看的是**同一帧里干完的那几项**——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node` 加起来接近某次 `hitch` 的毫秒数，就是它。这样即使一帧都没超过 33 ms，也能看出时间被谁吃了。
 
 已经因此改掉的两处（同一提交）：

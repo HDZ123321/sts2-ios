@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.IO;
 using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
@@ -326,6 +327,91 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// </summary>
 	/// <param name="visuals">Data used to determine what visuals should appear in the combat room.</param>
 	/// <param name="mode">The mode that the combat room should start in.</param>
+	/// <summary>
+	/// Creature nodes built a frame or two before the room exists, keyed by the creature they belong to.
+	/// Instantiating <see cref="NCreature" /> is the expensive half of adding an enemy - the packed
+	/// scene, its visuals scene and their textures all get instantiated there - and it happens for every
+	/// enemy in the single frame that builds the room. <see cref="PrepareCreatureNodes" /> does that half
+	/// earlier, one per frame, while the map is still on screen; <see cref="AddCreature" /> then only has
+	/// to parent them.
+	/// </summary>
+	private static readonly Dictionary<Creature, NCreature> _preparedCreatureNodes = new Dictionary<Creature, NCreature>();
+
+	private static bool? _prewarmEnabled;
+
+	/// <summary>
+	/// Whether creature nodes are built ahead of the room. On by default; a <c>user://combat_prewarm.txt</c>
+	/// containing <c>off</c> turns it back off, for comparing a run against the old single-frame build.
+	/// </summary>
+	public static bool CreaturePrewarmEnabled
+	{
+		get
+		{
+			if (!_prewarmEnabled.HasValue)
+			{
+				_prewarmEnabled = true;
+				try
+				{
+					string path = ProjectSettings.GlobalizePath("user://combat_prewarm.txt");
+					if (File.Exists(path))
+					{
+						_prewarmEnabled = !File.ReadAllText(path).Trim().Equals("off", StringComparison.OrdinalIgnoreCase);
+					}
+				}
+				catch (Exception ex)
+				{
+					Log.Warn($"[Perf] could not read combat_prewarm.txt, assuming it is on: {ex.Message}");
+				}
+			}
+			return _prewarmEnabled.Value;
+		}
+	}
+
+	/// <summary>
+	/// Builds an <see cref="NCreature" /> for every enemy that will be added to the room, spreading the
+	/// work one creature per frame so no single frame carries all of them. The nodes are not in the tree
+	/// yet: their <c>_Ready</c> still runs in the same frame as before, when they are parented.
+	/// </summary>
+	public static async Task PrepareCreatureNodes(ICombatState combatState)
+	{
+		ClearPreparedCreatureNodes();
+		if (!CreaturePrewarmEnabled || TestMode.IsOn)
+		{
+			return;
+		}
+		NGame? game = NGame.Instance;
+		if (game == null)
+		{
+			return;
+		}
+		foreach (Creature creature in combatState.Creatures)
+		{
+			if (creature.IsPlayer)
+			{
+				continue;
+			}
+			NCreature? node = NCreature.Create(creature);
+			if (node != null)
+			{
+				_preparedCreatureNodes[creature] = node;
+			}
+			await game.AwaitProcessFrame();
+		}
+	}
+
+	/// <summary>Frees any creature node that was prepared but never added, so a skipped room cannot leak them.</summary>
+	public static void ClearPreparedCreatureNodes()
+	{
+		foreach (NCreature node in _preparedCreatureNodes.Values)
+		{
+			if (GodotObject.IsInstanceValid(node))
+			{
+				node.QueueFree();
+			}
+		}
+		_preparedCreatureNodes.Clear();
+	}
+
 	public static NCombatRoom? Create(ICombatRoomVisuals visuals, CombatRoomMode mode)
 	{
 		if (TestMode.IsOn)
@@ -385,6 +471,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_window.Connect(Viewport.SignalName.SizeChanged, Callable.From(AdjustCreatureScaleForAspectRatio));
 		AdjustCreatureScaleForAspectRatio();
 		NGame.Instance.SetScreenShakeTarget(SceneContainer);
+		ClearPreparedCreatureNodes();
 		Perf.Phase("combat.room-ready.done");
 	}
 
@@ -730,7 +817,15 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	public void AddCreature(Creature creature)
 	{
 		Perf.Phase("combat.creature-node");
-		NCreature nCreature = NCreature.Create(creature);
+		NCreature nCreature;
+		if (_preparedCreatureNodes.Remove(creature, out NCreature? prepared) && GodotObject.IsInstanceValid(prepared))
+		{
+			nCreature = prepared;
+		}
+		else
+		{
+			nCreature = NCreature.Create(creature);
+		}
 		_creatureNodes.Add(nCreature);
 		if (creature.IsPlayer || creature.PetOwner != null)
 		{

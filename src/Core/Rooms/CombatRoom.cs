@@ -220,6 +220,11 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 		}
 		if (ShouldCreateCombat)
 		{
+			// Build the enemy nodes now, one per frame, while the map still covers the
+			// screen. Creating them inside the room's own frame means every enemy's packed
+			// scene and visuals get instantiated in that one frame.
+			Perf.Phase("combat.prepare-nodes");
+			await NCombatRoom.PrepareCreatureNodes(CombatState);
 			Perf.Phase("combat.create-room");
 			NRun.Instance?.SetCurrentRoom(NCombatRoom.Create(this, CombatRoomMode.ActiveCombat));
 		}
