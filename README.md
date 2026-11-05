@@ -183,6 +183,10 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 房间本身也一样：`combat_room.tscn` 有两千多个节点，`Instantiate()` 是原子的、拆不开，所以给它单独一帧——`NCombatRoom.PrepareRoom` 在地图还在的时候就把房间树建好，`NCombatRoom.Create` 直接取走。`combat.create-room` 那一步于是只剩「换场景」。
 
+站位场景也跟着建：手摆敌人的 encounter 自带一个 slots 场景（`EncounterModel.CreateScene()`），实例化它同样是几百个节点，原来也在 `_Ready` 的 `combat.enemies` 里。`PrepareRoom` 现在一起建好，`CreateEnemyNodes` 取走。
+
+玩家节点现在也算在内。`PrepareCreatureNodes` 原来跳过了 `creature.IsPlayer`，理由是「玩家走 `CreateAllyNodes`」——但 `CreateAllyNodes` 里也是调 `AddCreature`，同一条路，而可玩角色的 visuals 场景往往是全场最重的一套图集。现在它跟敌人一样提前建好。
+
 背景跟着房间一起建：`NCombatBackground.Create` 会按 `BackgroundAssets.BgLayers` 逐层实例化视差层场景（每层都带自己的大图），原来也挤在 `combat.background` 那一格里。`PrepareRoom(visuals, mode, runState)` 现在把背景一起建好挂在预备位上，`SetUpBackground` 直接取走再挂进 `BgContainer`。安全前提是背景的层组只由 `Encounter` 和 `new Rng(runState.Rng.Seed + 当前地图点)` 决定（`GenerateBackgroundRngForCurrentPoint`），不碰全局 RNG，且 `BackgroundAssets` 本来就缓存在 `EncounterModel` 上——提前算一次和晚算一次结果一样。
 
 时序没变：`_Ready` 仍然在 `SetCurrentRoom` 那一帧跑，入场动画、血条 `SpawnedAtCombatStart` 判定都照旧。变的只是「资源实例化」提前了几帧，并且分散开了。没用掉的预备节点在 `_Ready` 末尾统一释放，房间退出时 `CombatRoom.Exit` 再兜一次底。

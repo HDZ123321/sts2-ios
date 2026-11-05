@@ -86,12 +86,13 @@ Sts2IslandWidget       →  UIImage(data:) → 圆形 Image
 
 `total` 是整段真实墙钟，每项是两个标签之间的时间。`combat.preload` 大不代表卡（里面混着后台加载让出的帧），真正的嫌疑是那些**同一帧里一口气干完**的项——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node`。
 
-顺着这条链已经改掉六处：
+顺着这条链已经改掉七处：
 
 - **房间加载后的全量 `GC.Collect()` 在移动端不再阻塞当前帧**（`GC.Collect(2, Forced, blocking: false)`）。它原来正落在进房间的转场帧上，5–20 ms 的停顿直接可感知。
 - **意图动画帧并入 run 资产集**。`AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，每帧走 `AssetCache` 的同步 `ResourceLoader.Load`；现在进第一场战斗前就已经常驻。
 - **房间树也提前建好**。`combat_room.tscn` 两千多个节点，`Instantiate()` 拆不开，原来落在换场景那一帧；现在地图还在屏幕上时就建好，`create-room` 只剩换场景。
 - **怪物节点提前一帧一个建好**。原来每只怪的 `NCreature.Create`（PackedScene + visuals 子场景 + 纹理实例化）全都挤在建房间那一帧，敌人越多越重。现在这部分挪到地图还在屏幕上的时候，一帧建一只，房间创建时只做挂载。时序不变（`_Ready` 仍在原来那一帧跑，入场动画和血条判定都照旧）。想看老路径的表现，`user://combat_prewarm.txt` 写 `off` 即可退回。
+- **玩家节点和站位场景也进了预热**。原来只预热敌人；玩家走 `CreateAllyNodes` → `AddCreature`，其实是同一条路，而角色立绘那套图集往往是全场最重的。手摆敌人的 encounter 还自带一个 slots 场景，几百个节点，也一起提前建好。
 - **背景的视差层也提前建好**。`NCombatBackground.Create` 按层实例化场景，每层带自己的大图，原来同样落在换场景那一格里。现在它跟房间一起在地图还在屏幕上的时候建好，`SetUpBackground` 只做挂载。层组只由 encounter 和一个按地图点重新播种的 `Rng` 决定，提前算和晚算结果一致。
 - **首回合也有了单独的账本**。「刚开始打怪」的手感往往落在房间已经出现之后——逐只怪的入场 `AfterCreatureAdded`、以及起手五张牌的 `CardPileCmd.Draw`（一张牌一个节点）。这两段现在分别打 `combat.creature-added` 和 `[Perf] combat turn setup total=<ms> combat.hand-draw=<ms>`，下一版就能直接照着数字动刀。
 - **自适应字号的拟合结果做了记忆化**。`MegaLabel` 会用二分搜索把文字塞进框里，每一步都重新 shaping 整段文字；进战那一帧血条、名牌、意图、能量、横幅几十个新 label 同时要字号，问的却是同一批「文本 + 字体 + 矩形」。现在算过一次就记住，后来的实例一次 shaping 都不做。

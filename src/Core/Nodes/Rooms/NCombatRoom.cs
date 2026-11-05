@@ -342,6 +342,13 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// </summary>
 	private static NCombatBackground? _preparedBackground;
 
+	/// <summary>
+	/// The encounter's slot layout scene, built with the room. Encounters that place their enemies
+	/// by hand ship a scene for it (<see cref="EncounterModel.CreateScene" />), and instantiating it
+	/// inside the room's frame is another few hundred nodes on top of everything else.
+	/// </summary>
+	private static Control? _preparedEncounterSlots;
+
 	private static ICombatRoomVisuals? _preparedRoomVisuals;
 
 	private static CombatRoomMode _preparedRoomMode;
@@ -377,7 +384,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	}
 
 	/// <summary>
-	/// Builds an <see cref="NCreature" /> for every enemy that will be added to the room, spreading the
+	/// Builds an <see cref="NCreature" /> for every creature that will be added to the room, spreading the
 	/// work one creature per frame so no single frame carries all of them. The nodes are not in the tree
 	/// yet: their <c>_Ready</c> still runs in the same frame as before, when they are parented.
 	/// </summary>
@@ -393,12 +400,11 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			return;
 		}
+		// Players are prepared too: the ally side goes through the same AddCreature path
+		// (CreateAllyNodes), and a playable character's visuals scene is usually the heaviest
+		// atlas in the room.
 		foreach (Creature creature in combatState.Creatures)
 		{
-			if (creature.IsPlayer)
-			{
-				continue;
-			}
 			NCreature? node = NCreature.Create(creature);
 			if (node != null)
 			{
@@ -473,11 +479,16 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		try
 		{
 			_preparedBackground = visuals.Encounter.CreateBackground(visuals.Act, GenerateBackgroundRngForCurrentPoint(runState));
+			if (visuals.Encounter.HasScene)
+			{
+				_preparedEncounterSlots = visuals.Encounter.CreateScene();
+			}
 		}
 		catch (Exception ex)
 		{
 			Log.Warn($"[Perf] could not prepare the combat background, it will be built on the frame instead: {ex.Message}");
 			_preparedBackground = null;
+			DiscardPreparedEncounterSlots();
 		}
 	}
 
@@ -491,6 +502,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_preparedRoom = null;
 		_preparedRoomVisuals = null;
 		DiscardPreparedBackground();
+		DiscardPreparedEncounterSlots();
 	}
 
 	/// <summary>Drops the background built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
@@ -501,6 +513,28 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 			DiscardNode(_preparedBackground);
 		}
 		_preparedBackground = null;
+	}
+
+	/// <summary>Drops the slot layout built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
+	private static void DiscardPreparedEncounterSlots()
+	{
+		if (_preparedEncounterSlots != null && GodotObject.IsInstanceValid(_preparedEncounterSlots))
+		{
+			DiscardNode(_preparedEncounterSlots);
+		}
+		_preparedEncounterSlots = null;
+	}
+
+	/// <summary>Takes the prepared slot layout if there is a live one, otherwise null.</summary>
+	private static Control? TakePreparedEncounterSlots()
+	{
+		Control? slots = _preparedEncounterSlots;
+		_preparedEncounterSlots = null;
+		if (slots != null && GodotObject.IsInstanceValid(slots))
+		{
+			return slots;
+		}
+		return null;
 	}
 
 	/// <summary>Takes the prepared background if there is a live one, otherwise null.</summary>
@@ -675,7 +709,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	{
 		if (_visuals.Encounter.HasScene)
 		{
-			EncounterSlots = _visuals.Encounter.CreateScene();
+			EncounterSlots = TakePreparedEncounterSlots() ?? _visuals.Encounter.CreateScene();
 		}
 		if (EncounterSlots != null)
 		{
