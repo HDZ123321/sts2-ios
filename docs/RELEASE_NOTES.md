@@ -78,7 +78,15 @@ Sts2IslandWidget       →  UIImage(data:) → 圆形 Image
 
 `phase` 覆盖进战全链路（`combat.generate` / `preload` / `creatures` / `create-room` / `room-ready` / `allies` / `enemies` / `creature-node` / `populate` / `ui-activate` / `background` / `bgm`），另有 `spine.ready`（某只怪骨架建完、图集上传完的那一帧）和 `combat.banner`（「战斗开始」横幅的自适应字号二分重排）。判读口径：`proc` 小、`draw`/`vram` 跳高就是 GPU 侧；`proc` 大就是主线程同步干活。
 
-顺着这条链已经改掉两处：
+进战这条链跑完时还会多打一行**阶段总账**，因为卡顿常常是一串二十几毫秒的帧叠出来的，不一定有哪一帧单独越过阈值：
+
+```
+[Perf] combat entry total=1120ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.banner=7ms
+```
+
+`total` 是整段真实墙钟，每项是两个标签之间的时间。`combat.preload` 大不代表卡（里面混着后台加载让出的帧），真正的嫌疑是那些**同一帧里一口气干完**的项——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node`。
+
+顺着这条链已经改掉三处：
 
 - **房间加载后的全量 `GC.Collect()` 在移动端不再阻塞当前帧**（`GC.Collect(2, Forced, blocking: false)`）。它原来正落在进房间的转场帧上，5–20 ms 的停顿直接可感知。
 - **意图动画帧并入 run 资产集**。`AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，每帧走 `AssetCache` 的同步 `ResourceLoader.Load`；现在进第一场战斗前就已经常驻。
