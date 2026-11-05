@@ -145,6 +145,30 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 `proc`（C# 每帧时间）远小于 `avg` 就是 GPU 受限；`draw`/`obj` 高则先砍绘制批次。想看更密的报表用 `--perf` 启动（600 帧一行），想彻底关掉用 `--noperf`。桌面端默认不开，`--perf` 才开。
 
+#### 卡顿归因：`hitch` 行带阶段标签
+
+帧报表只说了「有几次长帧」，说不出**长在哪**。所以超过 `HitchThresholdMs`（33 ms）的帧会单独打一行，带上当前阶段标签（每个报表窗口最多 12 行，总量仍由 `hitch=` 计）：
+
+```
+[Perf] hitch 187.4ms phase=combat.enemies scene=NCombatRoom proc=41.2ms nodes=2310 draw=126 vram=268MB managed=64MB
+```
+
+`phase` 是 `Perf.Phase("...")` 设的短标签，战斗进入这条链上埋了这些点：
+
+| 阶段 | 覆盖的工作 |
+|---|---|
+| `combat.generate` | 生成怪物与站位 |
+| `combat.preload` | `PreloadManager.LoadRoomCombatAssets` 的等待 |
+| `combat.creatures` | `CombatState.CreateCreature` × N |
+| `combat.create-room` | `combat_room.tscn` 实例化 |
+| `combat.room-ready` / `.allies` / `.enemies` / `.room-ready.done` | `NCombatRoom._Ready` 的各段 |
+| `combat.creature-node` | 每个 `NCreature` 节点创建 |
+| `combat.populate` / `register-creatures` | 玩家战斗状态、手牌进 DB |
+| `combat.combat-setup-hooks` / `ui-activate` / `background` | UI 激活、能量球、场景背景 |
+| `combat.bgm` / `after-creature-added` | 战斗音乐（FMOD bank）、每只怪的入场 |
+
+判读：`proc` 小、`draw`/`vram` 跳高 → GPU 侧（纹理上传或首次 PSO）；`proc` 大 → 主线程同步干活（实例化、Spine 建骨、卡面解码）。
+
 ### 2.10 灵动岛：跑图状态挂在 Live Activity 上
 
 iPhone 14 Pro 以后的机型（含 17 Pro Max）在 App 外能看到一条「第 X 幕 第 Y 层 · HP 32/80」的实时活动。实现刻意避开两处最容易翻车的地方：
@@ -157,7 +181,18 @@ C#  DynamicIslandReporter  每秒（只在内容变化时）写 user://island_st
 Swift Sts2IslandBridge     读文件 → Activity.update() / Activity.request()
 ```
 
-写失败只丢灵动岛，一帧都不影响。文件内容是一行 JSON：`{"seq":12,"active":true,"hp":32,"maxHp":80,"floor":7,"act":2,"gold":143,"character":"铁甲战士"}`；不在跑图时 `active` 为 false，扩展收到就把活动结束掉。
+写失败只丢灵动岛，一帧都不影响。文件内容是一行 JSON：`{"seq":12,"active":true,"hp":32,"maxHp":80,"floor":7,"act":2,"gold":143,"character":"铁甲战士","avatar":"island_avatar.png"}`；不在跑图时 `active` 为 false，扩展收到就把活动结束掉。
+
+**角色 2D 形象跟着状态一起传。** 扩展进程有自己的沙盒，读不到 Godot 的 `user://`；这个构建又是 ad-hoc 签名，拿不到 App Group 去共享容器，所以图片只能塞进 `ContentState.avatar`（`Data`）走系统通道：
+
+```
+IslandAvatar.Ensure(角色)   角色变了才编码：取 char_select 立绘（回落 top_panel 图标）
+                            → 解压 → 长边缩到 132 px RGBA8 → user://island_avatar.png
+Swift Bridge                读字节（按 size+mtime 缓存）→ ContentState.avatar
+Widget IslandAvatarView     Image(uiImage:) 圆环裁切；缺失就退回落一个 figure.stand 符号
+```
+
+132 px 是「44 pt × 3x」；单张 PNG 实测在 10–40 KB 区间，超过 48 KB 会掉到 96 px、再掉到 72 px，还超就不发（图标兜底）—— 因为 content state 每次更新都要归档并投递给扩展进程。展开态左侧、紧凑态前区、极简态、锁屏左侧都用这张图。
 
 **扩展不建 Xcode target。** `tools/build_island_extension.py` 用 `swiftc` 直接编出 `.appex` 塞进 `sts2.app/PlugIns/`，版本号从主 app 的 `Info.plist` 回填。值得记的三件事：
 

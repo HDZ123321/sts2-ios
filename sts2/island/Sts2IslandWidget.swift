@@ -1,5 +1,6 @@
 import ActivityKit
 import SwiftUI
+import UIKit
 import WidgetKit
 
 /// The Dynamic Island and Lock Screen presentation of a Slay the Spire 2 run.
@@ -28,6 +29,39 @@ private enum IslandPalette {
 	}
 }
 
+/// The hero's portrait, drawn in a ring.
+///
+/// The bytes come in on the content state (see `Sts2RunActivityAttributes.ContentState.avatar`) and
+/// are decoded here on every render - a 132 px PNG is a cheap decode, and the widget process has no
+/// access to the app's user directory to read it from disk. A missing or undecodable image falls
+/// back to a symbol, so an avatar failure never costs the island.
+struct IslandAvatarView: View {
+	let data: Data?
+	let size: CGFloat
+	let ring: Color
+
+	var body: some View {
+		ZStack {
+			Circle()
+				.fill(ring.opacity(0.18))
+			if let data, let image = UIImage(data: data) {
+				Image(uiImage: image)
+					.resizable()
+					.interpolation(.high)
+					.aspectRatio(contentMode: .fill)
+					.frame(width: size, height: size)
+			} else {
+				Image(systemName: "figure.stand")
+					.font(.system(size: size * 0.6, weight: .bold))
+					.foregroundStyle(ring)
+			}
+		}
+		.frame(width: size, height: size)
+		.clipShape(Circle())
+		.overlay(Circle().strokeBorder(ring.opacity(0.55), lineWidth: 1))
+	}
+}
+
 struct Sts2IslandLiveActivity: Widget {
 	var body: some WidgetConfiguration {
 		ActivityConfiguration(for: Sts2RunActivityAttributes.self) { context in
@@ -40,14 +74,12 @@ struct Sts2IslandLiveActivity: Widget {
 			DynamicIsland {
 				DynamicIslandExpandedRegion(.leading) {
 					HStack(spacing: 5) {
-						Image(systemName: "map.fill")
-							.font(.caption2)
-							.foregroundStyle(IslandPalette.gold)
+						IslandAvatarView(data: context.state.avatar, size: 30, ring: IslandPalette.hp(context.state))
 						Text("A\(context.state.act) · \(context.state.floor)")
 							.font(.caption.weight(.semibold))
 							.monospacedDigit()
 					}
-					.padding(.leading, 4)
+					.padding(.leading, 2)
 				}
 				DynamicIslandExpandedRegion(.trailing) {
 					HStack(spacing: 4) {
@@ -78,14 +110,7 @@ struct Sts2IslandLiveActivity: Widget {
 					.frame(maxWidth: .infinity, alignment: .center)
 				}
 			} compactLeading: {
-				HStack(spacing: 3) {
-					Image(systemName: "map.fill")
-						.font(.system(size: 10))
-						.foregroundStyle(IslandPalette.gold)
-					Text("\(context.state.floor)")
-						.font(.caption2.weight(.semibold))
-						.monospacedDigit()
-				}
+				IslandAvatarView(data: context.state.avatar, size: 17, ring: IslandPalette.hp(context.state))
 			} compactTrailing: {
 				HStack(spacing: 2) {
 					Image(systemName: "heart.fill")
@@ -96,10 +121,7 @@ struct Sts2IslandLiveActivity: Widget {
 						.monospacedDigit()
 				}
 			} minimal: {
-				Text("\(context.state.hp)")
-					.font(.caption2.weight(.bold))
-					.monospacedDigit()
-					.foregroundStyle(IslandPalette.hp(context.state))
+				IslandAvatarView(data: context.state.avatar, size: 15, ring: IslandPalette.hp(context.state))
 			}
 			.keylineTint(IslandPalette.hp(context.state))
 		}
@@ -111,14 +133,18 @@ struct Sts2IslandLockScreenView: View {
 
 	var body: some View {
 		HStack(spacing: 12) {
-			ZStack {
-				Circle()
-					.fill(IslandPalette.hp(state).opacity(0.18))
-					.frame(width: 38, height: 38)
-				Image(systemName: "heart.fill")
-					.font(.system(size: 16, weight: .bold))
-					.foregroundStyle(IslandPalette.hp(state))
-			}
+			IslandAvatarView(data: state.avatar, size: 44, ring: IslandPalette.hp(state))
+				.overlay(alignment: .bottomTrailing) {
+					ZStack {
+						Circle()
+							.fill(Color(white: 0.08))
+							.frame(width: 18, height: 18)
+						Image(systemName: "heart.fill")
+							.font(.system(size: 9, weight: .bold))
+							.foregroundStyle(IslandPalette.hp(state))
+					}
+					.offset(x: 3, y: 3)
+				}
 			VStack(alignment: .leading, spacing: 4) {
 				HStack(spacing: 6) {
 					Text(state.character.isEmpty ? "Slay the Spire 2" : state.character)

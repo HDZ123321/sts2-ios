@@ -12,6 +12,10 @@ import ActivityKit
 // this poller reads it at 0.5 s and starts or updates the Live Activity. A missing or malformed
 // file means "no island", never a broken frame.
 //
+// The character portrait is a second file next to the state (user://island_avatar.png, written by
+// IslandAvatar.cs). Its bytes are loaded here and carried in the content state, because the widget
+// extension runs in its own sandbox and cannot open Godot's user directory.
+//
 // Entry point: sts2_island_bootstrap(), called from sts2/dummy.cpp at image load and again from
 // Godot's apple-embedded plugin hook. It is idempotent.
 
@@ -19,6 +23,9 @@ private let islandTickSeconds: Double = 0.5
 private let islandStateFileName = "island_state.json"
 private let islandStatusFileName = "island_status.txt"
 private let islandStatusLimit = 8000
+
+/// Refuse to put a runaway file into the content state; the app side targets under 48 KB.
+private let islandAvatarLimit = 256 * 1024
 
 private final class Sts2IslandPoller {
 	static let shared = Sts2IslandPoller()
@@ -30,6 +37,7 @@ private final class Sts2IslandPoller {
 	private var lastResolvedAt: Date = .distantPast
 	private var lastPayloadHash: Int = 0
 	private var lastActiveRunId: String?
+	private var avatarCache: (name: String, stamp: String, data: Data?)
 
 	func start() {
 		queue.async { [self] in
@@ -63,14 +71,14 @@ private final class Sts2IslandPoller {
 			return
 		}
 		if #available(iOS 16.1, *) {
-			apply(snapshot)
+			apply(snapshot, dir: dir)
 		}
 	}
 
 	// MARK: - Live Activity
 
 	@available(iOS 16.1, *)
-	private func apply(_ snapshot: Snapshot) {
+	private func apply(_ snapshot: Snapshot, dir: URL) {
 		let info = ActivityAuthorizationInfo()
 		guard info.areActivitiesEnabled else {
 			status("live activities are disabled in Settings")
@@ -80,13 +88,15 @@ private final class Sts2IslandPoller {
 			endActivity()
 			return
 		}
+		let avatar = avatarData(dir: dir, named: snapshot.avatar)
 		let state = Sts2RunActivityAttributes.ContentState(
 			hp: snapshot.hp,
 			maxHp: snapshot.maxHp,
 			floor: snapshot.floor,
 			act: snapshot.act,
 			gold: snapshot.gold,
-			character: snapshot.character)
+			character: snapshot.character,
+			avatar: avatar)
 		let runId = "run-\(snapshot.act)-\(snapshot.character)"
 		if let existing = Activity<Sts2RunActivityAttributes>.activities.first {
 			lastActiveRunId = existing.attributes.runId
@@ -96,7 +106,7 @@ private final class Sts2IslandPoller {
 			return
 		}
 		if lastActiveRunId == nil {
-			status("requesting activity hp=\(snapshot.hp)/\(snapshot.maxHp) floor=\(snapshot.floor)")
+			status("requesting activity hp=\(snapshot.hp)/\(snapshot.maxHp) floor=\(snapshot.floor) avatar=\(avatar?.count ?? 0)B")
 		}
 		do {
 			_ = try Activity<Sts2RunActivityAttributes>.request(
@@ -125,6 +135,47 @@ private final class Sts2IslandPoller {
 		}
 		lastActiveRunId = nil
 		status("activity ended")
+	}
+
+	// MARK: - The portrait
+
+	/// Reads the PNG the reporter named, cached until the file's size or mtime moves. Godot rewrites
+	/// the file only when the hero changes, so in practice this costs one read per run.
+	private func avatarData(dir: URL, named name: String) -> Data? {
+		guard !name.isEmpty else { return nil }
+		let url = dir.appendingPathComponent(name)
+		let stamp = fileStamp(url)
+		if stamp.isEmpty {
+			if avatarCache?.name != name || avatarCache?.data != nil {
+				status("avatar '\(name)' is missing next to the state file")
+			}
+			avatarCache = (name, "", nil)
+			return nil
+		}
+		if let cached = avatarCache, cached.name == name, cached.stamp == stamp {
+			return cached.data
+		}
+		guard let data = try? Data(contentsOf: url) else {
+			avatarCache = (name, stamp, nil)
+			return nil
+		}
+		guard data.count <= islandAvatarLimit else {
+			status("avatar '\(name)' is \(data.count) bytes, over the \(islandAvatarLimit) limit")
+			avatarCache = (name, stamp, nil)
+			return nil
+		}
+		avatarCache = (name, stamp, data)
+		status("avatar '\(name)' loaded (\(data.count) bytes)")
+		return data
+	}
+
+	private func fileStamp(_ url: URL) -> String {
+		guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+			return ""
+		}
+		let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+		let modified = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+		return "\(size)-\(Int(modified))"
 	}
 
 	// MARK: - Where the reporter writes
@@ -226,6 +277,7 @@ private final class Sts2IslandPoller {
 		let act: Int
 		let gold: Int
 		let character: String
+		let avatar: String
 
 		init?(data: Data) {
 			guard let object = try? JSONSerialization.jsonObject(with: data),
@@ -237,6 +289,7 @@ private final class Sts2IslandPoller {
 			act = (dict["act"] as? Int) ?? 1
 			gold = (dict["gold"] as? Int) ?? 0
 			character = (dict["character"] as? String) ?? ""
+			avatar = (dict["avatar"] as? String) ?? ""
 		}
 	}
 }

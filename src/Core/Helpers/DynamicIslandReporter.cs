@@ -22,6 +22,11 @@ namespace MegaCrit.Sts2.Core.Helpers;
 /// activity. A failed write costs the island, never the frame.
 /// </para>
 /// <para>
+/// The character portrait is a second file, <c>user://island_avatar.png</c>, written by
+/// <see cref="IslandAvatar" /> and re-encoded only when the hero changes. The JSON only carries
+/// its name, so the poll stays a formatted string comparison until something actually moves.
+/// </para>
+/// <para>
 /// One write per second, and only when the payload actually changed - idle cost is a formatted
 /// string comparison, no allocation, no file IO.
 /// </para>
@@ -33,7 +38,7 @@ public static class DynamicIslandReporter
 	/// <summary>How often the run is re-read. The island is not a HUD; once a second is plenty.</summary>
 	private const ulong PollIntervalMs = 1000;
 
-	private static readonly StringBuilder Payload = new StringBuilder(192);
+	private static readonly StringBuilder Payload = new StringBuilder(224);
 
 	private static bool _started;
 
@@ -118,6 +123,7 @@ public static class DynamicIslandReporter
 			.Append(",\"act\":").Append((runState.CurrentActIndex + 1).ToString(CultureInfo.InvariantCulture))
 			.Append(",\"gold\":").Append(me.Gold.ToString(CultureInfo.InvariantCulture))
 			.Append(",\"character\":").Append(Quote(CharacterTitle(me)))
+			.Append(",\"avatar\":").Append(Quote(IslandAvatar.Ensure(me.Character)))
 			.Append('}');
 	}
 

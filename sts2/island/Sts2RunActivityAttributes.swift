@@ -19,13 +19,22 @@ public struct Sts2RunActivityAttributes: ActivityAttributes {
 		public var gold: Int
 		public var character: String
 
-		public init(hp: Int, maxHp: Int, floor: Int, act: Int, gold: Int, character: String) {
+		/// The character portrait as PNG bytes, ready for `UIImage(data:)`.
+		///
+		/// It travels inside the state because the widget extension has its own sandbox: it cannot
+		/// read Godot's `user://` directory, and an ad-hoc-signed build has no App Group to share
+		/// one. The app side keeps it small (132 px long edge, under 48 KB) because every update
+		/// archives and ships this state to the widget; `nil` means "show the fallback symbol".
+		public var avatar: Data?
+
+		public init(hp: Int, maxHp: Int, floor: Int, act: Int, gold: Int, character: String, avatar: Data? = nil) {
 			self.hp = hp
 			self.maxHp = maxHp
 			self.floor = floor
 			self.act = act
 			self.gold = gold
 			self.character = character
+			self.avatar = avatar
 		}
 
 		/// 0...1 health fraction, safe when maxHp is momentarily 0 (a fresh or dying run).
