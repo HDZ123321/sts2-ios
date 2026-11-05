@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Intents;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
@@ -200,7 +201,18 @@ public static class PreloadManager
 			return;
 		}
 		long collectStart = Perf.ElapsedMs;
-		GC.Collect();
+		// A blocking full collection here lands right in the middle of the
+		// transition into the room, which is where a hitch is most visible.
+		// On mobile let the collector run on its own thread instead: this call
+		// still triggers the collection, it just does not wait for it.
+		if (Godot.OS.HasFeature("mobile"))
+		{
+			GC.Collect(2, GCCollectionMode.Forced, blocking: false);
+		}
+		else
+		{
+			GC.Collect();
+		}
 		_heapAtLastCollect = GC.GetTotalMemory(forceFullCollection: false);
 		if (Perf.Enabled)
 		{
@@ -224,7 +236,7 @@ public static class PreloadManager
 		{
 			source2 = source2.Where((CardModel card) => card.MultiplayerConstraint != CardMultiplayerConstraint.MultiplayerOnly);
 		}
-		return new IEnumerable<string>[10]
+		return new IEnumerable<string>[11]
 		{
 			source2.SelectMany((CardModel card) => card.RunAssetPaths),
 			source.SelectMany((CharacterModel c) => c.CardPool.AllCards.SelectMany((CardModel card) => card.RunAssetPaths)),
@@ -238,7 +250,8 @@ public static class PreloadManager
 				select e.IconPath into p
 				where p != EnchantmentModel.MissingIconPath
 				select p,
-			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath)
+			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath),
+			IntentAnimData.AssetPaths
 		}.SelectMany((IEnumerable<string> s) => s);
 	}
 

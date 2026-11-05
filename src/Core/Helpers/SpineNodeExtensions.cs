@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Bindings.MegaSpine;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 
@@ -48,7 +49,20 @@ public static class SpineNodeExtensions
 		}
 		if (GodotObject.IsInstanceValid(sprite.BoundObject))
 		{
+			// The skeleton is built and its atlas pages are uploaded by the engine
+			// between frames, so this frame is where a spine creature pays for
+			// itself. Label it, and hold the label until the frame has been
+			// reported, so a hitch here is attributed to spine rather than to
+			// whatever the room was doing when it started waiting.
+			string previousPhase = Perf.CurrentPhase;
+			Perf.Phase("spine.ready");
+			if (Perf.Enabled && framesWaited > 0)
+			{
+				Log.Info($"[Perf] {host.Name}: spine skeleton ready after {framesWaited} frames", 3);
+			}
 			onReady(sprite.GetAnimationState());
+			await host.AwaitProcessFrame();
+			Perf.Phase(previousPhase);
 		}
 	}
 }

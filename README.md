@@ -169,6 +169,15 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 判读：`proc` 小、`draw`/`vram` 跳高 → GPU 侧（纹理上传或首次 PSO）；`proc` 大 → 主线程同步干活（实例化、Spine 建骨、卡面解码）。
 
+另有两个不在调用链上、但仍会出现在进战后几帧里的标签：`spine.ready`（某只怪的 SpineSprite 把骨架建完、图集页上传完的那一帧，之前是空白）和 `combat.banner`（「战斗开始」横幅的 `MegaLabel` 自适应字号二分重排）。
+
+已经因此改掉的两处（同一提交）：
+
+| 改动 | 位置 | 为什么 |
+|---|---|---|
+| 房间加载后的全量 `GC.Collect()` 在移动端改成不等结果 | `src/Core/Assets/PreloadManager.cs` `CollectIfHeapGrew` | 它就落在进房间的转场帧上，5–20 ms 的停顿正好被玩家看见。`GC.Collect(2, Forced, blocking: false)` 照样回收，只是不在绘制那一帧上等 |
+| 意图动画帧并入 run 资产集 | `PreloadManager.GetRunAssetPaths` + `IntentAnimData.AssetPaths` | `AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，走 `AssetCache` 的同步 `ResourceLoader.Load` |
+
 ### 2.10 灵动岛：跑图状态挂在 Live Activity 上
 
 iPhone 14 Pro 以后的机型（含 17 Pro Max）在 App 外能看到一条「第 X 幕 第 Y 层 · HP 32/80」的实时活动。实现刻意避开两处最容易翻车的地方：

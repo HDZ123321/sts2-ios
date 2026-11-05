@@ -4,6 +4,7 @@ using System.Text;
 using Godot;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 
 namespace MegaCrit.Sts2.Core.Debug;
 
@@ -130,6 +131,28 @@ public static class Perf
 	public static void Phase(string phase)
 	{
 		_phase = phase;
+	}
+
+	/// <summary>The label a hitch in the current frame would be reported under.</summary>
+	public static string CurrentPhase => _phase;
+
+	/// <summary>
+	/// Labels the current frame, then puts the previous label back once that frame has
+	/// been reported. The restoration deliberately happens a frame later: a hitch is
+	/// reported at the end of the frame it happened in, so restoring immediately would
+	/// erase the label before anything reads it.
+	/// </summary>
+	public static void PhaseForThisFrame(Node host, string phase)
+	{
+		string previous = _phase;
+		_phase = phase;
+		TaskHelper.RunSafely(RestorePhase(host, previous));
+	}
+
+	private static async System.Threading.Tasks.Task RestorePhase(Node host, string previous)
+	{
+		await host.AwaitProcessFrame();
+		_phase = previous;
 	}
 
 	/// <summary>Starts the per-frame sampler. Safe to call twice.</summary>
