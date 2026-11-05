@@ -51,7 +51,26 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完；`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）。
 
-## 这一版（v23）：把 perf 数据做成一个能直接发出来的文件
+## 这一版（v24）：账本从「点地图点」开始算
+
+上一版的账本从 `combat.generate` 起算，但玩家感受到的卡顿往往从**点击地图点**就开始了——镜头平移那半秒到一秒里，如果资产还在加载，那段时间根本没有任何标签背着它。
+
+现在链路前面补了两个阶段，并且账本在每个地图点开始时重新起算（商店、营火这类不打账的房间不会把时间漏进下一场战斗）：
+
+- `map.travel`：`TravelToMapCoord` 的镜头平移
+- `map.arrive`：进房间、生成、加载、预热 —— 一直到 `combat.generate` 之前
+
+于是 `[Perf] combat entry total=...` 的 `total` 就是**从点地图点到战斗就绪的真实墙钟**，直接对应手感。
+
+帧报表末尾还多了一段按阶段的超阈值时间汇总：
+
+```
+[Perf] frames=1800 avg=8.44ms fps=118.5 max=41.2ms hitch=17 proc=2.03ms ... hitchby=combat.enemies:214ms spine.ready:96ms combat.room-ready:41ms
+```
+
+`hitch=` 是次数，`hitchby=` 是归属，前 3 名。之前单帧 `hitch` 行最多 12 条，进战那种「一串二十几毫秒」的抖动全被截掉了，现在能看出时间到底落在哪一阶段。
+
+## 上一版（v23）：把 perf 数据做成一个能直接发出来的文件
 
 上一版的账本行是在 `godot.log` 里，而 iOS 应用容器里的日志基本取不出来——所以埋了归因也收不到数据。这一版把它解决了。
 

@@ -157,6 +157,7 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 | 阶段 | 覆盖的工作 |
 |---|---|
+| `map.travel` / `map.arrive` | 点地图点后的镜头平移，到房间真正开始之前 |
 | `combat.generate` | 生成怪物与站位 |
 | `combat.preload` | `PreloadManager.LoadRoomCombatAssets` 的等待 |
 | `combat.creatures` | `CombatState.CreateCreature` × N |
@@ -168,6 +169,16 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 | `combat.bgm` / `after-creature-added` | 战斗音乐（FMOD bank）、每只怪的入场 |
 
 判读：`proc` 小、`draw`/`vram` 跳高 → GPU 侧（纹理上传或首次 PSO）；`proc` 大 → 主线程同步干活（实例化、Spine 建骨、卡面解码）。
+
+单帧 `hitch` 行最多 12 条，而进战常常是**一串**刚过 33 ms 的帧。所以每行帧报表末尾按阶段汇总这一窗口里超阈值帧花了多少时间（前 3 名）：
+
+```
+[Perf] frames=1800 avg=8.44ms fps=118.5 max=41.2ms hitch=17 proc=2.03ms ... managed=63MB vram=241MB hitchby=combat.enemies:214ms spine.ready:96ms combat.room-ready:41ms
+```
+
+`hitch=` 是次数，`hitchby=` 是归属。两个数字一起看就知道是「一场战斗进战时抖了十几下」还是「全程平均」。
+
+进战这条链的总账从**点地图点那一刻**开始算（`MapRoom` 之前那段 `map.travel`），到 `combat.after-room` 结束，所以 `total` 就是玩家手感上的「点了之后等了多久」。
 
 另有两个不在调用链上、但仍会出现在进战后几帧里的标签：`spine.ready`（某只怪的 SpineSprite 把骨架建完、图集页上传完的那一帧，之前是空白）和 `combat.banner`（「战斗开始」横幅的 `MegaLabel` 自适应字号二分重排）。
 

@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
@@ -46,7 +47,10 @@ public class MoveToMapCoordAction : GameAction
 		}
 		else
 		{
+			Perf.StartSequence();
+			Perf.Phase("map.travel");
 			await NMapScreen.Instance.TravelToMapCoord(_destination);
+			Perf.Phase("map.arrive");
 		}
 	}
 

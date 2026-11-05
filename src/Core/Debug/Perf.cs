@@ -58,6 +58,15 @@ public static class Perf
 
 	private static int _hitchLines;
 
+	/// <summary>
+	/// How much time each phase spent in frames over the hitch threshold, for the current report
+	/// window. The per-hitch lines are capped at <see cref="MaxHitchLines" /> and a battle entry
+	/// usually produces a burst of them, so this is what says where the time actually went.
+	/// </summary>
+	private static readonly Dictionary<string, double> HitchMsByPhase = new Dictionary<string, double>();
+
+	private const int HitchPhaseSlots = 3;
+
 	private static int _gc0;
 
 	private static int _gc1;
@@ -203,6 +212,17 @@ public static class Perf
 	public static string CurrentPhase => _phase;
 
 	/// <summary>
+	/// Drops any phases recorded since the last <see cref="ReportPhases" />. Call it where a new
+	/// sequence begins, so a room that never prints a ledger (a shop, a campfire) cannot have its
+	/// time counted into the next combat entry.
+	/// </summary>
+	public static void StartSequence()
+	{
+		_phaseTimings.Clear();
+		_phaseStart = 0L;
+	}
+
+	/// <summary>
 	/// Labels the current frame, then puts the previous label back once that frame has
 	/// been reported. The restoration deliberately happens a frame later: a hitch is
 	/// reported at the end of the frame it happened in, so restoring immediately would
@@ -276,6 +296,31 @@ public static class Perf
 		return ProjectSettings.GlobalizePath("user://" + MirrorFileName);
 	}
 
+	/// <summary>
+	/// Appends the three phases that ate the most hitch time in this window, e.g.
+	/// <c>hitchby=combat.enemies:412ms spine.ready:186ms combat.banner:71ms</c>. A battle entry
+	/// shows up as a burst of frames just over the threshold, so counting them per phase is the
+	/// only way to tell a 20 ms room frame repeated fifteen times from a single 300 ms stall.
+	/// </summary>
+	private static void AppendHitchPhases(StringBuilder builder)
+	{
+		if (HitchMsByPhase.Count == 0)
+		{
+			return;
+		}
+		builder.Append(" hitchby=");
+		bool first = true;
+		foreach (KeyValuePair<string, double> entry in HitchMsByPhase.OrderByDescending((KeyValuePair<string, double> p) => p.Value).Take(HitchPhaseSlots))
+		{
+			if (!first)
+			{
+				builder.Append(' ');
+			}
+			first = false;
+			builder.Append(entry.Key).Append(':').Append(entry.Value.ToString("F0")).Append("ms");
+		}
+	}
+
 	/// <summary>Keeps the tail of the mirror file and drops the rest, so the newest data survives.</summary>
 	private static void RotateMirror(string path)
 	{
@@ -345,6 +390,8 @@ public static class Perf
 		if (num2 > HitchThresholdMs)
 		{
 			_hitches++;
+			HitchMsByPhase.TryGetValue(_phase, out double spent);
+			HitchMsByPhase[_phase] = spent + num2;
 			LogHitch(num2);
 		}
 		if (_frames < ReportFrames)
@@ -372,6 +419,7 @@ public static class Perf
 			.Append(" managed=").Append((GC.GetTotalMemory(false) / 1048576).ToString())
 			.Append("MB vram=").Append((GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576.0).ToString("F0"))
 			.Append("MB");
+		AppendHitchPhases(Report);
 		Log.Info(Report.ToString(), 3);
 		Mirror(Report.ToString());
 		_gc0 = num3;
@@ -382,6 +430,7 @@ public static class Perf
 		_maxMs = 0.0;
 		_hitches = 0;
 		_hitchLines = 0;
+		HitchMsByPhase.Clear();
 	}
 
 	/// <summary>
