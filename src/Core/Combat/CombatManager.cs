@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Achievements;
 using MegaCrit.Sts2.Core.Combat.History;
 using MegaCrit.Sts2.Core.Commands;
@@ -365,15 +366,18 @@ public class CombatManager
 		{
 			player.ResetCombatState();
 		}
+		Perf.Phase("combat.populate");
 		foreach (Player player2 in state.Players)
 		{
 			player2.PopulateCombatState(player2.RunState.Rng.Shuffle, state);
 		}
+		Perf.Phase("combat.register-creatures");
 		NetCombatCardDb.Instance.StartCombat(state.Players);
 		foreach (Creature creature in state.Creatures)
 		{
 			AddCreature(creature);
 		}
+		Perf.Phase("combat.combat-setup-hooks");
 		this.CombatSetUp?.Invoke(state);
 	}
 
@@ -389,8 +393,10 @@ public class CombatManager
 		await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
 		if (_state.Encounter.HasBgm)
 		{
+			Perf.Phase("combat.bgm");
 			NRunMusicController.Instance?.PlayCustomMusic(_state.Encounter.CustomBgm);
 		}
+		Perf.Phase("combat.after-creature-added");
 		foreach (Creature creature in _state.Creatures)
 		{
 			await AfterCreatureAdded(creature);

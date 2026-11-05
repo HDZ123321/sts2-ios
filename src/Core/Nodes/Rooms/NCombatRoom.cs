@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
@@ -339,6 +340,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public override void _Ready()
 	{
+		Perf.Phase("combat.room-ready");
 		Ui = GetNode<NCombatUi>("%CombatUi");
 		Ui.Deactivate();
 		SceneContainer = GetNode<Control>("%CombatSceneContainer");
@@ -360,9 +362,11 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		BgContainer = GetNode<Control>("%BgContainer");
 		CreatedMsec = Time.GetTicksMsec();
 		Log.Info($"Creating NCombatRoom with mode={Mode} encounter={_visuals.Encounter.Id.Entry}.");
+		Perf.Phase("combat.allies");
 		CreateAllyNodes();
 		if (Mode != CombatRoomMode.FinishedCombat)
 		{
+			Perf.Phase("combat.enemies");
 			CreateEnemyNodes();
 		}
 		if (Mode != CombatRoomMode.ActiveCombat)
@@ -381,6 +385,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_window.Connect(Viewport.SignalName.SizeChanged, Callable.From(AdjustCreatureScaleForAspectRatio));
 		AdjustCreatureScaleForAspectRatio();
 		NGame.Instance.SetScreenShakeTarget(SceneContainer);
+		Perf.Phase("combat.room-ready.done");
 	}
 
 	public static Rng GenerateBackgroundRngForCurrentPoint(IRunState state)
@@ -420,11 +425,14 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	private void OnCombatSetUp(CombatState state)
 	{
+		Perf.Phase("combat.ui-activate");
 		Ui.Activate(((CombatRoom)_visuals).CombatState);
 		if (Background == null)
 		{
+			Perf.Phase("combat.background");
 			SetUpBackground(state.RunState);
 		}
+		Perf.Phase("combat.ui-activate.done");
 	}
 
 	/// <summary>
@@ -721,6 +729,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public void AddCreature(Creature creature)
 	{
+		Perf.Phase("combat.creature-node");
 		NCreature nCreature = NCreature.Create(creature);
 		_creatureNodes.Add(nCreature);
 		if (creature.IsPlayer || creature.PetOwner != null)

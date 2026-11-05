@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
@@ -196,14 +197,17 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 
 	private async Task StartCombat(IRunState? runState)
 	{
+		Perf.Phase("combat.generate");
 		if (!Encounter.HaveMonstersBeenGenerated)
 		{
 			Encounter.GenerateMonstersWithSlots(CombatState.RunState);
 		}
 		if (ShouldCreateCombat)
 		{
+			Perf.Phase("combat.preload");
 			await PreloadManager.LoadRoomCombatAssets(Encounter, runState ?? NullRunState.Instance);
 		}
+		Perf.Phase("combat.creatures");
 		foreach (var (monsterModel, slot) in Encounter.MonstersWithSlots)
 		{
 			monsterModel.AssertMutable();
@@ -216,15 +220,19 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 		}
 		if (ShouldCreateCombat)
 		{
+			Perf.Phase("combat.create-room");
 			NRun.Instance?.SetCurrentRoom(NCombatRoom.Create(this, CombatRoomMode.ActiveCombat));
 		}
 		else
 		{
+			Perf.Phase("combat.create-room");
 			NCombatRoom.Instance?.TransitionToActiveCombat(this);
 		}
+		Perf.Phase("combat.set-up");
 		CombatManager.Instance.SetUpCombat(CombatState);
 		if (runState != null)
 		{
+			Perf.Phase("combat.after-room");
 			await Hook.AfterRoomEntered(runState, this);
 		}
 		CombatManager.Instance.AfterCombatRoomLoaded();

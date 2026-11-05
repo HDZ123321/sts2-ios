@@ -30,9 +30,18 @@ public static class Perf
 	/// </summary>
 	private const int MobileReportFrames = 1800;
 
+	/// <summary>
+	/// How many individual hitches are spelled out per report window. A long stall usually produces
+	/// a burst of them and the log is read off a phone, so keep the detail bounded; the window's
+	/// <c>hitch=</c> counter still carries the true total.
+	/// </summary>
+	private const int MaxHitchLines = 12;
+
 	private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
 	private static readonly StringBuilder Report = new StringBuilder(384);
+
+	private static readonly StringBuilder Hitch = new StringBuilder(256);
 
 	private static long _lastMarkMs;
 
@@ -43,6 +52,8 @@ public static class Perf
 	private static double _maxMs;
 
 	private static int _hitches;
+
+	private static int _hitchLines;
 
 	private static int _gc0;
 
@@ -55,6 +66,14 @@ public static class Perf
 	private static bool? _enabled;
 
 	private static int _reportFrames;
+
+	/// <summary>
+	/// What the game is currently doing, as a short tag set by the code that owns the work
+	/// ("combat.preload", "combat.create-room", ...). A frame that runs long logs this tag, which is
+	/// the only way to attribute a stall to a phase after the fact: the frame report alone says a
+	/// hitch happened but not which piece of the game caused it.
+	/// </summary>
+	private static string _phase = "boot";
 
 	/// <summary>
 	/// True when the run was started with <c>--perf</c>, or when this is a mobile build that was
@@ -104,6 +123,15 @@ public static class Perf
 		_lastMarkMs = elapsedMilliseconds;
 	}
 
+	/// <summary>
+	/// Names the work about to happen, so a long frame inside it is attributable. Costs one string
+	/// reference assignment; pass a literal, never an interpolated string.
+	/// </summary>
+	public static void Phase(string phase)
+	{
+		_phase = phase;
+	}
+
 	/// <summary>Starts the per-frame sampler. Safe to call twice.</summary>
 	public static void StartFrameWatch()
 	{
@@ -137,6 +165,7 @@ public static class Perf
 		if (num2 > HitchThresholdMs)
 		{
 			_hitches++;
+			LogHitch(num2);
 		}
 		if (_frames < ReportFrames)
 		{
@@ -171,6 +200,42 @@ public static class Perf
 		_sumMs = 0.0;
 		_maxMs = 0.0;
 		_hitches = 0;
+		_hitchLines = 0;
+	}
+
+	/// <summary>
+	/// One line per long frame, naming what was running and how loaded the frame was.
+	/// <c>proc</c> is the engine's own process time for the frame just ended, so a GPU stall shows up
+	/// as a big frame with a small <c>proc</c>, while a CPU stall shows both large.
+	/// </summary>
+	private static void LogHitch(double frameMs)
+	{
+		if (_hitchLines >= MaxHitchLines)
+		{
+			return;
+		}
+		_hitchLines++;
+		string scene = "?";
+		try
+		{
+			scene = Engine.GetMainLoop() is SceneTree tree ? tree.CurrentScene?.Name ?? "-" : "-";
+		}
+		catch (Exception)
+		{
+			// A freed scene during a room swap is not worth losing the line over.
+		}
+		Hitch.Clear();
+		Hitch.Append("[Perf] hitch ")
+			.Append(frameMs.ToString("F1"))
+			.Append("ms phase=").Append(_phase)
+			.Append(" scene=").Append(scene)
+			.Append(" proc=").Append((GetMonitor(Performance.Monitor.TimeProcess) * 1000.0).ToString("F1"))
+			.Append("ms nodes=").Append(GetMonitor(Performance.Monitor.ObjectNodeCount).ToString("F0"))
+			.Append(" draw=").Append(GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame).ToString("F0"))
+			.Append(" vram=").Append((GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576.0).ToString("F0"))
+			.Append("MB managed=").Append((GC.GetTotalMemory(false) / 1048576).ToString())
+			.Append("MB");
+		Log.Info(Hitch.ToString(), 3);
 	}
 
 	/// <summary>
