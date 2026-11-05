@@ -177,6 +177,23 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 [Perf] combat entry total=1120ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.creature-node=11ms combat.ui-activate=26ms combat.background=31ms combat.bgm=4ms combat.after-creature-added=18ms
 ```
 
+#### 数据怎么从手机里拿出来
+
+上面这些行除了进日志，还会被镜像到 `combat_perf.txt` —— 因为 iOS 上应用容器里的 `godot.log` 极难取，而这份文件落在 Documents 目录（App 已声明 `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`），在**文件 App → 我的 iPhone → sts2** 里直接能看见、能分享出来。
+
+内容就是同样的行，前面加时间戳，每次启动写一行 header：
+
+```
+=== session 2026-11-05 20:31:07 engine=4.5.1-stable (official) os=iOS model=iPhone18,2 renderer=mobile fps=60 ===
+20:31:09.114 [Perf] frame watch started (report every 1800 frames)
+20:31:41.882 [Perf] frames=1800 avg=8.44ms fps=118.5 max=22.1ms hitch=0 proc=2.03ms ...
+20:33:02.517 [Perf] combat entry total=486ms combat.generate=3ms combat.preload=141ms ...
+```
+
+超过 128 KB 自动轮转一次，只保留最后 400 行（前面补一行 `(rotated, N older lines dropped)`），所以跑一整天也不会把手机塞满。`--noperf` 时整个镜像一起关掉。
+
+**要定位卡顿，只需要把这个文件（或者其中带 `combat entry` / `hitch` 的几十行）发出来**，不必设法去捞 `godot.log`。
+
 ### 2.9.1 进战预热：怪物节点提前一帧一个建好
 
 `NCombatRoom._Ready` 建房间时，每只怪的 `NCreature.Create` 都在同一帧里跑 —— PackedScene、visuals 子场景、纹理全都要在那里实例化，敌人越多这一帧越重。现在这部分搬到 `CombatRoom.StartCombat` 的 `combat.prepare-nodes` 阶段：`NCombatRoom.PrepareCreatureNodes(CombatState)` 在**地图还在屏幕上**的时候，每帧建一只，先不挂进树；等房间真正创建时，`AddCreature` 直接从预备表里取，只做挂载。

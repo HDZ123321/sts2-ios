@@ -51,7 +51,27 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完；`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）。
 
-## 这一版（v21）：角色立绘上岛 + 进战预热一路前置
+## 这一版（v23）：把 perf 数据做成一个能直接发出来的文件
+
+上一版的账本行是在 `godot.log` 里，而 iOS 应用容器里的日志基本取不出来——所以埋了归因也收不到数据。这一版把它解决了。
+
+`Perf` 现在把每一行（帧报表、`hitch`、阶段总账、启动 mark，连 `frame watch started` 都有）**镜像到 `combat_perf.txt`**：
+
+- 落在 **Documents** 目录。App 早就声明了 `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`，所以这个文件在 **文件 App → 我的 iPhone → sts2** 里直接可见，可以分享、可以 AirDrop，不需要数据线也不需要任何工具。
+- 每行带时间戳，每次启动写一行 header，写清引擎版本、系统、机型、渲染后端、当前 `MaxFps`：
+
+```
+=== session 2026-11-05 20:31:07 engine=4.5.1-stable (official) os=iOS model=iPhone18,2 renderer=mobile fps=60 ===
+20:31:09.114 [Perf] frame watch started (report every 1800 frames)
+20:31:41.882 [Perf] frames=1800 avg=8.44ms fps=118.5 max=22.1ms hitch=0 proc=2.03ms ...
+```
+
+- 超过 128 KB 轮转一次，只留最后 400 行，跑一整天也塞不满手机。
+- `--noperf` 时连镜像一起关；`user://combat_prewarm.txt` 写 `off` 仍然能退回没有预热的路径。
+
+**要做下一版，需要的就是这个文件**：随便打两三场，把 `combat_perf.txt` 发出来，或者只挑 `combat entry` / `hitch` / `combat turn setup` 那几十行。有了真机数字就不用再猜——哪一项大就动哪一项。
+
+## 上一版（v21）：角色立绘上岛 + 进战预热一路前置
 
 ### 灵动岛显示角色 2D 形象
 

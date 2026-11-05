@@ -84,6 +84,19 @@ public static class Perf
 	private static long _phaseStart;
 
 	/// <summary>
+	/// The same lines the log gets, mirrored into <c>user://combat_perf.txt</c>. On a phone the log is
+	/// buried inside the app container and hard to pull off the device, while the user data directory
+	/// is one file the player can hand over. Bounded and rotated so a long run cannot fill the disk.
+	/// </summary>
+	private const string MirrorFileName = "combat_perf.txt";
+
+	private const long MirrorMaxBytes = 128L * 1024L;
+
+	private static readonly object MirrorLock = new object();
+
+	private static long _mirrorBytes = -1L;
+
+	/// <summary>
 	/// True when the run was started with <c>--perf</c>, or when this is a mobile build that was
 	/// not explicitly silenced with <c>--noperf</c>.
 	/// </summary>
@@ -127,7 +140,9 @@ public static class Perf
 			return;
 		}
 		long elapsedMilliseconds = Clock.ElapsedMilliseconds;
-		Log.Info($"[Perf] {phase}: {elapsedMilliseconds - _lastMarkMs}ms (t={elapsedMilliseconds}ms)", 3);
+		string line = $"[Perf] {phase}: {elapsedMilliseconds - _lastMarkMs}ms (t={elapsedMilliseconds}ms)";
+		Log.Info(line, 3);
+		Mirror(line);
 		_lastMarkMs = elapsedMilliseconds;
 	}
 
@@ -180,6 +195,7 @@ public static class Perf
 			builder.Append(' ').Append(phase).Append('=').Append(milliseconds).Append("ms");
 		}
 		Log.Info(builder.ToString(), 3);
+		Mirror(builder.ToString());
 		_phaseTimings.Clear();
 	}
 
@@ -205,6 +221,96 @@ public static class Perf
 		_phase = previous;
 	}
 
+	/// <summary>
+	/// Appends one line to <c>user://combat_perf.txt</c>, rotating the file once it grows past
+	/// <see cref="MirrorMaxBytes" />. Diagnostics must never be able to break the game, so every
+	/// failure here is swallowed: the log line has already been written by the caller.
+	/// </summary>
+	private static void Mirror(string line)
+	{
+		if (!Enabled)
+		{
+			return;
+		}
+		try
+		{
+			lock (MirrorLock)
+			{
+				string path = MirrorPath();
+				if (_mirrorBytes < 0L)
+				{
+					_mirrorBytes = System.IO.File.Exists(path) ? new System.IO.FileInfo(path).Length : 0L;
+				}
+				if (_mirrorBytes > MirrorMaxBytes)
+				{
+					RotateMirror(path);
+				}
+				string text = $"{DateTime.Now:MM-dd HH:mm:ss.fff} {line}\n";
+				System.IO.File.AppendAllText(path, text, Encoding.UTF8);
+				_mirrorBytes += text.Length;
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	/// <summary>
+	/// Where the mirror lives. The documents directory is preferred because the app declares file
+	/// sharing, so that path shows up in the Files app and the player can hand the file over without
+	/// a cable. On a platform without it, the Godot user directory is used instead.
+	/// </summary>
+	private static string MirrorPath()
+	{
+		try
+		{
+			string documents = OS.GetSystemDir(OS.SystemDir.Documents);
+			if (!string.IsNullOrEmpty(documents) && System.IO.Directory.Exists(documents))
+			{
+				return System.IO.Path.Combine(documents, MirrorFileName);
+			}
+		}
+		catch (Exception)
+		{
+		}
+		return ProjectSettings.GlobalizePath("user://" + MirrorFileName);
+	}
+
+	/// <summary>Keeps the tail of the mirror file and drops the rest, so the newest data survives.</summary>
+	private static void RotateMirror(string path)
+	{
+		string[] lines = System.IO.File.ReadAllLines(path, Encoding.UTF8);
+		StringBuilder builder = new StringBuilder();
+		int start = Math.Max(0, lines.Length - 400);
+		if (start > 0)
+		{
+			builder.Append($"(rotated, {start} older lines dropped)\n");
+		}
+		for (int i = start; i < lines.Length; i++)
+		{
+			builder.Append(lines[i]).Append('\n');
+		}
+		System.IO.File.WriteAllText(path, builder.ToString(), Encoding.UTF8);
+		_mirrorBytes = builder.Length;
+	}
+
+	/// <summary>
+	/// One header per session, so a file that arrives without its log still says which build and
+	/// which device produced it.
+	/// </summary>
+	private static void MirrorHeader()
+	{
+		try
+		{
+			string renderer = (string)ProjectSettings.GetSetting("rendering/renderer/rendering_method", "?");
+			string line = $"=== session {DateTime.Now:yyyy-MM-dd HH:mm:ss} engine={Engine.GetVersionInfo()["string"]} os={OS.GetName()} model={OS.GetModelName()} renderer={renderer} fps={Engine.MaxFps} ===";
+			Mirror(line);
+		}
+		catch (Exception)
+		{
+		}
+	}
+
 	/// <summary>Starts the per-frame sampler. Safe to call twice.</summary>
 	public static void StartFrameWatch()
 	{
@@ -222,6 +328,7 @@ public static class Perf
 		_gc1 = GC.CollectionCount(1);
 		_gc2 = GC.CollectionCount(2);
 		tree.ProcessFrame += OnFrame;
+		MirrorHeader();
 		Log.Info($"[Perf] frame watch started (report every {ReportFrames} frames)", 3);
 	}
 
@@ -266,6 +373,7 @@ public static class Perf
 			.Append("MB vram=").Append((GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576.0).ToString("F0"))
 			.Append("MB");
 		Log.Info(Report.ToString(), 3);
+		Mirror(Report.ToString());
 		_gc0 = num3;
 		_gc1 = num4;
 		_gc2 = num5;
@@ -309,6 +417,7 @@ public static class Perf
 			.Append("MB managed=").Append((GC.GetTotalMemory(false) / 1048576).ToString())
 			.Append("MB");
 		Log.Info(Hitch.ToString(), 3);
+		Mirror(Hitch.ToString());
 	}
 
 	/// <summary>
