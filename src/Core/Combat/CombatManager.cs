@@ -399,6 +399,10 @@ public class CombatManager
 		Perf.Phase("combat.after-creature-added");
 		foreach (Creature creature in _state.Creatures)
 		{
+			// The creature's entrance is awaited one at a time, so this frame lands after the room
+			// is already on screen - it is the part of "combat started" that shows up as a hitch a
+			// beat later than the room swap.
+			Perf.Phase("combat.creature-added");
 			await AfterCreatureAdded(creature);
 			CombatCt.ThrowIfCancellationRequested();
 		}
@@ -676,9 +680,13 @@ public class CombatManager
 			handDraw = Math.Max(handDraw, list2.Count);
 			handDraw = Math.Min(handDraw, CardPile.MaxCardsInHand);
 		}
+		// Drawing the opening hand builds one card node per card, so it is worth knowing whether
+		// that is what the first-turn hitch is.
+		Perf.Phase("combat.hand-draw");
 		await CardPileCmd.Draw(playerChoiceContext, handDraw, player, fromHandDraw: true);
 		CombatCt.ThrowIfCancellationRequested();
 		await Hook.AfterPlayerTurnStart(state, playerChoiceContext, player);
+		Perf.ReportPhases("combat turn setup");
 	}
 
 	/// <summary>

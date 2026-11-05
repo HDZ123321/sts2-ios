@@ -183,6 +183,8 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 房间本身也一样：`combat_room.tscn` 有两千多个节点，`Instantiate()` 是原子的、拆不开，所以给它单独一帧——`NCombatRoom.PrepareRoom` 在地图还在的时候就把房间树建好，`NCombatRoom.Create` 直接取走。`combat.create-room` 那一步于是只剩「换场景」。
 
+背景跟着房间一起建：`NCombatBackground.Create` 会按 `BackgroundAssets.BgLayers` 逐层实例化视差层场景（每层都带自己的大图），原来也挤在 `combat.background` 那一格里。`PrepareRoom(visuals, mode, runState)` 现在把背景一起建好挂在预备位上，`SetUpBackground` 直接取走再挂进 `BgContainer`。安全前提是背景的层组只由 `Encounter` 和 `new Rng(runState.Rng.Seed + 当前地图点)` 决定（`GenerateBackgroundRngForCurrentPoint`），不碰全局 RNG，且 `BackgroundAssets` 本来就缓存在 `EncounterModel` 上——提前算一次和晚算一次结果一样。
+
 时序没变：`_Ready` 仍然在 `SetCurrentRoom` 那一帧跑，入场动画、血条 `SpawnedAtCombatStart` 判定都照旧。变的只是「资源实例化」提前了几帧，并且分散开了。没用掉的预备节点在 `_Ready` 末尾统一释放，房间退出时 `CombatRoom.Exit` 再兜一次底。
 
 关掉它做对照：写 `user://combat_prewarm.txt`，内容 `off`（大小写不敏感），下次进战就退回老的单帧路径。
@@ -196,6 +198,8 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 | 房间加载后的全量 `GC.Collect()` 在移动端改成不等结果 | `src/Core/Assets/PreloadManager.cs` `CollectIfHeapGrew` | 它就落在进房间的转场帧上，5–20 ms 的停顿正好被玩家看见。`GC.Collect(2, Forced, blocking: false)` 照样回收，只是不在绘制那一帧上等 |
 | 意图动画帧并入 run 资产集 | `PreloadManager.GetRunAssetPaths` + `IntentAnimData.AssetPaths` | `AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，走 `AssetCache` 的同步 `ResourceLoader.Load` |
 | 自适应字号的拟合结果做记忆化 | `addons/mega_text/MegaLabel.cs` `_fittedSizes` | 拟合是二分搜索，每一步都把整段字重新 shaping，中文尤其贵。战斗开始时血条、名牌、意图、横幅一起出现，几十个新 label 问的是同一批 (文本, 字体, 矩形)，缓存命中后一次 shaping 都不做 |
+
+进战之后还有一条单独的总账，因为「刚开始打怪」的手感往往落在房间已经出现之后：`SetupPlayerTurn` 末尾打 `[Perf] combat turn setup total=<ms> combat.hand-draw=<ms> ...`，其中 `combat.hand-draw` 包住 `CardPileCmd.Draw` —— 起手五张牌就是这个阶段一张一张建节点出来的。等到 `StartCombatInternal` 里逐只怪 `await AfterCreatureAdded` 的那段，也按 `combat.creature-added` 记账。
 
 ### 2.10 灵动岛：跑图状态挂在 Live Activity 上
 

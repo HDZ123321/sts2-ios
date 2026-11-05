@@ -334,6 +334,14 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	private static NCombatRoom? _preparedRoom;
 
+	/// <summary>
+	/// The background node built alongside the room. <see cref="NCombatBackground.Create" /> instantiates one
+	/// scene per parallax layer and every layer's textures on the spot, which used to land in the frame that
+	/// already had the room and the enemies in it. The layer set is derived from the encounter and a fresh
+	/// <see cref="Rng" /> seeded off the run, so it can be built before the room is on screen.
+	/// </summary>
+	private static NCombatBackground? _preparedBackground;
+
 	private static ICombatRoomVisuals? _preparedRoomVisuals;
 
 	private static CombatRoomMode _preparedRoomMode;
@@ -445,7 +453,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// make the fight appear late - two thousand nodes, all in the frame that swaps the map out - and
 	/// it cannot be split across frames, so instead it happens while the map is still on screen.
 	/// </summary>
-	public static void PrepareRoom(ICombatRoomVisuals visuals, CombatRoomMode mode)
+	public static void PrepareRoom(ICombatRoomVisuals visuals, CombatRoomMode mode, IRunState? runState = null)
 	{
 		DiscardPreparedRoom();
 		if (!PrewarmEnabled || TestMode.IsOn)
@@ -458,6 +466,19 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_preparedRoom = nCombatRoom;
 		_preparedRoomVisuals = visuals;
 		_preparedRoomMode = mode;
+		if (runState == null)
+		{
+			return;
+		}
+		try
+		{
+			_preparedBackground = visuals.Encounter.CreateBackground(visuals.Act, GenerateBackgroundRngForCurrentPoint(runState));
+		}
+		catch (Exception ex)
+		{
+			Log.Warn($"[Perf] could not prepare the combat background, it will be built on the frame instead: {ex.Message}");
+			_preparedBackground = null;
+		}
 	}
 
 	/// <summary>Drops the room built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
@@ -469,6 +490,29 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		}
 		_preparedRoom = null;
 		_preparedRoomVisuals = null;
+		DiscardPreparedBackground();
+	}
+
+	/// <summary>Drops the background built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
+	public static void DiscardPreparedBackground()
+	{
+		if (_preparedBackground != null && GodotObject.IsInstanceValid(_preparedBackground))
+		{
+			DiscardNode(_preparedBackground);
+		}
+		_preparedBackground = null;
+	}
+
+	/// <summary>Takes the prepared background if there is a live one, otherwise null.</summary>
+	private static NCombatBackground? TakePreparedBackground()
+	{
+		NCombatBackground? background = _preparedBackground;
+		_preparedBackground = null;
+		if (background != null && GodotObject.IsInstanceValid(background))
+		{
+			return background;
+		}
+		return null;
 	}
 
 	/// <summary>Frees a node that may never have entered the tree, where <c>QueueFree</c> has nothing to hook.</summary>
@@ -593,7 +637,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			Log.Warn("Tried to set up background twice!");
 		}
-		Background = _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
+		Background = TakePreparedBackground() ?? _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
 		BgContainer.AddChildSafely(Background);
 	}
 

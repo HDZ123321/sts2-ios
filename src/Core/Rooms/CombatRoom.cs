@@ -229,14 +229,15 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 			Perf.Phase("combat.prepare-nodes");
 			await NCombatRoom.PrepareCreatureNodes(CombatState);
 			// The room tree itself is two thousand nodes and cannot be split up, so it gets
-			// its own frame while the map is still on screen.
+			// its own frame while the map is still on screen. The background goes with it:
+			// one scene per parallax layer, each with its own textures.
 			Perf.Phase("combat.prepare-room");
 			NGame? game = NGame.Instance;
 			if (game != null)
 			{
 				await game.AwaitProcessFrame();
 			}
-			NCombatRoom.PrepareRoom(this, CombatRoomMode.ActiveCombat);
+			NCombatRoom.PrepareRoom(this, CombatRoomMode.ActiveCombat, CombatState.RunState);
 			Perf.Phase("combat.create-room");
 			NRun.Instance?.SetCurrentRoom(NCombatRoom.Create(this, CombatRoomMode.ActiveCombat));
 		}
