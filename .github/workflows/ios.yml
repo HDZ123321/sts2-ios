@@ -413,6 +413,20 @@ jobs:
           gh release view "$TAG" --json assets \
             --jq '.assets[] | "\(.name)\t\(.size)\t\(.state)"'
 
+      - name: Refresh the release notes from this build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # docs/RELEASE_NOTES.md 里的 {{SIZE}} / {{SHA256}} / {{COMMIT}} 之类由这里回填，
+          # 这样 Release 页不会像 v13 那样还写着旧包的体积和哈希。
+          python3 tools/refresh_release_notes.py \
+            --ipa build/sts2-unsigned.ipa \
+            --tag "${PCK_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --run "${GITHUB_RUN_ID}" \
+            --sha "${GITHUB_SHA}"
+
       - name: Upload dSYM
         uses: actions/upload-artifact@v4
         with:
