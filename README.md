@@ -177,6 +177,7 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 |---|---|---|
 | 房间加载后的全量 `GC.Collect()` 在移动端改成不等结果 | `src/Core/Assets/PreloadManager.cs` `CollectIfHeapGrew` | 它就落在进房间的转场帧上，5–20 ms 的停顿正好被玩家看见。`GC.Collect(2, Forced, blocking: false)` 照样回收，只是不在绘制那一帧上等 |
 | 意图动画帧并入 run 资产集 | `PreloadManager.GetRunAssetPaths` + `IntentAnimData.AssetPaths` | `AbstractIntent.AssetPaths` 只报了静态图标，动画帧每次进战全部 miss，走 `AssetCache` 的同步 `ResourceLoader.Load` |
+| 自适应字号的拟合结果做记忆化 | `addons/mega_text/MegaLabel.cs` `_fittedSizes` | 拟合是二分搜索，每一步都把整段字重新 shaping，中文尤其贵。战斗开始时血条、名牌、意图、横幅一起出现，几十个新 label 问的是同一批 (文本, 字体, 矩形)，缓存命中后一次 shaping 都不做 |
 
 ### 2.10 灵动岛：跑图状态挂在 Live Activity 上
 

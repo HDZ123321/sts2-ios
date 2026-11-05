@@ -238,6 +238,57 @@ public class MegaLabel : Label
 		}
 	}
 
+	/// <summary>
+	/// One (text, font, box) combination whose fitted font size has already been computed.
+	/// Fitting is a binary search that re-shapes the whole string on every step, which is
+	/// expensive for CJK text and runs for every label that appears - health bars,
+	/// nameplates, intents, banners - so the answer is memoized across instances. Combat
+	/// recreates dozens of these labels and every one of them asks the same handful of
+	/// questions.
+	/// </summary>
+	private readonly struct FittedSizeKey : IEquatable<FittedSizeKey>
+	{
+		private readonly string _text;
+		private readonly ulong _fontId;
+		private readonly float _width;
+		private readonly float _height;
+		private readonly float _lineSpacing;
+		private readonly bool _wrap;
+		private readonly int _min;
+		private readonly int _max;
+
+		public FittedSizeKey(string text, ulong fontId, Vector2 box, float lineSpacing, bool wrap, int min, int max)
+		{
+			_text = text;
+			_fontId = fontId;
+			_width = box.X;
+			_height = box.Y;
+			_lineSpacing = lineSpacing;
+			_wrap = wrap;
+			_min = min;
+			_max = max;
+		}
+
+		public bool Equals(FittedSizeKey other)
+		{
+			return _fontId == other._fontId && _width.Equals(other._width) && _height.Equals(other._height) && _lineSpacing.Equals(other._lineSpacing) && _wrap == other._wrap && _min == other._min && _max == other._max && string.Equals(_text, other._text, StringComparison.Ordinal);
+		}
+
+		public override bool Equals(object? obj)
+		{
+			return obj is FittedSizeKey other && Equals(other);
+		}
+
+		public override int GetHashCode()
+		{
+			return HashCode.Combine(_text, _fontId.GetHashCode(), _width, _height, _lineSpacing, _wrap, _min, _max);
+		}
+	}
+
+	private const int _fittedSizeCacheLimit = 512;
+
+	private static readonly Dictionary<FittedSizeKey, int> _fittedSizes = new Dictionary<FittedSizeKey, int>();
+
 	private void AdjustFontSize()
 	{
 		TextParagraph cachedParagraph = _cachedParagraph;
@@ -250,14 +301,26 @@ public class MegaLabel : Label
 		float lineSpacing = GetThemeConstant(ThemeConstants.Label.LineSpacing, "Label");
 		Vector2 size = GetRect().Size;
 		bool wrap = base.AutowrapMode != TextServer.AutowrapMode.Off;
+		FittedSizeKey key = new FittedSizeKey(base.Text, themeFont.GetInstanceId(), size, lineSpacing, wrap, MinFontSize, MaxFontSize);
+		if (_fittedSizes.TryGetValue(key, out int fitted))
+		{
+			SetFontSize(fitted);
+			return;
+		}
+		if (_fittedSizes.Count >= _fittedSizeCacheLimit)
+		{
+			_fittedSizes.Clear();
+		}
 		if (!MegaLabelHelper.IsTooBig(cachedParagraph, base.Text, themeFont, MaxFontSize, lineSpacing, wrap, size))
 		{
 			SetFontSize(MaxFontSize);
+			_fittedSizes[key] = MaxFontSize;
 			return;
 		}
 		if (_lastSetSize >= MinFontSize && _lastSetSize < MaxFontSize && !MegaLabelHelper.IsTooBig(cachedParagraph, base.Text, themeFont, _lastSetSize, lineSpacing, wrap, size) && MegaLabelHelper.IsTooBig(cachedParagraph, base.Text, themeFont, _lastSetSize + 1, lineSpacing, wrap, size))
 		{
 			SetFontSize(_lastSetSize);
+			_fittedSizes[key] = _lastSetSize;
 			return;
 		}
 		int num = MinFontSize;
@@ -274,7 +337,9 @@ public class MegaLabel : Label
 				num = num3 + 1;
 			}
 		}
-		SetFontSize(Math.Min(num, num2));
+		int num4 = Math.Min(num, num2);
+		SetFontSize(num4);
+		_fittedSizes[key] = num4;
 	}
 
 	/// <summary>
