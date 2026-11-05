@@ -37,7 +37,7 @@ private final class Sts2IslandPoller {
 	private var lastResolvedAt: Date = .distantPast
 	private var lastPayloadHash: Int = 0
 	private var lastActiveRunId: String?
-	private var avatarCache: (name: String, stamp: String, data: Data?)
+	private var avatarCache: (name: String, stamp: String, data: Data?) = ("", "", nil)
 
 	func start() {
 		queue.async { [self] in
