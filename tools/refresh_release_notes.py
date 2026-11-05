@@ -73,21 +73,33 @@ def render(template: str, values: dict[str, str]) -> str:
     return re.sub(r"\{\{(\w+)\}\}", substitute, template)
 
 
-def patch_release(repo: str, tag: str, token: str, body: str) -> None:
-    url = "%s/repos/%s/releases/tags/%s" % (API, repo, tag)
-    payload = json.dumps({"body": body}).encode("utf-8")
-    request = urllib.request.Request(url, data=payload, method="PATCH")
+def call(url: str, token: str, method: str = "GET", payload: dict | None = None) -> dict:
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method=method)
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("Authorization", "Bearer " + token)
-    request.add_header("Content-Type", "application/json")
+    request.add_header("X-GitHub-Api-Version", "2022-11-28")
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            data = json.loads(response.read())
+            return json.loads(response.read())
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", "replace")[:400]
-        die("PATCH %s failed: %s %s" % (url, error.code, detail))
+        die("%s %s failed: %s %s" % (method, url, error.code, detail))
     except urllib.error.URLError as error:
-        die("PATCH %s failed: %s" % (url, error))
+        die("%s %s failed: %s" % (method, url, error))
+    return {}
+
+
+def patch_release(repo: str, tag: str, token: str, body: str) -> None:
+    # PATCH /releases/tags/<tag> 不存在（那个路由只支持 GET，会直接 404），
+    # 必须先按 tag 查出 id，再 PATCH /releases/<id>。gh release edit 也是这么走的。
+    release = call("%s/repos/%s/releases/tags/%s" % (API, repo, tag), token)
+    release_id = release.get("id")
+    if not release_id:
+        die("release %s not found in %s" % (tag, repo))
+    data = call("%s/repos/%s/releases/%d" % (API, repo, release_id), token, "PATCH", {"body": body})
     print("release notes updated: %s (%d bytes of markdown)" % (data.get("html_url"), len(body)))
 
 
