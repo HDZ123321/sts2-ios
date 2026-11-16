@@ -170,6 +170,15 @@ public class NCursorManager : Node
 
 	private Image? _lastSetCursor;
 
+	/// <summary>
+	/// Whether the current display server can render a custom mouse cursor image at all.
+	/// Mobile display servers (iOS/Android) have no pointer, so every
+	/// <see cref="M:Godot.Input.SetCustomMouseCursor(Godot.Texture2D,Godot.Input.CursorShape,Godot.Vector2)" /> call
+	/// emits "Custom cursor shape not supported by this display server." into the log.
+	/// Gating on this keeps the port's logs readable without changing desktop behaviour.
+	/// </summary>
+	private static readonly bool _supportsCustomCursor = !OS.HasFeature("mobile");
+
 	private bool _isDown;
 
 	private bool _isUsingController;
@@ -184,7 +193,10 @@ public class NCursorManager : Node
 
 	public override void _EnterTree()
 	{
-		Input.SetCustomMouseCursor(_cursorInspect, Input.CursorShape.Help, _inspectHotSpot);
+		if (_supportsCustomCursor)
+		{
+			Input.SetCustomMouseCursor(_cursorInspect, Input.CursorShape.Help, _inspectHotSpot);
+		}
 		UpdateCursor();
 	}
 
@@ -239,6 +251,10 @@ public class NCursorManager : Node
 
 	private void UpdateCursor()
 	{
+		if (!_supportsCustomCursor)
+		{
+			return;
+		}
 		if (Input.MouseMode != Input.MouseModeEnum.Hidden)
 		{
 			Image image = (_isDown ? CursorTilted : CursorNotTilted);

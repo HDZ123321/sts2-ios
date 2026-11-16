@@ -6,6 +6,7 @@ using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Audio.Debug;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -84,6 +85,7 @@ public class NCombatStartBanner : Control
 
 	public override void _Ready()
 	{
+		Perf.PhaseForThisFrame(this, "combat.banner");
 		_colorRect = GetNode<ColorRect>("ColorRect");
 		_colorRect.Modulate = Colors.Transparent;
 		_label = GetNode<MegaLabel>("Label");

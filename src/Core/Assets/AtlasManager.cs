@@ -24,15 +24,32 @@ public static class AtlasManager
 
 	private record SpriteInfo(Texture2D Atlas, TpSheetSprite Sprite);
 
-	private static readonly string[] _knownAtlases = new string[13]
+	/// <summary>
+	/// Atlases the main menu, map and every non-combat screen draw from. Kept resident for the
+	/// whole session.
+	/// </summary>
+	private static readonly string[] _menuAtlases = new string[10]
 	{
-		"ui_atlas", "compressed_atlas", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "power_atlas", "card_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
-		"intent_atlas", "era_atlas", "controller_atlas"
+		"ui_atlas", "compressed_atlas", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
+		"controller_atlas", "era_atlas"
 	};
 
+	/// <summary>
+	/// Atlases only a run draws from. Deferred on desktop until the first run scene loads; on mobile
+	/// they are loaded up front, see <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadAllAtlases" />.
+	/// </summary>
+	private static readonly string[] _runAtlases = new string[3] { "card_atlas", "power_atlas", "intent_atlas" };
+
+	/// <summary>
+	/// <see cref="P:System.Text.Json.JsonSerializerOptions.TypeInfoResolver" /> is pinned to the
+	/// source-generated context because NativeAOT turns reflection-based serialization off
+	/// (<c>JsonSerializer.IsReflectionEnabledByDefault = false</c>); without it every .tpsheet
+	/// deserialize throws and the game comes up with no sprites at all.
+	/// </summary>
 	private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
 	{
-		PropertyNameCaseInsensitive = true
+		PropertyNameCaseInsensitive = true,
+		TypeInfoResolver = TpSheetSerializerContext.Default
 	};
 
 	private static readonly ConcurrentDictionary<string, AtlasData> _atlases = new ConcurrentDictionary<string, AtlasData>();
@@ -51,8 +68,35 @@ public static class AtlasManager
 	/// </summary>
 	public static void LoadAllAtlases()
 	{
-		string[] knownAtlases = _knownAtlases;
-		foreach (string atlasName in knownAtlases)
+		if (OS.HasFeature("mobile"))
+		{
+			string[] allAtlases = _menuAtlases;
+			foreach (string atlasName in allAtlases)
+			{
+				LoadAtlas(atlasName);
+			}
+			string[] deferredAtlases = _runAtlases;
+			foreach (string atlasName2 in deferredAtlases)
+			{
+				LoadAtlas(atlasName2);
+			}
+			return;
+		}
+		string[] menuAtlases = _menuAtlases;
+		foreach (string atlasName3 in menuAtlases)
+		{
+			LoadAtlas(atlasName3);
+		}
+	}
+
+	/// <summary>
+	/// Loads the atlases that only a run draws from. Called when the first run scene is about to
+	/// load, so their memory is only paid while a run is in progress.
+	/// </summary>
+	public static void LoadRunAtlases()
+	{
+		string[] runAtlases = _runAtlases;
+		foreach (string atlasName in runAtlases)
 		{
 			LoadAtlas(atlasName);
 		}
@@ -85,7 +129,7 @@ public static class AtlasManager
 			AtlasData atlasData = BuildAtlasData(atlasName);
 			if (atlasData != null && _atlases.TryAdd(atlasName, atlasData))
 			{
-				Log.Info($"AtlasManager: Loaded {atlasName} with {atlasData.SpriteMap.Count} sprites");
+				Log.Info($"AtlasManager: Loaded {atlasName} with {atlasData.SpriteMap.Count} sprites, {atlasData.PageTextures.Count} page(s)");
 			}
 		}
 	}

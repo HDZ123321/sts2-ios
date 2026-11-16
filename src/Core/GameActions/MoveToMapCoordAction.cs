@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Nodes;
@@ -41,8 +42,11 @@ public class MoveToMapCoordAction : GameAction
 			await RunManager.Instance.FadeOut();
 			await RunManager.Instance.EnterMapCoord(_destination);
 			TaskHelper.RunSafely(RunManager.Instance.FadeIn());
+			return;
 		}
-		else if (_player.RunState.GameMode == GameMode.Blitz)
+		Perf.StartSequence();
+		Perf.Phase("map.travel");
+		if (_player.RunState.GameMode == GameMode.Blitz)
 		{
 			await NRun.Instance.GlobalUi.TopBar.BlitzMap.TravelToMapCoord(_destination);
 		}
@@ -50,6 +54,7 @@ public class MoveToMapCoordAction : GameAction
 		{
 			await NMapScreen.Instance.TravelToMapCoord(_destination);
 		}
+		Perf.Phase("map.arrive");
 	}
 
 	public override INetAction ToNetAction()

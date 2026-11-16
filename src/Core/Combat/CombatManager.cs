@@ -485,15 +485,18 @@ public class CombatManager
 		{
 			player.ResetCombatState();
 		}
+		Perf.Phase("combat.populate");
 		foreach (Player player2 in state.Players)
 		{
 			player2.PopulateCombatState(player2.RunState.Rng.Shuffle, state);
 		}
+		Perf.Phase("combat.register-creatures");
 		NetCombatCardDb.Instance.StartCombat(state.Players);
 		foreach (Creature creature in state.Creatures)
 		{
 			AddCreature(creature);
 		}
+		Perf.Phase("combat.combat-setup-hooks");
 		this.CombatSetUp?.Invoke(state);
 	}
 
@@ -612,10 +615,16 @@ public class CombatManager
 		RunManager.Instance.ActionExecutor.Pause();
 		if (turnState.State.Encounter.HasBgm)
 		{
+			Perf.Phase("combat.bgm");
 			NRunMusicController.Instance?.PlayCustomMusic(turnState.State.Encounter.CustomBgm);
 		}
+		Perf.Phase("combat.after-creature-added");
 		foreach (Creature creature in turnState.State.Creatures)
 		{
+			// The creature's entrance is awaited one at a time, so this frame lands after the room
+			// is already on screen - it is the part of "combat started" that shows up as a hitch a
+			// beat later than the room swap.
+			Perf.Phase("combat.creature-added");
 			await AfterCreatureAdded(creature, turnState.State);
 			turnState.Ct.ThrowIfCancellationRequested();
 		}
@@ -943,9 +952,13 @@ public class CombatManager
 			handDraw = Math.Max(handDraw, list2.Count);
 			handDraw = Math.Min(handDraw, CardPile.MaxCardsInHand);
 		}
+		// Drawing the opening hand builds one card node per card, so it is worth knowing whether
+		// that is what the first-turn hitch is.
+		Perf.Phase("combat.hand-draw");
 		await CardPileCmd.Draw(playerChoiceContext, handDraw, player, fromHandDraw: true);
 		turnState.Ct.ThrowIfCancellationRequested();
 		await Hook.AfterPlayerTurnStart(state, playerChoiceContext, player);
+		Perf.ReportPhases("combat turn setup");
 	}
 
 	/// <summary>

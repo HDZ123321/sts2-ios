@@ -5,12 +5,14 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Rewards;
@@ -144,6 +146,8 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 
 	public override Task Exit(IRunState? runState)
 	{
+		NCombatRoom.DiscardPreparedRoom();
+		NCombatRoom.ClearPreparedCreatureNodes();
 		CombatManager.Instance.Reset(graceful: true);
 		if (IsPreFinished)
 		{
@@ -196,14 +200,17 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 
 	private async Task StartCombat(IRunState? runState)
 	{
+		Perf.Phase("combat.generate");
 		if (!Encounter.HaveMonstersBeenGenerated)
 		{
 			Encounter.GenerateMonstersWithSlots(CombatState.RunState);
 		}
 		if (ShouldCreateCombat)
 		{
+			Perf.Phase("combat.preload");
 			await PreloadManager.LoadRoomCombatAssets(Encounter, CombatState.RunState);
 		}
+		Perf.Phase("combat.creatures");
 		foreach (var (monsterModel, slot) in Encounter.MonstersWithSlots)
 		{
 			monsterModel.AssertMutable();
@@ -216,18 +223,38 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 		}
 		if (ShouldCreateCombat)
 		{
+			// Build the enemy nodes now, one per frame, while the map still covers the
+			// screen. Creating them inside the room's own frame means every enemy's packed
+			// scene and visuals get instantiated in that one frame.
+			Perf.Phase("combat.prepare-nodes");
+			await NCombatRoom.PrepareCreatureNodes(CombatState);
+			// The room tree itself is two thousand nodes and cannot be split up, so it gets
+			// its own frame while the map is still on screen. The background goes with it:
+			// one scene per parallax layer, each with its own textures.
+			Perf.Phase("combat.prepare-room");
+			NGame? game = NGame.Instance;
+			if (game != null)
+			{
+				await game.AwaitProcessFrame();
+			}
+			NCombatRoom.PrepareRoom(this, CombatRoomMode.ActiveCombat, CombatState.RunState);
+			Perf.Phase("combat.create-room");
 			NRun.Instance?.SetCurrentRoom(NCombatRoom.Create(this, CombatRoomMode.ActiveCombat));
 		}
 		else
 		{
+			Perf.Phase("combat.create-room");
 			NCombatRoom.Instance?.TransitionToActiveCombat(this);
 		}
+		Perf.Phase("combat.set-up");
 		CombatManager.Instance.SetUpCombat(CombatState);
 		if (runState != null)
 		{
+			Perf.Phase("combat.after-room");
 			await Hook.AfterRoomEntered(runState, this);
 		}
 		CombatManager.Instance.AfterCombatRoomLoaded();
+		Perf.ReportPhases("combat entry");
 	}
 
 	public void OnCombatEnded()
@@ -256,6 +283,7 @@ public class CombatRoom : AbstractRoom, ICombatRoomVisuals
 		{
 			await nCombatRoom.Ui.ProceedWithoutRewards();
 		}
+		Perf.ReportPhases("pre-finished combat entry");
 	}
 
 	public async Task OfferRoomEndRewards()

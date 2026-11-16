@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Godot;
@@ -9,6 +10,7 @@ using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
@@ -325,6 +327,222 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	public event Action? ProceedButtonPressed;
 
 	/// <summary>
+	/// Creature nodes built a frame or two before the room exists, keyed by the creature they belong to.
+	/// Instantiating <see cref="T:MegaCrit.Sts2.Core.Nodes.Combat.NCreature" /> is the expensive half of adding
+	/// an enemy - the packed scene, its visuals scene and their textures all get instantiated there - and it
+	/// happens for every enemy in the single frame that builds the room. <see cref="M:MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.PrepareCreatureNodes(MegaCrit.Sts2.Core.Combat.ICombatState)" />
+	/// does that half earlier, one per frame, while the map is still on screen;
+	/// <see cref="M:MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.AddCreature(MegaCrit.Sts2.Core.Entities.Creatures.Creature)" />
+	/// then only has to parent them.
+	/// </summary>
+	private static readonly Dictionary<Creature, NCreature> _preparedCreatureNodes = new Dictionary<Creature, NCreature>();
+
+	private static NCombatRoom? _preparedRoom;
+
+	/// <summary>
+	/// The background node built alongside the room. <c>NCombatBackground.Create</c> instantiates one scene per
+	/// parallax layer and every layer's textures on the spot, which used to land in the frame that already had
+	/// the room and the enemies in it. The layer set is derived from the encounter and a fresh <see cref="T:MegaCrit.Sts2.Core.Random.Rng" />
+	/// seeded off the run, so it can be built before the room is on screen.
+	/// </summary>
+	private static NCombatBackground? _preparedBackground;
+
+	/// <summary>
+	/// The encounter's slot layout scene, built with the room. Encounters that place their enemies by hand ship
+	/// a scene for it, and instantiating it inside the room's frame is another few hundred nodes on top of
+	/// everything else.
+	/// </summary>
+	private static Control? _preparedEncounterSlots;
+
+	private static ICombatRoomVisuals? _preparedRoomVisuals;
+
+	private static CombatRoomMode _preparedRoomMode;
+
+	private static bool? _prewarmEnabled;
+
+	/// <summary>
+	/// Whether the room node and its creature nodes are built ahead of time. On by default; a
+	/// <c>user://combat_prewarm.txt</c> containing <c>off</c> turns it back off, for comparing a run against the
+	/// old single-frame build.
+	/// </summary>
+	public static bool PrewarmEnabled
+	{
+		get
+		{
+			if (!_prewarmEnabled.HasValue)
+			{
+				_prewarmEnabled = true;
+				try
+				{
+					string path = ProjectSettings.GlobalizePath("user://combat_prewarm.txt");
+					if (File.Exists(path))
+					{
+						_prewarmEnabled = !File.ReadAllText(path).Trim().Equals("off", StringComparison.OrdinalIgnoreCase);
+					}
+				}
+				catch (Exception ex)
+				{
+					Log.Warn($"[Perf] could not read combat_prewarm.txt, assuming it is on: {ex.Message}");
+				}
+			}
+			return _prewarmEnabled.Value;
+		}
+	}
+
+	/// <summary>
+	/// Builds an <see cref="T:MegaCrit.Sts2.Core.Nodes.Combat.NCreature" /> for every creature that will be added
+	/// to the room, spreading the work one creature per frame so no single frame carries all of them. The nodes
+	/// are not in the tree yet: their <c>_Ready</c> still runs in the same frame as before, when they are
+	/// parented.
+	/// </summary>
+	public static async Task PrepareCreatureNodes(ICombatState combatState)
+	{
+		ClearPreparedCreatureNodes();
+		if (!PrewarmEnabled || TestMode.IsOn)
+		{
+			return;
+		}
+		NGame? game = NGame.Instance;
+		if (game == null)
+		{
+			return;
+		}
+		// Players are prepared too: the ally side goes through the same AddCreature path
+		// (CreateAllyNodes), and a playable character's visuals scene is usually the heaviest
+		// atlas in the room.
+		foreach (Creature creature in combatState.Creatures)
+		{
+			NCreature? node = NCreature.Create(creature);
+			if (node != null)
+			{
+				_preparedCreatureNodes[creature] = node;
+			}
+			await game.AwaitProcessFrame();
+		}
+	}
+
+	/// <summary>Frees any creature node that was prepared but never added, so a skipped room cannot leak them.</summary>
+	public static void ClearPreparedCreatureNodes()
+	{
+		foreach (NCreature node in _preparedCreatureNodes.Values)
+		{
+			if (GodotObject.IsInstanceValid(node))
+			{
+				DiscardNode(node);
+			}
+		}
+		_preparedCreatureNodes.Clear();
+	}
+
+	/// <summary>
+	/// Instantiates the room's own node tree before the room is needed. Building it is what used to make the
+	/// fight appear late - two thousand nodes, all in the frame that swaps the map out - and it cannot be split
+	/// across frames, so instead it happens while the map is still on screen.
+	/// </summary>
+	public static void PrepareRoom(ICombatRoomVisuals visuals, CombatRoomMode mode, IRunState? runState = null)
+	{
+		DiscardPreparedRoom();
+		if (!PrewarmEnabled || TestMode.IsOn)
+		{
+			return;
+		}
+		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
+		nCombatRoom._visuals = visuals;
+		nCombatRoom.Mode = mode;
+		_preparedRoom = nCombatRoom;
+		_preparedRoomVisuals = visuals;
+		_preparedRoomMode = mode;
+		if (runState == null)
+		{
+			return;
+		}
+		try
+		{
+			_preparedBackground = visuals.Encounter.CreateBackground(visuals.Act, GenerateBackgroundRngForCurrentPoint(runState));
+			if (visuals.Encounter.HasScene)
+			{
+				_preparedEncounterSlots = visuals.Encounter.CreateScene();
+			}
+		}
+		catch (Exception ex)
+		{
+			Log.Warn($"[Perf] could not prepare the combat background, it will be built on the frame instead: {ex.Message}");
+			_preparedBackground = null;
+			DiscardPreparedEncounterSlots();
+		}
+	}
+
+	/// <summary>Drops the room built by <see cref="M:MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.PrepareRoom(MegaCrit.Sts2.Core.Rooms.ICombatRoomVisuals,MegaCrit.Sts2.Core.Rooms.CombatRoomMode,MegaCrit.Sts2.Core.Runs.IRunState)" /> without ever adding it to the tree.</summary>
+	public static void DiscardPreparedRoom()
+	{
+		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom))
+		{
+			DiscardNode(_preparedRoom);
+		}
+		_preparedRoom = null;
+		_preparedRoomVisuals = null;
+		DiscardPreparedBackground();
+		DiscardPreparedEncounterSlots();
+	}
+
+	/// <summary>Drops the background built by <c>PrepareRoom</c> without ever adding it to the tree.</summary>
+	public static void DiscardPreparedBackground()
+	{
+		if (_preparedBackground != null && GodotObject.IsInstanceValid(_preparedBackground))
+		{
+			DiscardNode(_preparedBackground);
+		}
+		_preparedBackground = null;
+	}
+
+	/// <summary>Drops the slot layout built by <c>PrepareRoom</c> without ever adding it to the tree.</summary>
+	private static void DiscardPreparedEncounterSlots()
+	{
+		if (_preparedEncounterSlots != null && GodotObject.IsInstanceValid(_preparedEncounterSlots))
+		{
+			DiscardNode(_preparedEncounterSlots);
+		}
+		_preparedEncounterSlots = null;
+	}
+
+	/// <summary>Takes the prepared slot layout if there is a live one, otherwise null.</summary>
+	private static Control? TakePreparedEncounterSlots()
+	{
+		Control? slots = _preparedEncounterSlots;
+		_preparedEncounterSlots = null;
+		if (slots != null && GodotObject.IsInstanceValid(slots))
+		{
+			return slots;
+		}
+		return null;
+	}
+
+	/// <summary>Takes the prepared background if there is a live one, otherwise null.</summary>
+	private static NCombatBackground? TakePreparedBackground()
+	{
+		NCombatBackground? background = _preparedBackground;
+		_preparedBackground = null;
+		if (background != null && GodotObject.IsInstanceValid(background))
+		{
+			return background;
+		}
+		return null;
+	}
+
+	/// <summary>Frees a node that may never have entered the tree, where <c>QueueFree</c> has nothing to hook.</summary>
+	private static void DiscardNode(Node node)
+	{
+		if (node.IsInsideTree())
+		{
+			node.QueueFree();
+		}
+		else
+		{
+			node.Free();
+		}
+	}
+
+	/// <summary>
 	/// Create a new combat room node.
 	/// </summary>
 	/// <param name="visuals">Data used to determine what visuals should appear in the combat room.</param>
@@ -333,9 +551,18 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	{
 		if (TestMode.IsOn)
 		{
+			DiscardPreparedRoom();
 			return null;
 		}
-		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene("res://scenes/rooms/combat_room.tscn").Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
+		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom) && _preparedRoomMode == mode && ReferenceEquals(_preparedRoomVisuals, visuals))
+		{
+			NCombatRoom prepared = _preparedRoom;
+			_preparedRoom = null;
+			_preparedRoomVisuals = null;
+			return prepared;
+		}
+		DiscardPreparedRoom();
+		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
 		nCombatRoom._visuals = visuals;
 		nCombatRoom.Mode = mode;
 		return nCombatRoom;
@@ -343,6 +570,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public override void _Ready()
 	{
+		Perf.Phase("combat.room-ready");
 		Ui = GetNode<NCombatUi>("%CombatUi");
 		Ui.Deactivate();
 		SceneContainer = GetNode<Control>("%CombatSceneContainer");
@@ -364,9 +592,11 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		BgContainer = GetNode<Control>("%BgContainer");
 		CreatedMsec = Time.GetTicksMsec();
 		Log.Info($"Creating NCombatRoom with mode={Mode} encounter={_visuals.Encounter.Id.Entry}.");
+		Perf.Phase("combat.allies");
 		CreateAllyNodes();
 		if (Mode != CombatRoomMode.FinishedCombat)
 		{
+			Perf.Phase("combat.enemies");
 			CreateEnemyNodes();
 		}
 		if (Mode != CombatRoomMode.ActiveCombat)
@@ -384,6 +614,8 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_window.Connect(Viewport.SignalName.SizeChanged, Callable.From(AdjustCreatureScaleForAspectRatio));
 		AdjustCreatureScaleForAspectRatio();
 		NGame.Instance.SetScreenShakeTarget(SceneContainer);
+		ClearPreparedCreatureNodes();
+		Perf.Phase("combat.room-ready.done");
 	}
 
 	public static Rng GenerateBackgroundRngForCurrentPoint(IRunState state)
@@ -423,12 +655,15 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	private void OnCombatSetUp(CombatState state)
 	{
+		Perf.Phase("combat.ui-activate");
 		Ui.Activate(((CombatRoom)_visuals).CombatState);
 		_proceedButton.Initialize(state.RunState);
 		if (Background == null)
 		{
+			Perf.Phase("combat.background");
 			SetUpBackground(state.RunState);
 		}
+		Perf.Phase("combat.ui-activate.done");
 	}
 
 	/// <summary>
@@ -442,7 +677,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			Log.Warn("Tried to set up background twice!");
 		}
-		Background = _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
+		Background = TakePreparedBackground() ?? _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
 		BgContainer.AddChildSafely(Background);
 	}
 
@@ -480,7 +715,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	{
 		if (_visuals.Encounter.HasScene)
 		{
-			EncounterSlots = _visuals.Encounter.CreateScene();
+			EncounterSlots = TakePreparedEncounterSlots() ?? _visuals.Encounter.CreateScene();
 		}
 		if (EncounterSlots != null)
 		{
@@ -730,7 +965,16 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public void AddCreature(Creature creature)
 	{
-		NCreature nCreature = NCreature.Create(creature);
+		Perf.Phase("combat.creature-node");
+		NCreature nCreature;
+		if (_preparedCreatureNodes.Remove(creature, out NCreature? prepared) && GodotObject.IsInstanceValid(prepared))
+		{
+			nCreature = prepared;
+		}
+		else
+		{
+			nCreature = NCreature.Create(creature);
+		}
 		_creatureNodes.Add(nCreature);
 		if (creature.IsPlayer || creature.PetOwner != null)
 		{

@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Intents;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
@@ -85,6 +88,7 @@ public static class PreloadManager
 			List<CharacterModel> list = characters.ToList();
 			bool isMultiplayer = RunManager.Instance.NetService.Type.IsMultiplayer();
 			EnsureAtlasesLoaded();
+			EnsureRunAtlasesLoaded();
 			AssetSets.RunSet = new HashSet<string>(GetRunAssetPaths(list, isMultiplayer));
 			await (await LoadAssetSets("characters=" + string.Join(',', list.Select((CharacterModel c) => c.Id.Entry)), AssetSets.CommonAssets, AssetSets.RunSet)).WaitForCompletion();
 			GC.Collect();
@@ -161,7 +165,7 @@ public static class PreloadManager
 		}
 		HashSet<string> hashSet2 = hashSet;
 		await (await LoadAssetSets(roomName, AssetSets.CommonAssets, AssetSets.RunSet, AssetSets.Act, hashSet2)).WaitForCompletion();
-		GC.Collect();
+		CollectIfHeapGrew(roomName);
 	}
 
 	/// <summary>
@@ -205,6 +209,62 @@ public static class PreloadManager
 		}
 	}
 
+	/// <summary>
+	/// Desktop defers the run-only atlases, so the first run scene pulls them in here. On mobile
+	/// <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadAllAtlases" /> already loaded them, and this is
+	/// a dictionary lookup per name.
+	/// </summary>
+	private static void EnsureRunAtlasesLoaded()
+	{
+		if (TestMode.IsOn)
+		{
+			return;
+		}
+		long runAtlasStart = Perf.ElapsedMs;
+		AtlasManager.LoadRunAtlases();
+		if (Perf.Enabled)
+		{
+			Log.Info($"[Perf] run atlases: {Perf.ElapsedMs - runAtlasStart}ms", 3);
+		}
+	}
+
+	private const long _gcGrowthThresholdBytes = 8L * 1024L * 1024L;
+
+	private static long _heapAtLastCollect;
+
+	/// <summary>
+	/// Collects only when the managed heap has grown enough to be worth the pause. The room
+	/// transition used to pay a full blocking GC every time, which on a phone is a visible
+	/// hitch in the frame that swaps the map for the room.
+	/// </summary>
+	private static void CollectIfHeapGrew(string roomName)
+	{
+		long totalMemory = GC.GetTotalMemory(forceFullCollection: false);
+		long num = totalMemory - _heapAtLastCollect;
+		if (num < _gcGrowthThresholdBytes)
+		{
+			if (Perf.Enabled)
+			{
+				Log.Info($"[Perf] room gc after '{roomName}': skipped, heap grew {num / 1024}KB", 3);
+			}
+			return;
+		}
+		long collectStart = Perf.ElapsedMs;
+		if (Godot.OS.HasFeature("mobile"))
+		{
+			GC.Collect(2, GCCollectionMode.Forced, blocking: false);
+		}
+		else
+		{
+			GC.Collect();
+		}
+		_heapAtLastCollect = GC.GetTotalMemory(forceFullCollection: false);
+		if (Perf.Enabled)
+		{
+			Log.Info($"[Perf] room gc after '{roomName}': {Perf.ElapsedMs - collectStart}ms, heap was {totalMemory / 1048576}MB", 3);
+		}
+	}
+
 	private static AssetLoadingSession LoadAssets(IEnumerable<string> assetPaths, string name)
 	{
 		AssetLoadingSession assetLoadingSession = Cache.CreateSession(name, assetPaths);
@@ -221,7 +281,7 @@ public static class PreloadManager
 		{
 			source2 = source2.Where((CardModel card) => card.MultiplayerConstraint != CardMultiplayerConstraint.MultiplayerOnly);
 		}
-		return new IEnumerable<string>[10]
+		return new IEnumerable<string>[11]
 		{
 			source2.SelectMany((CardModel card) => card.RunAssetPaths),
 			source.SelectMany((CharacterModel c) => c.CardPool.AllCards.SelectMany((CardModel card) => card.RunAssetPaths)),
@@ -235,7 +295,8 @@ public static class PreloadManager
 				select e.IconPath into p
 				where p != EnchantmentModel.MissingIconPath
 				select p,
-			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath)
+			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath),
+			IntentAnimData.AssetPaths
 		}.SelectMany((IEnumerable<string> s) => s);
 	}
 

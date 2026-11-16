@@ -1011,6 +1011,12 @@ public static class ModManager
 				}
 			}
 		}
+		// Content baked into the build ships its localization inside its own pack instead of as
+		// loose files, so those tables never show up in the scan above.
+		foreach (string bakedLocTable in BakedContent.GetLocTables(language, file))
+		{
+			yield return bakedLocTable;
+		}
 	}
 
 	/// <summary>

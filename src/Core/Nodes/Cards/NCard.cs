@@ -18,6 +18,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Helpers.Models;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Pooling;
@@ -1252,6 +1253,52 @@ public class NCard : Control, IPoolable
 		ReloadOverlay();
 	}
 
+	private bool _portraitDefaultsCaptured;
+
+	private TextureRect.StretchModeEnum _portraitDefaultStretchMode;
+
+	private CanvasItem.TextureFilterEnum _portraitDefaultTextureFilter;
+
+	private CanvasItem.TextureFilterEnum _ancientPortraitDefaultTextureFilter;
+
+	/// <summary>
+	/// The baked-in art reworks ship full-size portraits instead of atlas sprites, so the slot has to
+	/// fit them rather than show them 1:1, and they read better with mipmaps. Cards without a
+	/// replacement keep whatever the scene set up.
+	/// </summary>
+	private void ApplyPortraitPresentation()
+	{
+		if (!_portraitDefaultsCaptured)
+		{
+			_portraitDefaultsCaptured = true;
+			_portraitDefaultStretchMode = _portrait.StretchMode;
+			_portraitDefaultTextureFilter = _portrait.TextureFilter;
+			_ancientPortraitDefaultTextureFilter = _ancientPortrait.TextureFilter;
+		}
+		bool flag = RegentCardArt.HasReplacement(Model.GetType());
+		TextureRect.StretchModeEnum stretchMode = (flag ? ReplacementStretchMode() : _portraitDefaultStretchMode);
+		_portrait.StretchMode = stretchMode;
+		_portrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _portraitDefaultTextureFilter);
+		_ancientPortrait.StretchMode = stretchMode;
+		_ancientPortrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _ancientPortraitDefaultTextureFilter);
+	}
+
+	/// <summary>
+	/// The reworked portraits are whole illustrations, not atlas sprites trimmed to the slot, so the
+	/// wide ones (1000x760 and friends) fill it exactly and the full-card ones are taller than it. A
+	/// tall illustration gets letterboxed: cover-cropping it would cut away roughly half the height,
+	/// which on a full-card illustration is the face.
+	/// </summary>
+	private TextureRect.StretchModeEnum ReplacementStretchMode()
+	{
+		Texture2D portrait = Model.Portrait;
+		if (portrait != null && portrait.GetHeight() > portrait.GetWidth())
+		{
+			return TextureRect.StretchModeEnum.KeepAspectCentered;
+		}
+		return TextureRect.StretchModeEnum.KeepAspectCovered;
+	}
+
 	private void UpdatePortrait()
 	{
 		if (Model != null)
@@ -1274,6 +1321,7 @@ public class NCard : Control, IPoolable
 				_banner.Material = null;
 			}
 			UpdatePortraitBlurParams();
+			ApplyPortraitPresentation();
 		}
 	}
 
