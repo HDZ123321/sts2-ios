@@ -362,8 +362,9 @@ public sealed class TheArchitect : EventModel
 	{
 		if (LocalContext.IsMe(base.Owner))
 		{
-			await AnimPlayerAttackIfNecessary(Dialogue.EndAttackers);
-			await AnimArchitectAttackIfNecessary(Dialogue.EndAttackers);
+			ArchitectAttackers endAttackers = Dialogue?.EndAttackers ?? ArchitectAttackers.None;
+			await AnimPlayerAttackIfNecessary(endAttackers);
+			await AnimArchitectAttackIfNecessary(endAttackers);
 			await RunManager.Instance.WinRun();
 		}
 		SetEventState(_emptyLocString, Array.Empty<EventOption>());

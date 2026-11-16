@@ -74,7 +74,10 @@ public class ArtConsoleCmd : AbstractConsoleCmd
 				foreach (string allPortraitPath in allCard.AllPortraitPaths)
 				{
 					var (text5, spriteName3) = AtlasResourceLoader.ParsePath(allPortraitPath);
-					if (text5 == null || !AtlasManager.HasSprite(text5, spriteName3))
+					// A portrait can also be a standalone texture rather than an atlas sprite: the
+					// baked art reworks ship full images. Those count as present when the file resolves.
+					bool flag = (text5 != null) ? AtlasManager.HasSprite(text5, spriteName3) : Godot.ResourceLoader.Exists(allPortraitPath);
+					if (!flag)
 					{
 						list.Add(new MissingArt(allCard, allCard.PortraitPath, allCard.Description.GetRawText()));
 					}

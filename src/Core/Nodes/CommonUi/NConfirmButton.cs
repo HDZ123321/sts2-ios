@@ -219,7 +219,7 @@ public class NConfirmButton : NButton
 
 	private void OnWindowChange()
 	{
-		_showPos = NGame.Instance.Size - _posOffset;
+		_showPos = NGame.Instance.SafeAreaEnd - _posOffset;
 		_hidePos = _showPos + _hideOffset;
 		base.Position = (_isEnabled ? _showPos : _hidePos);
 	}

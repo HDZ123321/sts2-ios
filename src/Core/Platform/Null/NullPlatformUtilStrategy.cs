@@ -82,10 +82,72 @@ public class NullPlatformUtilStrategy : IPlatformUtilStrategy
 
 	public void OpenVirtualKeyboard()
 	{
+		if (!DisplayServer.HasFeature(DisplayServer.Feature.VirtualKeyboard))
+		{
+			return;
+		}
+		Control? focused = (Engine.GetMainLoop() as SceneTree)?.Root?.GuiGetFocusOwner();
+		if (focused is LineEdit lineEdit)
+		{
+			DisplayServer.VirtualKeyboardShow(lineEdit.Text, lineEdit.GetGlobalRect(), ToDisplayServerKeyboardType(lineEdit.VirtualKeyboardType), lineEdit.MaxLength, lineEdit.CaretColumn);
+		}
+		else if (focused is TextEdit textEdit)
+		{
+			DisplayServer.VirtualKeyboardShow(textEdit.Text, textEdit.GetGlobalRect(), DisplayServer.VirtualKeyboardType.Multiline, -1, GetTextEditCaretOffset(textEdit), GetTextEditCaretEnd(textEdit));
+		}
+		else
+		{
+			Log.Warn($"OpenVirtualKeyboard called with no text control focused ({focused?.GetType().Name ?? "null"}).");
+		}
 	}
 
 	public void CloseVirtualKeyboard()
 	{
+		if (DisplayServer.HasFeature(DisplayServer.Feature.VirtualKeyboard))
+		{
+			DisplayServer.VirtualKeyboardHide();
+		}
+	}
+
+	private static DisplayServer.VirtualKeyboardType ToDisplayServerKeyboardType(LineEdit.VirtualKeyboardTypeEnum type)
+	{
+		return type switch
+		{
+			LineEdit.VirtualKeyboardTypeEnum.Number => DisplayServer.VirtualKeyboardType.Number,
+			LineEdit.VirtualKeyboardTypeEnum.NumberDecimal => DisplayServer.VirtualKeyboardType.NumberDecimal,
+			LineEdit.VirtualKeyboardTypeEnum.Phone => DisplayServer.VirtualKeyboardType.Phone,
+			LineEdit.VirtualKeyboardTypeEnum.EmailAddress => DisplayServer.VirtualKeyboardType.EmailAddress,
+			LineEdit.VirtualKeyboardTypeEnum.Password => DisplayServer.VirtualKeyboardType.Password,
+			LineEdit.VirtualKeyboardTypeEnum.Url => DisplayServer.VirtualKeyboardType.Url,
+			LineEdit.VirtualKeyboardTypeEnum.Multiline => DisplayServer.VirtualKeyboardType.Multiline,
+			_ => DisplayServer.VirtualKeyboardType.Default,
+		};
+	}
+
+	private static int GetTextEditCaretOffset(TextEdit textEdit)
+	{
+		int caretLine = textEdit.GetCaretLine();
+		int offset = 0;
+		for (int i = 0; i < caretLine; i++)
+		{
+			offset += textEdit.GetLine(i).Length + 1;
+		}
+		return offset + textEdit.GetCaretColumn();
+	}
+
+	private static int GetTextEditCaretEnd(TextEdit textEdit)
+	{
+		if (!textEdit.HasSelection())
+		{
+			return -1;
+		}
+		int line = textEdit.GetSelectionToLine();
+		int offset = 0;
+		for (int i = 0; i < line; i++)
+		{
+			offset += textEdit.GetLine(i).Length + 1;
+		}
+		return offset + textEdit.GetSelectionToColumn();
 	}
 
 	public void SetRichPresence(string token, string? playerGroup, int? groupSize)
@@ -145,6 +207,10 @@ public class NullPlatformUtilStrategy : IPlatformUtilStrategy
 
 	public SupportedWindowMode GetSupportedWindowMode()
 	{
+		if (OS.HasFeature("mobile"))
+		{
+			return SupportedWindowMode.FullscreenOnly;
+		}
 		return SupportedWindowMode.Any;
 	}
 }

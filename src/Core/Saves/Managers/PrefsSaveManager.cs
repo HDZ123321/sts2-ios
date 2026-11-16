@@ -1,4 +1,5 @@
 using Godot;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Saves.Migrations;
 
 namespace MegaCrit.Sts2.Core.Saves.Managers;
@@ -46,6 +47,7 @@ public class PrefsSaveManager
 		if (!readSaveResult.Success || readSaveResult.SaveData == null)
 		{
 			Prefs = _migrationManager.CreateNewSave<PrefsSave>();
+			ApplyPlatformDefaults(Prefs);
 			SavePrefs();
 		}
 		else
@@ -54,5 +56,18 @@ public class PrefsSaveManager
 		}
 		IsLoaded = true;
 		return readSaveResult;
+	}
+
+	/// <summary>
+	/// A fresh prefs file is written with desktop defaults. On a touch-only device long press has
+	/// to start on, otherwise there is no way to right-click until the player finds the toggle.
+	/// Only applied to new saves: an existing file already records the player's own choice.
+	/// </summary>
+	private static void ApplyPlatformDefaults(PrefsSave prefs)
+	{
+		if (MobileDevice.IsTouchOnly)
+		{
+			prefs.IsLongPressEnabled = true;
+		}
 	}
 }

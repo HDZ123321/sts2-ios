@@ -82,6 +82,11 @@ public static class SentryService
 	/// </summary>
 	public static void Initialize()
 	{
+		if (OS.HasFeature("mobile"))
+		{
+			Log.Info("[Sentry.NET] Disabled on mobile: native sentry library is not shipped in this build");
+			return;
+		}
 		bool flag = OS.HasFeature("editor");
 		_isHeadless = DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase);
 		bool isForcedOn = CommandLineHelper.HasArg("force-sentry");
@@ -106,40 +111,56 @@ public static class SentryService
 		ReleaseInfo releaseInfo = ReleaseInfoManager.Instance.ReleaseInfo;
 		string environment = "unknown";
 		string release = releaseInfo?.Version ?? "dev";
-		Sentry.Godot.SentrySdk.Init(delegate(SentryGodotOptions options)
+		try
 		{
-			options.Dsn = dsn;
-			options.Environment = environment;
-			options.Release = release;
-			options.Debug = isForcedOn;
-			options.AutoSessionTracking = false;
-			options.IsGlobalModeEnabled = true;
-			options.SendDefaultPii = false;
-			options.SetBeforeSend((SentryEvent sentryEvent, SentryHint hint) => FilterEvent(sentryEvent));
-			options.Native.SetBeforeSend(FilterNativeEvent);
-		});
+			Sentry.Godot.SentrySdk.Init(delegate(SentryGodotOptions options)
+			{
+				options.Dsn = dsn;
+				options.Environment = environment;
+				options.Release = release;
+				options.Debug = isForcedOn;
+				options.AutoSessionTracking = false;
+				options.IsGlobalModeEnabled = true;
+				options.SendDefaultPii = false;
+				options.SetBeforeSend((SentryEvent sentryEvent, SentryHint hint) => FilterEvent(sentryEvent));
+				options.Native.SetBeforeSend(FilterNativeEvent);
+			});
+		}
+		catch (Exception ex)
+		{
+			IsEnabled = false;
+			Log.Warn("[Sentry.NET] Disabled: native SDK unavailable (" + ex.GetType().Name + ": " + ex.Message + ")");
+			return;
+		}
 		IsEnabled = Sentry.Godot.SentrySdk.IsEnabled;
 		if (!IsEnabled)
 		{
 			Log.Warn("[Sentry.NET] SDK initialization failed");
 			return;
 		}
-		Sentry.Godot.SentrySdk.ConfigureScope(delegate(Scope scope)
+		try
 		{
-			scope.SetTag("sdk", "dotnet");
-			scope.SetTag("session_id", _sessionId);
-			scope.SetTag("os", OS.GetName());
-			scope.SetTag("godot_version", Engine.GetVersionInfo()["string"].AsString());
-			scope.SetTag("assembly.main_hash", AssemblyHasher.GetMainAssemblyHash().ToString());
-			if (releaseInfo != null)
+			Sentry.Godot.SentrySdk.ConfigureScope(delegate(Scope scope)
 			{
-				scope.SetTag("branch", releaseInfo.Branch);
-				scope.SetExtra("build.commit", releaseInfo.Commit);
-				scope.SetExtra("build.main_hash", releaseInfo.MainAssemblyHash);
-				scope.SetExtra("build.date", releaseInfo.Date.ToString("o"));
-			}
-			AddAutoslayTags(scope);
-		});
+				scope.SetTag("sdk", "dotnet");
+				scope.SetTag("session_id", _sessionId);
+				scope.SetTag("os", OS.GetName());
+				scope.SetTag("godot_version", Engine.GetVersionInfo()["string"].AsString());
+				scope.SetTag("assembly.main_hash", AssemblyHasher.GetMainAssemblyHash().ToString());
+				if (releaseInfo != null)
+				{
+					scope.SetTag("branch", releaseInfo.Branch);
+					scope.SetExtra("build.commit", releaseInfo.Commit);
+					scope.SetExtra("build.main_hash", releaseInfo.MainAssemblyHash);
+					scope.SetExtra("build.date", releaseInfo.Date.ToString("o"));
+				}
+				AddAutoslayTags(scope);
+			});
+		}
+		catch (Exception ex2)
+		{
+			Log.Warn("[Sentry.NET] Scope configuration failed: " + ex2.Message);
+		}
 		Log.LogCallback += OnLogCallback;
 		Log.Info("[Sentry.NET] Initialized: env=" + environment + ", release=" + release);
 	}

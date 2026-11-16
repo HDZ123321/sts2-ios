@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Settings;
 
 namespace MegaCrit.Sts2.Core.Saves;
@@ -39,7 +40,13 @@ public class PrefsSave : ISaveSchema
 	public bool MuteInBackground { get; set; } = true;
 
 	[JsonPropertyName("long_press")]
-	public bool IsLongPressEnabled { get; set; }
+	public bool IsLongPressEnabled { get; set; } = DefaultIsLongPressEnabled;
+
+	/// <summary>
+	/// Long press is the only way to get a right-click on a touch-only device, so it has to be
+	/// on by default there. Desktop keeps it off so a held mouse button stays a held mouse button.
+	/// </summary>
+	public static bool DefaultIsLongPressEnabled => MobileDevice.IsTouchOnly;
 
 	[JsonPropertyName("text_effects_enabled")]
 	public bool TextEffectsEnabled { get; set; } = true;
