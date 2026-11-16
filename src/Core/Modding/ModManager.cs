@@ -27,6 +27,12 @@ public static class ModManager
 
 	private static bool _allowInitForTests;
 
+	/// <summary>
+	/// True when this boot ran with mods suppressed, i.e. the previous boots never reached the
+	/// main menu. A suppressed boot is the recovery boot: it has to make the recovery stick.
+	/// </summary>
+	private static bool _suppressedThisBoot;
+
 	private static List<Mod> _mods = new List<Mod>();
 
 	private static Callback<ItemInstalled_t>? _steamItemInstalledCallback;
@@ -86,6 +92,28 @@ public static class ModManager
 			State = ModManagerState.Skipped;
 			return;
 		}
+		if (IsModSuppressionRequested(out int incompleteBoots, out bool manual))
+		{
+			if (manual)
+			{
+				Log.Warn("[Mods] mods are suppressed because " + SafeModeMarkerPath + " exists (" + ResolveModDirectory(SafeModeMarkerPath) + ")");
+				Log.Warn("[Mods] that file was written by hand, so the game leaves it alone; delete it to load mods again");
+				State = ModManagerState.Skipped;
+				return;
+			}
+			if (incompleteBoots <= IncompleteBootTolerance)
+			{
+				Log.Warn($"[Mods] the previous boot started with mods and never reached the main menu ({incompleteBoots} of {IncompleteBootTolerance} allowed). Loading mods normally this time; one more failure at startup will suppress them");
+			}
+			else
+			{
+				_suppressedThisBoot = true;
+				Log.Warn($"[Mods] mods are suppressed because the last {incompleteBoots} boots with mods never reached the main menu");
+				Log.Warn("[Mods] start the game once with mods off to switch them off in the save, then re-enable them one at a time");
+				State = ModManagerState.Skipped;
+				return;
+			}
+		}
 		if (TestMode.IsOn && !_allowInitForTests)
 		{
 			State = ModManagerState.Skipped;
@@ -93,14 +121,19 @@ public static class ModManager
 		}
 		_allowInitForTests = false;
 		AppDomain.CurrentDomain.AssemblyResolve += HandleAssemblyResolveFailure;
-		string executablePath = OS.GetExecutablePath();
-		string directoryName = Path.GetDirectoryName(executablePath);
-		string path = Path.Combine(directoryName, "mods");
-		string path2 = Path.Combine(directoryName, "mods_STEAMTEST");
-		if (fileIo.DirectoryExists(path))
+		EnsureUserModDirectory();
+		foreach (string path3 in GetModDirectories())
 		{
-			ReadModsInDirRecursive(path, ModSource.ModsDirectory, null);
+			string resolved = ResolveModDirectory(path3);
+			if (!fileIo.DirectoryExists(path3))
+			{
+				Log.Info($"[Mods] no mod directory at {path3} ({resolved})");
+				continue;
+			}
+			Log.Info($"[Mods] scanning {path3} ({resolved})");
+			ReadModsInDirRecursive(path3, ModSource.ModsDirectory, null);
 		}
+		string path2 = Path.Combine(Path.GetDirectoryName(OS.GetExecutablePath()) ?? ".", "mods_STEAMTEST");
 		if (fileIo.DirectoryExists(path2))
 		{
 			ReadModsInDirRecursive(path2, ModSource.SteamWorkshop, null);
@@ -121,6 +154,7 @@ public static class ModManager
 		await CheckSteamBranchSupport();
 		RemoveDisabledMods();
 		SortModList(_settings?.ModList ?? new List<SettingsSaveMod>());
+		ArmStartupWatchdog();
 		foreach (Mod mod2 in _mods)
 		{
 			TryLoadMod(mod2);
@@ -167,6 +201,7 @@ public static class ModManager
 			throw new NotImplementedException("Tried to reset ModManager outside of tests! This is not allowed, as we cannot unload DLLs or PCKs");
 		}
 		_mods.Clear();
+		_suppressedThisBoot = false;
 		State = ModManagerState.None;
 		_settings = null;
 		_fileIo = null;
@@ -1179,4 +1214,280 @@ public static class ModManager
 			}
 		}
 	}
+	/// <summary>
+	/// The directories mods are read from, most trusted first.
+	///
+	/// On desktop this stays the historical layout - a <c>mods</c> folder next to the executable -
+	/// followed by the same folder under <c>user://</c> so a mod can be dropped in without write
+	/// access to the install directory.
+	///
+	/// On mobile the executable lives inside the read-only app bundle, so <c>user://mods</c> is the
+	/// only usable location. It resolves to the app's Documents directory there, which the file
+	/// sharing entitlement exposes to the Files app.
+	/// </summary>
+	public static IReadOnlyList<string> GetModDirectories()
+	{
+		List<string> list = new List<string>();
+		if (OS.HasFeature("mobile"))
+		{
+			list.Add(UserModDirectory);
+			return list;
+		}
+		string? installDir = Path.GetDirectoryName(OS.GetExecutablePath());
+		if (!string.IsNullOrEmpty(installDir))
+		{
+			list.Add(Path.Combine(installDir, "mods"));
+		}
+		list.Add(UserModDirectory);
+		return list;
+	}
+
+	/// <summary>
+	/// Turns a mod directory setting into an absolute path a person can act on.
+	///
+	/// The mod list is scanned with <c>user://</c> paths because that is what Godot's file API takes,
+	/// but nobody can paste <c>user://mods</c> into a file browser, so anything that shows a
+	/// directory to the player goes through here first.
+	/// </summary>
+	public static string ResolveModDirectory(string path)
+	{
+		return ProjectSettings.GlobalizePath(path);
+	}
+
+	/// <summary>
+	/// Absolute path of the first mod directory that exists, or the preferred path when none does.
+	/// Used by the modding UI to show the player where to drop files.
+	/// </summary>
+	public static string GetPrimaryModDirectory()
+	{
+		foreach (string dir in GetModDirectories())
+		{
+			if (_fileIo != null && _fileIo.DirectoryExists(dir))
+			{
+				return ProjectSettings.GlobalizePath(dir);
+			}
+		}
+		IReadOnlyList<string> all = GetModDirectories();
+		return ProjectSettings.GlobalizePath(all[0]);
+	}
+
+	/// <summary>
+	/// How many consecutive boots may start with mods and never reach the main menu before the
+	/// game stops loading them. One is deliberate: a player who force-quits during the loading
+	/// screen, or whose device kills the app there, would otherwise lose every mod to a single
+	/// accident.
+	/// </summary>
+	public const int IncompleteBootTolerance = 1;
+
+	/// <summary>
+	/// Reports whether mods must be suppressed this boot, and why.
+	///
+	/// <c>--nomods</c> cannot serve this on mobile: neither iOS nor Android hands a launch argument
+	/// to a shipped app. A marker file is the equivalent that works everywhere.
+	///
+	/// The file holds a count of boots that started with mods and never reached the main menu,
+	/// written as <c>watchdog N</c>, or <c>manual</c> when the player created it themselves. The
+	/// two cases are kept apart on purpose: a watchdog file is the game's own bookkeeping and the
+	/// resolver deletes it, while a hand-written one is a request the game must not silently
+	/// discard.
+	/// </summary>
+	public static bool IsModSuppressionRequested(out int incompleteBoots, out bool manual)
+	{
+		incompleteBoots = 0;
+		manual = false;
+		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return false;
+		}
+		string text = ReadSafeModeMarker();
+		if (text.StartsWith("watchdog ", StringComparison.Ordinal) && int.TryParse(text.Substring("watchdog ".Length).Trim(), out int value))
+		{
+			incompleteBoots = Math.Max(value, 1);
+			return true;
+		}
+		manual = true;
+		return true;
+	}
+
+	/// <summary>Path of the safe-mode marker file.</summary>
+	public static string SafeModeMarkerPath => "user://nomods";
+
+	/// <summary>Arms safe mode by hand, for a player who already knows a mod is breaking the boot.</summary>
+	public static void RequestSafeMode()
+	{
+		WriteSafeModeMarker("manual");
+	}
+
+	private static string ReadSafeModeMarker()
+	{
+		using Godot.FileAccess file = Godot.FileAccess.Open(SafeModeMarkerPath, Godot.FileAccess.ModeFlags.Read);
+		if (file == null)
+		{
+			return string.Empty;
+		}
+		return file.GetAsText();
+	}
+
+	private static void WriteSafeModeMarker(string reason)
+	{
+		using Godot.FileAccess file = Godot.FileAccess.Open(SafeModeMarkerPath, Godot.FileAccess.ModeFlags.Write);
+		if (file == null)
+		{
+			Log.Error("[Mods] could not create the safe-mode marker at " + SafeModeMarkerPath);
+			return;
+		}
+		file.StoreString(reason);
+	}
+
+	/// <summary>
+	/// Records that this boot is about to start with mods loaded, incrementing the run of boots
+	/// that did so and never reported reaching the main menu.
+	///
+	/// The count has to be written before the mods load, not after: a mod script runs before the
+	/// main menu, so the crash this protects against happens after this point and before any
+	/// chance to report it. <see cref="ResolveStartupWatchdog"/> puts the count back to zero.
+	/// </summary>
+	private static void ArmStartupWatchdog()
+	{
+		if (_mods.Count == 0)
+		{
+			return;
+		}
+		int num = ReadIncompleteBootCount() + 1;
+		WriteSafeModeMarker("watchdog " + num);
+		Log.Info($"[Mods] startup watchdog armed ({_mods.Count} manifest(s), incomplete boot {num} of {IncompleteBootTolerance} allowed); it is released once the main menu is up");
+	}
+
+	private static int ReadIncompleteBootCount()
+	{
+		string text = ReadSafeModeMarker();
+		if (text.StartsWith("watchdog ", StringComparison.Ordinal) && int.TryParse(text.Substring("watchdog ".Length).Trim(), out int value))
+		{
+			return Math.Max(value, 0);
+		}
+		return 0;
+	}
+
+	/// <summary>
+	/// Settles the watchdog once a boot reached the main menu.
+	///
+	/// Three cases, and they must not be conflated. A boot that ran with mods suppressed is the
+	/// recovery boot, so it is the one that has to make the recovery stick: every mod is switched
+	/// off in the save and the counter is cleared, otherwise the next launch either re-suppresses
+	/// forever or walks straight back into the same crash. A boot that loaded mods and got here has
+	/// disproved the suspicion, so the counter is cleared. A marker the player wrote by hand is
+	/// neither: it is an instruction, and deleting it would undo the only escape hatch they have.
+	/// </summary>
+	public static void ResolveStartupWatchdog()
+	{
+		if (_suppressedThisBoot)
+		{
+			QuarantineModsAfterSuppressedBoot();
+			ClearSafeModeMarker();
+			_suppressedThisBoot = false;
+			return;
+		}
+		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return;
+		}
+		if (ReadIncompleteBootCount() == 0)
+		{
+			return;
+		}
+		ClearSafeModeMarker();
+		Log.Info("[Mods] startup watchdog disarmed; mods loaded without taking the boot down");
+	}
+
+	/// <summary>
+	/// Turns every mod off after a boot that had to suppress them, so the next launch cannot
+	/// repeat the crash. The player re-enables mods one at a time from the modding screen to find
+	/// the offender.
+	/// </summary>
+	private static void QuarantineModsAfterSuppressedBoot()
+	{
+		List<SettingsSaveMod> list = _settings?.ModList;
+		if (list == null || list.Count == 0)
+		{
+			Log.Warn("[Mods] startup failed with mods last boot, but no mod was recorded in the save");
+			return;
+		}
+		int num = 0;
+		foreach (SettingsSaveMod item in list)
+		{
+			if (item.IsEnabled)
+			{
+				item.IsEnabled = false;
+				num++;
+			}
+		}
+		if (num == 0)
+		{
+			Log.Warn("[Mods] startup failed with mods last boot, but every mod was already switched off");
+			return;
+		}
+		SaveManager.Instance.SaveSettings();
+		Log.Warn($"[Mods] startup failed with mods last boot; switched off {num} mod(s). Re-enable them from Settings > Modding");
+	}
+
+	/// <summary>Deletes the marker after a boot that got far enough to prove mods are not fatal.</summary>
+	public static void ClearSafeModeMarker()
+	{
+		if (!Godot.FileAccess.FileExists(SafeModeMarkerPath))
+		{
+			return;
+		}
+		DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(SafeModeMarkerPath));
+	}
+
+	/// <summary>
+	/// Creates <c>user://mods</c> if it is missing, so the folder is always there to drop files
+	/// into.
+	///
+	/// On iOS the app bundle is read-only and <c>user://</c> resolves to the app's Documents
+	/// directory, which <c>UIFileSharingEnabled</c> already exposes in the Files app. Creating it
+	/// at boot means a player never has to guess the path before installing their first mod.
+	/// </summary>
+	public static void EnsureUserModDirectory()
+	{
+		if (DirAccess.DirExistsAbsolute(UserModDirectory))
+		{
+			return;
+		}
+		Error error = DirAccess.MakeDirRecursiveAbsolute(UserModDirectory);
+		if (error != Error.Ok)
+		{
+			Log.Error($"[Mods] could not create {UserModDirectory}: {error}");
+			return;
+		}
+		Log.Info($"[Mods] created {UserModDirectory} ({ResolveModDirectory(UserModDirectory)})");
+		WriteModReadme();
+	}
+
+	/// <summary>
+	/// Drops a short readme next to the folder the player is expected to copy mods into.
+	///
+	/// On iOS this folder is reachable from the system Files app, so the instructions need to be
+	/// where the files are rather than in a wiki the player has to find first.
+	/// </summary>
+	private static void WriteModReadme()
+	{
+		string[] lines = new string[9]
+		{
+			"Slay the Spire 2 - GDScript mods",
+			string.Empty,
+			"Put each mod in its own folder here:",
+			"  <id>/<id>.json   the manifest",
+			"  <id>/<id>.pck    the packed scripts",
+			string.Empty,
+			"Build one with tools/gdmod/make_gd_mod.py, copy the generated",
+			"folder into this directory, then restart the game.",
+			string.Empty
+		};
+		using Godot.FileAccess file = Godot.FileAccess.Open(UserModDirectory + "/README.txt", Godot.FileAccess.ModeFlags.Write);
+		file?.StoreString(string.Join(System.Environment.NewLine, lines));
+	}
+
+	/// <summary>The per-user mod directory. Always writable, on every platform.</summary>
+	public static string UserModDirectory => "user://mods";
 }

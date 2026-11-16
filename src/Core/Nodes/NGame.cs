@@ -23,6 +23,7 @@ using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.Fonts;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Modding.Gd;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -582,6 +583,14 @@ public class NGame : Control
 			return;
 		}
 		Instance = this;
+		try
+		{
+			MegaCrit.Sts2.Core.Audio.AudioExtensionProbe.RunOnce();
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("AudioExtensionProbe failed: " + ex.Message);
+		}
 		RootSceneContainer = GetNode<NSceneContainer>("%RootSceneContainer");
 		HoverTipsContainer = GetNode<Node>("%HoverTipsContainer");
 		DebugAudio = GetNode<NDebugAudioManager>("%DebugAudioManager");
@@ -756,21 +765,27 @@ public class NGame : Control
 	/// </summary>
 	private async Task GameStartup()
 	{
+		Log.Info($"[Startup] cmdline='{string.Join(" ", OS.GetCmdlineArgs())}' perf={Perf.Enabled} release={IsReleaseGame()}");
 		await OneTimeInitialization.ExecuteVeryEarly();
+		Perf.Mark("very early");
 		Node child = NDevConsole.Create();
 		this.AddChildSafely(child);
 		this.MoveChildSafely(child, GetChildCount() - 1);
+		GdModHost.Install(this);
 		AccountScopeUserDataMigrator.MigrateToUserScopedDirectories();
 		AccountScopeUserDataMigrator.ArchiveLegacyData();
 		ProfileAccountScopeMigrator.MigrateToProfileScopedDirectories();
 		ProfileAccountScopeMigrator.ArchiveLegacyData();
 		Task cloudSavesTask = DoCloudSync();
+		Perf.Mark("user data migrations");
 		InitPools();
 		OneTimeInitialization.ExecuteEssential();
+		Perf.Mark("essential init");
 		if (!IsNodeReady())
 		{
 			await ToSignal(this, Node.SignalName.Ready);
 		}
+		Perf.Mark("node ready");
 		Callable.From(InitializeGraphicsPreferences).CallDeferred();
 		AudioManager.SetMasterVol(SaveManager.Instance.SettingsSave.VolumeMaster);
 		AudioManager.SetSfxVol(SaveManager.Instance.SettingsSave.VolumeSfx);
@@ -781,6 +796,7 @@ public class NGame : Control
 		LeaderboardManager.Initialize();
 		SteamStatsManager.Initialize();
 		TimeoutOverlay.Relocalize();
+		Perf.Mark("audio and platform services");
 		while (!cloudSavesTask.IsCompleted)
 		{
 			if (!SteamInitializer.Initialized)
@@ -790,9 +806,11 @@ public class NGame : Control
 			}
 			await this.AwaitProcessFrame();
 		}
+		Perf.Mark("cloud save sync");
 		SaveManager.Instance.InitProfileId();
 		ReadSaveResult<SerializableProgress> progressReadResult = SaveManager.Instance.InitProgressData();
 		ReadSaveResult<PrefsSave> prefsReadResult = SaveManager.Instance.InitPrefsData();
+		Perf.Mark("profile and save files");
 		SentryService.AfterGameInit(PlatformUtil.GetPlatformBranch().ToName(), SaveManager.Instance.Progress.UniqueId);
 		_screenShake.SetMultiplier(NScreenshakePaginator.GetShakeMultiplier(SaveManager.Instance.PrefsSave.ScreenShakeOptionIndex));
 		if (!OS.HasFeature("editor") && SaveManager.Instance.PrefsSave.FastMode == FastModeType.Instant)
@@ -846,6 +864,7 @@ public class NGame : Control
 	private void OnWindowChange()
 	{
 		Log.Info($"Window changed! New size: {DisplayServer.WindowGetSize()}");
+		ApplySafeArea();
 		EmitSignal(SignalName.WindowChange, SaveManager.Instance.SettingsSave.AspectRatioSetting == AspectRatioSetting.Auto);
 	}
 
@@ -873,6 +892,10 @@ public class NGame : Control
 	/// </summary>
 	public static bool IsReleaseGame()
 	{
+		if (CommandLineHelper.HasArg("autoslay") || CommandLineHelper.HasArg("scenario") || CommandLineHelper.HasArg("bootstrap"))
+		{
+			return false;
+		}
 		return true;
 	}
 
@@ -881,12 +904,66 @@ public class NGame : Control
 	/// </summary>
 	private void InitializeGraphicsPreferences()
 	{
+		SettingsSave settings = SaveManager.Instance.SettingsSave;
+		if (MobileGraphicsProfile.ApplyOnce(settings))
+		{
+			SaveManager.Instance.SaveSettings();
+		}
 		if (!DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase))
 		{
 			ApplyDisplaySettings();
 			ApplySyncSetting();
+			MobileGraphicsProfile.ApplyRenderScale(_window);
+			if (MobileDevice.IsMobile)
+			{
+				// The one line that tells us which phone we are actually running on: safe-area
+				// insets in both pixels and points, the refresh rate, and the canvas rect the
+				// layout ends up using.
+				Log.Info($"[Display] {MobileDevice.Describe()}");
+			}
 		}
-		Engine.MaxFps = SaveManager.Instance.SettingsSave.FpsLimit;
+		ApplyMsaa();
+		ApplyFontOversampling();
+		Engine.MaxFps = MobileGraphicsProfile.ClampFrameRate(settings.FpsLimit);
+	}
+
+	/// <summary>
+	/// Pushes the saved MSAA level onto the root viewport. Without this the setting was only ever
+	/// applied from the options paginator, so a fresh launch always rendered with MSAA disabled no
+	/// matter what the save file said.
+	/// </summary>
+	public void ApplyMsaa()
+	{
+		RenderingServer.ViewportMsaa msaa = SaveManager.Instance.SettingsSave.Msaa switch
+		{
+			2 => RenderingServer.ViewportMsaa.Msaa2X,
+			4 => RenderingServer.ViewportMsaa.Msaa4X,
+			8 => RenderingServer.ViewportMsaa.Msaa8X,
+			_ => RenderingServer.ViewportMsaa.Disabled
+		};
+		RenderingServer.ViewportSetMsaa2D(GetViewport().GetViewportRid(), msaa);
+		Log.Info($"[Display] MSAA 2D: {msaa}");
+	}
+
+	/// <summary>
+	/// Turns on dynamic font oversampling so glyphs are rasterised at the physical pixel density of
+	/// the panel instead of the 1920x1080 design canvas. The project file ships with oversampling
+	/// disabled, which leaves text visibly soft on a retina screen. The factor comes from the ratio
+	/// between the physical screen and the canvas, capped at 2x because beyond that the extra atlas
+	/// memory buys nothing a phone can show.
+	/// </summary>
+	public void ApplyFontOversampling()
+	{
+		if (!MobileDevice.IsMobile)
+		{
+			return;
+		}
+		// On the design-canvas path the drawable is one pixel per canvas unit already, so
+		// oversampling above 1x would rasterise glyphs into pixels the framebuffer does not have.
+		float ratio = MobileGraphicsProfile.DesignCanvasRendering ? 1f : MobileDevice.CanvasPixelRatio;
+		_window.SetUseFontOversampling(true);
+		_window.OversamplingOverride = ratio;
+		Log.Info($"[Display] Font oversampling: {ratio:0.##}x (canvas {GetViewport().GetVisibleRect().Size} screen {MobileDevice.ScreenSize})");
 	}
 
 	/// <summary>
@@ -1139,7 +1216,11 @@ public class NGame : Control
 			await Transition.FadeOut();
 		}
 		await LoadMainMenu();
+		Perf.Mark("main menu scene");
 		Log.Info($"[Startup] Time to main menu: {Time.GetTicksMsec():N0}ms");
+		Perf.StartFrameWatch();
+		DynamicIslandReporter.Start(GetTree());
+		ModManager.ResolveStartupWatchdog();
 		LogResourceStats("main menu loaded (essential)");
 		TaskHelper.RunSafely(LoadDeferredStartupAssetsAsync());
 		_joinCallbackHandler?.CheckForCommandLineJoin();
@@ -1152,7 +1233,9 @@ public class NGame : Control
 	private async Task LoadDeferredStartupAssetsAsync()
 	{
 		OneTimeInitialization.ExecuteDeferred();
+		Perf.Mark("deferred atlases and prewarm");
 		await PreloadManager.LoadCommonAndMainMenuAssets();
+		Perf.Mark("common and main menu assets");
 		LogResourceStats("main menu loaded (complete)");
 	}
 
