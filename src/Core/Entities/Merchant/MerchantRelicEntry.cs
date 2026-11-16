@@ -8,7 +8,6 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Factories;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 
 namespace MegaCrit.Sts2.Core.Entities.Merchant;
@@ -52,17 +51,15 @@ public sealed class MerchantRelicEntry : MerchantEntry
 		SaveManager.Instance.MarkRelicAsSeen(Model);
 	}
 
-	protected override async Task<(bool, int)> OnTryPurchase(MerchantInventory? inventory, bool ignoreCost)
+	protected override async Task<(bool, int)> OnTryPurchaseInternal(MerchantInventory? inventory, bool ignoreCost)
 	{
 		if (!ignoreCost)
 		{
-			await PlayerCmd.LoseGold(base.Cost, _player, GoldLossType.Spent);
+			await PlayerCmd.LoseGold(Cost, _player, GoldLossType.Spent);
 		}
 		_player.RunState.CurrentMapPointHistoryEntry?.GetEntry(_player.NetId).BoughtRelics.Add(Model.Id);
 		await RelicCmd.Obtain(Model, _player);
-		RunManager.Instance.RewardSynchronizer.SyncLocalGoldLost(base.Cost);
-		RunManager.Instance.RewardSynchronizer.SyncLocalObtainedRelic(Model);
-		return (true, (!ignoreCost) ? base.Cost : 0);
+		return (true, (!ignoreCost) ? Cost : 0);
 	}
 
 	protected override void ClearAfterPurchase()
@@ -73,6 +70,6 @@ public sealed class MerchantRelicEntry : MerchantEntry
 	protected override void RestockAfterPurchase(MerchantInventory? inventory)
 	{
 		HashSet<RelicModel> blacklist = inventory?.RelicEntries.Select((MerchantRelicEntry e) => e.Model?.CanonicalInstance).OfType<RelicModel>().ToHashSet() ?? new HashSet<RelicModel>();
-		FillSlot(RelicFactory.RollRarity(_player), blacklist);
+		FillSlot(RelicFactory.RollRarity(_player.PlayerRng.Shops), blacklist);
 	}
 }

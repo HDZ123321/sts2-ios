@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Entities.Players;
 
 namespace MegaCrit.Sts2.Core.GameActions.Multiplayer;
 
@@ -17,7 +18,11 @@ namespace MegaCrit.Sts2.Core.GameActions.Multiplayer;
 /// </summary>
 public class BlockingPlayerChoiceContext : PlayerChoiceContext
 {
-	public override Task SignalPlayerChoiceBegun(PlayerChoiceOptions options)
+	public override ulong? OwnerId => null;
+
+	public override GameActionType? GameActionType => null;
+
+	public override Task SignalPlayerChoiceBegun(Player chooser, PlayerChoiceOptions options)
 	{
 		return Task.CompletedTask;
 	}

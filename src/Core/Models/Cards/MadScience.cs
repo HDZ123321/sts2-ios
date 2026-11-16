@@ -99,7 +99,7 @@ public sealed class MadScience : CardModel
 		new BlockVar(8m, ValueProp.Move),
 		new PowerVar<WeakPower>("SappingWeak", 2m),
 		new PowerVar<VulnerablePower>("SappingVulnerable", 2m),
-		new DynamicVar("ViolenceHits", 3m),
+		new HitCountVar("ViolenceHits", 3),
 		new PowerVar<StranglePower>("ChokingDamage", 6m),
 		new EnergyVar("EnergizedEnergy", 2),
 		new CardsVar("WisdomCards", 3),
@@ -195,7 +195,7 @@ public sealed class MadScience : CardModel
 		switch (TinkerTimeType)
 		{
 		case CardType.Attack:
-			await ExecuteAttack(choiceContext, cardPlay.Target);
+			await ExecuteAttack(choiceContext, cardPlay.Target, cardPlay);
 			break;
 		case CardType.Skill:
 			await ExecuteSkill(cardPlay);
@@ -213,15 +213,13 @@ public sealed class MadScience : CardModel
 		}
 	}
 
-	private async Task ExecuteAttack(PlayerChoiceContext choiceContext, Creature target)
+	private async Task ExecuteAttack(PlayerChoiceContext choiceContext, Creature target, CardPlay cardPlay)
 	{
-		int hits = ((TinkerTimeRider != TinkerTime.RiderEffect.Violence) ? 1 : base.DynamicVars["ViolenceHits"].IntValue);
-		for (int i = 0; i < hits; i++)
-		{
-			await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).Targeting(target)
-				.WithHitFx("vfx/vfx_attack_slash")
-				.Execute(choiceContext);
-		}
+		int hitCount = ((TinkerTimeRider != TinkerTime.RiderEffect.Violence) ? 1 : base.DynamicVars["ViolenceHits"].IntValue);
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).WithHitCount(hitCount).FromCard(this, cardPlay)
+			.Targeting(target)
+			.WithHitFx("vfx/vfx_attack_slash")
+			.Execute(choiceContext);
 	}
 
 	private async Task ExecuteSkill(CardPlay cardPlay)
@@ -285,7 +283,7 @@ public sealed class MadScience : CardModel
 		{
 			CardModel cardModel = ((MockedChaosCard == null) ? CardFactory.GetDistinctForCombat(base.Owner, base.Owner.Character.CardPool.GetUnlockedCards(base.Owner.UnlockState, base.Owner.RunState.CardMultiplayerConstraint), 1, base.Owner.RunState.Rng.CombatCardGeneration).First() : MockedChaosCard);
 			cardModel.SetToFreeThisTurn();
-			await CardPileCmd.Add(cardModel, PileType.Hand);
+			await CardPileCmd.AddGeneratedCardToCombat(cardModel, PileType.Hand, base.Owner);
 			break;
 		}
 		default:

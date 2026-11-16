@@ -28,6 +28,8 @@ public class NetCoreRunner : Node
 	{
 	}
 
+	public static NetCoreRunner? Instance { get; private set; }
+
 	/// <inheritdoc />
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)

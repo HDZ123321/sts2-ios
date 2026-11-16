@@ -16,17 +16,18 @@ public sealed class MassiveScroll : RelicModel
 {
 	public override RelicRarity Rarity => RelicRarity.Ancient;
 
-	public override bool IsAllowed(IRunState runState)
+	protected override bool IsAllowedInternal(IRunState runState)
 	{
 		return runState.Players.Count > 1;
 	}
 
 	public override async Task AfterObtained()
 	{
-		IEnumerable<CardModel> customCardPool = from c in ModelDb.CardPool<ColorlessCardPool>().GetUnlockedCards(base.Owner.RunState.UnlockState, base.Owner.RunState.CardMultiplayerConstraint).Concat(base.Owner.Character.CardPool.GetUnlockedCards(base.Owner.RunState.UnlockState, base.Owner.RunState.CardMultiplayerConstraint))
-			where c.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly
-			select c;
-		CardCreationOptions options = new CardCreationOptions(customCardPool, CardCreationSource.Other, CardRarityOddsType.RegularEncounter);
+		CardCreationOptions options = new CardCreationOptions(new global::_003C_003Ez__ReadOnlyArray<CardPoolModel>(new CardPoolModel[2]
+		{
+			base.Owner.Character.CardPool,
+			ModelDb.CardPool<ColorlessCardPool>()
+		}), CardCreationSource.Other, CardRarityOddsType.RegularEncounter, (CardModel c) => c.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly);
 		List<CardModel> options2 = (from r in CardFactory.CreateForReward(base.Owner, 3, options)
 			select r.Card).ToList();
 		CardModel chosenCard = await CardSelectCmd.FromChooseACardScreen(new BlockingPlayerChoiceContext(), options2, base.Owner, canSkip: true);

@@ -26,6 +26,11 @@ public class NIroncladVfx : Node
 		public static readonly StringName OnAnimationEvent = "OnAnimationEvent";
 
 		/// <summary>
+		/// Cached name for the 'OnAnimationStart' method.
+		/// </summary>
+		public static readonly StringName OnAnimationStart = "OnAnimationStart";
+
+		/// <summary>
 		/// Cached name for the 'OnHeavySlash' method.
 		/// </summary>
 		public static readonly StringName OnHeavySlash = "OnHeavySlash";
@@ -34,6 +39,16 @@ public class NIroncladVfx : Node
 		/// Cached name for the 'OnAttackSlash' method.
 		/// </summary>
 		public static readonly StringName OnAttackSlash = "OnAttackSlash";
+
+		/// <summary>
+		/// Cached name for the 'OnCastEyes' method.
+		/// </summary>
+		public static readonly StringName OnCastEyes = "OnCastEyes";
+
+		/// <summary>
+		/// Cached name for the 'OnClearVfx' method.
+		/// </summary>
+		public static readonly StringName OnClearVfx = "OnClearVfx";
 
 		/// <summary>
 		/// Cached name for the '_ExitTree' method.
@@ -65,6 +80,11 @@ public class NIroncladVfx : Node
 		/// Cached name for the '_parent' field.
 		/// </summary>
 		public static readonly StringName _parent = "_parent";
+
+		/// <summary>
+		/// Cached name for the '_eyeFireTex' field.
+		/// </summary>
+		public static readonly StringName _eyeFireTex = "_eyeFireTex";
 	}
 
 	/// <summary>
@@ -80,34 +100,54 @@ public class NIroncladVfx : Node
 
 	private ShaderMaterial? _slashShaderMat;
 
-	private Tween _tween;
+	private Tween? _tween;
 
 	private Node2D _parent;
 
 	private MegaSprite _megaSprite;
+
+	private TextureRect _eyeFireTex;
 
 	public override void _Ready()
 	{
 		_parent = GetParent<Node2D>();
 		_slashShaderMat = new MegaSlotNode(_parent.GetNode("SlashVfxSlot")).GetNormalMaterial() as ShaderMaterial;
 		_slashStepBase = (Vector2)_slashShaderMat.GetShaderParameter(_step);
+		_eyeFireTex = _parent.GetNode<TextureRect>("EyeSlot/EyeFire");
 		_megaSprite = new MegaSprite(_parent);
 		_megaSprite.ConnectAnimationEvent(Callable.From<GodotObject, GodotObject, GodotObject, GodotObject>(OnAnimationEvent));
+		_megaSprite.ConnectAnimationStarted(Callable.From<GodotObject, GodotObject, GodotObject>(OnAnimationStart));
+		OnClearVfx();
 	}
 
 	private void OnAnimationEvent(GodotObject _, GodotObject __, GodotObject ___, GodotObject spineEvent)
 	{
-		string eventName = new MegaEvent(spineEvent).GetData().GetEventName();
-		if (!(eventName == "heavy_slash_start"))
+		switch (new MegaEvent(spineEvent).GetData().GetEventName())
 		{
-			if (eventName == "attack_slash_start")
-			{
-				OnAttackSlash();
-			}
-		}
-		else
-		{
+		case "heavy_slash_start":
 			OnHeavySlash();
+			break;
+		case "attack_slash_start":
+			OnAttackSlash();
+			break;
+		case "cast_eyes_start":
+			OnCastEyes();
+			break;
+		case "clear_vfx":
+			OnClearVfx();
+			break;
+		}
+	}
+
+	/// <summary>
+	/// Check if we want to make sure we turn off any vfx between animations. We have to do this if the animation that
+	/// is supposed to turn off the vfx is interrupted early.
+	/// </summary>
+	private void OnAnimationStart(GodotObject spineSprite, GodotObject animationState, GodotObject trackEntry)
+	{
+		if (new MegaAnimationState(animationState).GetCurrentAnimationName() != "cast")
+		{
+			OnClearVfx();
 		}
 	}
 
@@ -130,6 +170,16 @@ public class NIroncladVfx : Node
 		_tween.TweenProperty(_slashShaderMat, "shader_parameter/step", vector, 0.20000000298023224);
 	}
 
+	private void OnCastEyes()
+	{
+		_eyeFireTex.Visible = true;
+	}
+
+	private void OnClearVfx()
+	{
+		_eyeFireTex.Visible = false;
+	}
+
 	public override void _ExitTree()
 	{
 		_tween?.Kill();
@@ -143,7 +193,7 @@ public class NIroncladVfx : Node
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(5);
+		List<MethodInfo> list = new List<MethodInfo>(8);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnAnimationEvent, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -152,8 +202,16 @@ public class NIroncladVfx : Node
 			new PropertyInfo(Variant.Type.Object, "___", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Object"), exported: false),
 			new PropertyInfo(Variant.Type.Object, "spineEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Object"), exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.OnAnimationStart, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "spineSprite", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Object"), exported: false),
+			new PropertyInfo(Variant.Type.Object, "animationState", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Object"), exported: false),
+			new PropertyInfo(Variant.Type.Object, "trackEntry", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Object"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnHeavySlash, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnAttackSlash, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnCastEyes, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnClearVfx, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
@@ -174,6 +232,12 @@ public class NIroncladVfx : Node
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.OnAnimationStart && args.Count == 3)
+		{
+			OnAnimationStart(VariantUtils.ConvertTo<GodotObject>(in args[0]), VariantUtils.ConvertTo<GodotObject>(in args[1]), VariantUtils.ConvertTo<GodotObject>(in args[2]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.OnHeavySlash && args.Count == 0)
 		{
 			OnHeavySlash();
@@ -183,6 +247,18 @@ public class NIroncladVfx : Node
 		if (method == MethodName.OnAttackSlash && args.Count == 0)
 		{
 			OnAttackSlash();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnCastEyes && args.Count == 0)
+		{
+			OnCastEyes();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnClearVfx && args.Count == 0)
+		{
+			OnClearVfx();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -207,11 +283,23 @@ public class NIroncladVfx : Node
 		{
 			return true;
 		}
+		if (method == MethodName.OnAnimationStart)
+		{
+			return true;
+		}
 		if (method == MethodName.OnHeavySlash)
 		{
 			return true;
 		}
 		if (method == MethodName.OnAttackSlash)
+		{
+			return true;
+		}
+		if (method == MethodName.OnCastEyes)
+		{
+			return true;
+		}
+		if (method == MethodName.OnClearVfx)
 		{
 			return true;
 		}
@@ -246,6 +334,11 @@ public class NIroncladVfx : Node
 			_parent = VariantUtils.ConvertTo<Node2D>(in value);
 			return true;
 		}
+		if (name == PropertyName._eyeFireTex)
+		{
+			_eyeFireTex = VariantUtils.ConvertTo<TextureRect>(in value);
+			return true;
+		}
 		return base.SetGodotClassPropertyValue(in name, in value);
 	}
 
@@ -273,6 +366,11 @@ public class NIroncladVfx : Node
 			value = VariantUtils.CreateFrom(in _parent);
 			return true;
 		}
+		if (name == PropertyName._eyeFireTex)
+		{
+			value = VariantUtils.CreateFrom(in _eyeFireTex);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -289,6 +387,7 @@ public class NIroncladVfx : Node
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._slashShaderMat, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._tween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._parent, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._eyeFireTex, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -301,6 +400,7 @@ public class NIroncladVfx : Node
 		info.AddProperty(PropertyName._slashShaderMat, Variant.From(in _slashShaderMat));
 		info.AddProperty(PropertyName._tween, Variant.From(in _tween));
 		info.AddProperty(PropertyName._parent, Variant.From(in _parent));
+		info.AddProperty(PropertyName._eyeFireTex, Variant.From(in _eyeFireTex));
 	}
 
 	/// <inheritdoc />
@@ -323,6 +423,10 @@ public class NIroncladVfx : Node
 		if (info.TryGetProperty(PropertyName._parent, out var value4))
 		{
 			_parent = value4.As<Node2D>();
+		}
+		if (info.TryGetProperty(PropertyName._eyeFireTex, out var value5))
+		{
+			_eyeFireTex = value5.As<TextureRect>();
 		}
 	}
 }

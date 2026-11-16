@@ -30,7 +30,7 @@ public sealed class ForgottenRitual : CardModel
 
 	protected override IEnumerable<string> ExtraRunAssetPaths => NGroundFireVfx.AssetPaths;
 
-	private bool WasCardExhaustedThisTurn => CombatManager.Instance.History.Entries.OfType<CardExhaustedEntry>().Any((CardExhaustedEntry e) => e.HappenedThisTurn(base.CombatState) && e.Card.Owner == base.Owner);
+	private bool WasCardExhaustedThisTurn => CombatManager.Instance.History.Entries.OfType<CardExhaustedEntry>().Any((CardExhaustedEntry e) => e.HappenedThisTurn(base.CombatState) && e.Actor == base.Owner.Creature);
 
 	public ForgottenRitual()
 		: base(1, CardType.Skill, CardRarity.Uncommon, TargetType.Self)

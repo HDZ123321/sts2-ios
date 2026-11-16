@@ -99,11 +99,12 @@ public static class PlatformUtil
 	}
 
 	/// <summary>
-	/// Opens the platform invite dialog for the given net service.
+	/// Tries to open the platform invite dialog for the given net service.
 	/// </summary>
-	public static void OpenInviteDialog(INetGameService netService)
+	/// <returns>True if the dialog was opened, false otherwise. Modify this to return a proper error if necessary.</returns>
+	public static bool TryOpenInviteDialog(INetGameService netService)
 	{
-		GetPlatformUtil(netService.Platform).OpenInviteDialog(netService);
+		return GetPlatformUtil(netService.Platform).TryOpenInviteDialog(netService);
 	}
 
 	/// <summary>

@@ -25,6 +25,11 @@ public sealed class PhrogParasiteElite : EncounterModel
 
 	public override IEnumerable<string> ExtraAssetPaths => new global::_003C_003Ez__ReadOnlySingleElementList<string>(ModelDb.Card<Infection>().OverlayPath);
 
+	public override float GetCameraScaling()
+	{
+		return 0.95f;
+	}
+
 	public static string GetWrigglerSlotName(int index)
 	{
 		return $"{"wriggler"}{index + 1}";

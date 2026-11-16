@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using Godot;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves.Migrations;
@@ -44,9 +46,9 @@ public class RunHistorySaveManager
 		_saveStore.CreateDirectory(HistoryPath);
 	}
 
-	public static string GetHistoryPath(int profileId)
+	public static string GetHistoryPath(int profileId, bool? forceModState = null)
 	{
-		return Path.Combine(UserDataPathProvider.GetProfileDir(profileId), UserDataPathProvider.SavesDir, "history");
+		return UserDataPathProvider.GetProfileDir(profileId, forceModState).PathJoin(UserDataPathProvider.SavesDir).PathJoin("history");
 	}
 
 	public void SaveHistory(RunHistory history)
@@ -68,13 +70,18 @@ public class RunHistorySaveManager
 		_saveStore.WriteFile(path, content);
 	}
 
+	private static bool IsRunHistoryFile(string fileName)
+	{
+		return fileName.EndsWith(".run");
+	}
+
 	public int GetHistoryCount()
 	{
 		if (!_saveStore.DirectoryExists(HistoryPath))
 		{
 			return 0;
 		}
-		return _saveStore.GetFilesInDirectory(HistoryPath).Length;
+		return _saveStore.GetFilesInDirectory(HistoryPath).Count(IsRunHistoryFile);
 	}
 
 	/// <summary>
@@ -113,7 +120,7 @@ public class RunHistorySaveManager
 			{
 				num++;
 			}
-			else if (!text.EndsWith(".backup"))
+			else if (IsRunHistoryFile(text))
 			{
 				list.Add(text);
 			}

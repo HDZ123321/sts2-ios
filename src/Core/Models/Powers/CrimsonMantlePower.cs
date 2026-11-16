@@ -28,7 +28,7 @@ public sealed class CrimsonMantlePower : PowerModel
 		{
 			Flash();
 			DamageVar damageVar = (DamageVar)base.DynamicVars["SelfDamage"];
-			await CreatureCmd.Damage(choiceContext, base.Owner, damageVar.BaseValue, damageVar.Props, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner, damageVar.BaseValue, damageVar.Props, base.Owner);
 			await CreatureCmd.GainBlock(base.Owner, base.Amount, ValueProp.Unpowered, null);
 		}
 	}

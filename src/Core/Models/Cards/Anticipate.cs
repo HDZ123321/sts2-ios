@@ -28,6 +28,6 @@ public sealed class Anticipate : CardModel
 
 	protected override void OnUpgrade()
 	{
-		base.DynamicVars.Dexterity.UpgradeValueBy(1m);
+		base.DynamicVars.Dexterity.UpgradeValueBy(2m);
 	}
 }

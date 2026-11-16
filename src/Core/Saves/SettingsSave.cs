@@ -37,16 +37,7 @@ public class SettingsSave : ISaveSchema
 	public bool Fullscreen { get; set; } = true;
 
 	[JsonPropertyName("aspect_ratio")]
-	public AspectRatioSetting AspectRatioSetting { get; set; } = DefaultAspectRatioSetting;
-
-	/// <summary>
-	/// The aspect ratio a fresh settings file starts with.
-	/// On desktop the game ships a fixed 16:9 canvas, which is what the art was authored against.
-	/// Handheld displays are almost never 16:9 (iPhone 16 Pro is 2796x1290, about 2.167:1), so a fixed
-	/// 16:9 canvas would be letterboxed with black bars on the left and right. Auto lets the canvas follow
-	/// the device instead, which is what every other mobile build of a desktop game does.
-	/// </summary>
-	public static AspectRatioSetting DefaultAspectRatioSetting => OS.HasFeature("mobile") ? AspectRatioSetting.Auto : AspectRatioSetting.SixteenByNine;
+	public AspectRatioSetting AspectRatioSetting { get; set; } = AspectRatioSetting.SixteenByNine;
 
 	[JsonPropertyName("target_display")]
 	public int TargetDisplay { get; set; } = -1;
@@ -78,8 +69,19 @@ public class SettingsSave : ISaveSchema
 	[JsonPropertyName("skip_intro_logo")]
 	public bool SkipIntroLogo { get; set; }
 
+	/// <summary>
+	/// This is the saved Mouse-Keyboard (MKb) mapping. We are still calling it just "KeyboardMapping"
+	/// To not break compat with older versions of the settings save.
+	/// </summary>
 	[JsonPropertyName("keyboard_mapping")]
 	public Dictionary<string, string> KeyboardMapping { get; set; } = new Dictionary<string, string>();
+
+	/// <summary>
+	/// this is the saved Keyboard Only mapping. It is a control scheme that doesn't require use of the mouse.
+	/// See <see cref="F:MegaCrit.Sts2.Core.ControllerInput.InputType.KeyboardOnlyMode" /> for details.
+	/// </summary>
+	[JsonPropertyName("keyboard_only_mapping")]
+	public Dictionary<string, string> KbOnlyMapping { get; set; } = new Dictionary<string, string>();
 
 	[JsonPropertyName("controller_mapping_type")]
 	public ControllerMappingType ControllerMappingType { get; set; }

@@ -75,6 +75,23 @@ public abstract class CardPoolModel : AbstractModel, IPoolModel
 	protected abstract CardModel[] GenerateAllCards();
 
 	/// <summary>
+	/// Clears the lazily-computed <see cref="P:MegaCrit.Sts2.Core.Models.CardPoolModel.AllCards" />/<see cref="P:MegaCrit.Sts2.Core.Models.CardPoolModel.AllCardIds" /> caches so they are regenerated on
+	/// next access. Canonical pools are immutable, so they never need this, but mutable pools (like
+	/// <see cref="T:MegaCrit.Sts2.Core.Models.CardPools.MockCardPool" />) can change their card list after construction and must invalidate the caches.
+	/// </summary>
+	protected void InvalidateCardCache()
+	{
+		_allCards = null;
+		_allCardIds = null;
+	}
+
+	protected override void DeepCloneFields()
+	{
+		base.DeepCloneFields();
+		InvalidateCardCache();
+	}
+
+	/// <summary>
 	/// Returns every card in this pool that the player has unlocked.
 	/// This excludes cards that haven't been unlocked via certain epochs. We also can filter cards based on whether
 	/// they are allowed to appear during a singleplayer or multiplayer run.

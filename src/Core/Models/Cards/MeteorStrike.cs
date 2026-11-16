@@ -43,7 +43,7 @@ public sealed class MeteorStrike : CardModel
 			NCombatRoom.Instance.CombatVfxContainer.AddChildSafely(nLargeMagicMissileVfx);
 			await Cmd.Wait(nLargeMagicMissileVfx.WaitTime);
 		}
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).Targeting(cardPlay.Target)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).Targeting(cardPlay.Target)
 			.WithHitFx(null, null, "blunt_attack.mp3")
 			.Execute(choiceContext);
 		for (int i = 0; i < 3; i++)

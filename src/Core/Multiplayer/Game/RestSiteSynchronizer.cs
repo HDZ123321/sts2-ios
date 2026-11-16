@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Game.Flavor;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Game.Sync;
 using MegaCrit.Sts2.Core.Runs;
@@ -23,6 +24,8 @@ public class RestSiteSynchronizer : IDisposable
 		public uint? lastChosenOptionIndex;
 
 		public uint? hoveredOptionIndex;
+
+		public TaskCompletionSource completionTaskSource = new TaskCompletionSource();
 	}
 
 	public const int minHoverMessageMsec = 50;
@@ -34,6 +37,8 @@ public class RestSiteSynchronizer : IDisposable
 	private readonly IPlayerCollection _playerCollection;
 
 	private readonly ulong _localPlayerId;
+
+	private readonly RunLobby? _runLobby;
 
 	private readonly List<PlayerRestSite> _restSites = new List<PlayerRestSite>();
 
@@ -53,20 +58,31 @@ public class RestSiteSynchronizer : IDisposable
 
 	public event Action<RestSiteOption, bool, ulong>? AfterPlayerOptionChosen;
 
-	public RestSiteSynchronizer(RunLocationTargetedMessageBuffer messageBuffer, INetGameService netService, IPlayerCollection playerCollection, ulong localPlayerId)
+	public RestSiteSynchronizer(RunLocationTargetedMessageBuffer messageBuffer, INetGameService netService, IPlayerCollection playerCollection, ulong localPlayerId, RunLobby? runLobby)
 	{
 		_netService = netService;
 		_messageBuffer = messageBuffer;
 		_playerCollection = playerCollection;
 		_localPlayerId = localPlayerId;
+		_runLobby = runLobby;
 		_messageBuffer.RegisterMessageHandler<OptionIndexChosenMessage>(HandleRestSiteOptionChosenMessage);
 		_messageBuffer.RegisterMessageHandler<RestSiteOptionHoveredMessage>(HandleRestSiteOptionHoveredMessage);
+		_messageBuffer.RegisterMessageHandler<RestSiteSkippedMessage>(HandleRestSiteSkippedMessage);
+		if (_runLobby != null)
+		{
+			_runLobby.RemotePlayerDisconnected += OnPeerDisconnected;
+		}
 	}
 
 	public void Dispose()
 	{
 		_messageBuffer.UnregisterMessageHandler<OptionIndexChosenMessage>(HandleRestSiteOptionChosenMessage);
 		_messageBuffer.UnregisterMessageHandler<RestSiteOptionHoveredMessage>(HandleRestSiteOptionHoveredMessage);
+		_messageBuffer.UnregisterMessageHandler<RestSiteSkippedMessage>(HandleRestSiteSkippedMessage);
+		if (_runLobby != null)
+		{
+			_runLobby.RemotePlayerDisconnected -= OnPeerDisconnected;
+		}
 		_hoverMessageTask?.Dispose();
 		_hoverMessageTask = null;
 	}
@@ -107,6 +123,44 @@ public class RestSiteSynchronizer : IDisposable
 		this.PlayerHoverChanged?.Invoke(senderId);
 	}
 
+	private void HandleRestSiteSkippedMessage(RestSiteSkippedMessage message, ulong senderId)
+	{
+		_logger.Debug($"Player {senderId} skipped remaining options at rest site");
+		int playerSlotIndex = _playerCollection.GetPlayerSlotIndex(_playerCollection.GetPlayer(senderId));
+		PlayerRestSite playerRestSite = _restSites[playerSlotIndex];
+		if (!playerRestSite.completionTaskSource.Task.IsCompleted)
+		{
+			_logger.Debug($"Skipping {playerRestSite.options.Count} options");
+			playerRestSite.options.Clear();
+			playerRestSite.completionTaskSource.TrySetResult();
+		}
+	}
+
+	/// <summary>
+	/// Called when a remote player disconnects. If they still had rest site options remaining, they will never send us a
+	/// skip or final option-chosen message, so we complete their rest site here. Otherwise a room exit that is waiting
+	/// on <see cref="M:MegaCrit.Sts2.Core.Multiplayer.Game.RestSiteSynchronizer.AfterAllRestSitesCompleted" /> would hang forever.
+	/// </summary>
+	private void OnPeerDisconnected(ulong peerId)
+	{
+		Player player = _playerCollection.GetPlayer(peerId);
+		if (player == null)
+		{
+			return;
+		}
+		int playerSlotIndex = _playerCollection.GetPlayerSlotIndex(player);
+		if (playerSlotIndex < _restSites.Count)
+		{
+			PlayerRestSite playerRestSite = _restSites[playerSlotIndex];
+			if (!playerRestSite.completionTaskSource.Task.IsCompleted)
+			{
+				_logger.Debug($"Player {peerId} disconnected with {playerRestSite.options.Count} rest site options remaining; completing their rest site");
+				playerRestSite.options.Clear();
+				playerRestSite.completionTaskSource.SetResult();
+			}
+		}
+	}
+
 	public Task<bool> ChooseLocalOption(int index)
 	{
 		_logger.Debug($"Local player chose rest site option index {index}");
@@ -124,6 +178,10 @@ public class RestSiteSynchronizer : IDisposable
 	{
 		int playerSlotIndex = _playerCollection.GetPlayerSlotIndex(player);
 		PlayerRestSite restSite = _restSites[playerSlotIndex];
+		if (restSite.completionTaskSource.Task.IsCompleted)
+		{
+			throw new InvalidOperationException($"Player {player.NetId} attempted to choose rest site option index {optionIndex}, but the rest site has already been completed!");
+		}
 		if (optionIndex >= restSite.options.Count)
 		{
 			throw new InvalidOperationException($"Player {player.NetId} attempted to choose rest site option index {optionIndex}, but there were only {restSite.options.Count} options available!");
@@ -131,7 +189,7 @@ public class RestSiteSynchronizer : IDisposable
 		RestSiteOption option = restSite.options[optionIndex];
 		this.BeforePlayerOptionChosen?.Invoke(option, player.NetId);
 		bool flag = await option.OnSelect();
-		_logger.Debug($"Rest site option index {optionIndex} chosen for player {player.NetId} with success {flag}. Option: {restSite.options[optionIndex].OptionId}");
+		_logger.Debug($"Rest site option index {optionIndex} chosen for player {player.NetId} with success {flag}. Option: {option.OptionId}");
 		restSite.lastChosenOptionIndex = (uint)optionIndex;
 		this.AfterPlayerOptionChosen?.Invoke(option, flag, player.NetId);
 		if (!flag)
@@ -139,6 +197,10 @@ public class RestSiteSynchronizer : IDisposable
 			return false;
 		}
 		player.RunState.CurrentMapPointHistoryEntry?.GetEntry(player.NetId).RestSiteChoices.Add(option.OptionId);
+		if (restSite.completionTaskSource.Task.IsCompleted)
+		{
+			return true;
+		}
 		if (Hook.ShouldDisableRemainingRestSiteOptions(player.RunState, player))
 		{
 			_logger.Debug($"Clearing all remaining rest site options for player {player.NetId}");
@@ -149,7 +211,47 @@ public class RestSiteSynchronizer : IDisposable
 			_logger.Debug($"Leaving remaining rest site options enabled for player {player.NetId}");
 			restSite.options.RemoveAt(optionIndex);
 		}
+		if (restSite.options.Count == 0)
+		{
+			_logger.Debug($"Completing rest site for player {player.NetId} because there are no options left");
+			restSite.completionTaskSource.SetResult();
+		}
 		return true;
+	}
+
+	/// <summary>
+	/// Called by <see cref="T:MegaCrit.Sts2.Core.Rooms.RestSiteRoom" /> when the room is exited.
+	/// If there are still options remaining for the local player, those options are cleared and the room is completed.
+	/// This completion is synced to other players.
+	/// </summary>
+	public void BeforeLocalRestSiteExited()
+	{
+		Player me = LocalContext.GetMe(_playerCollection);
+		int playerSlotIndex = _playerCollection.GetPlayerSlotIndex(me);
+		PlayerRestSite playerRestSite = _restSites[playerSlotIndex];
+		if (playerRestSite.options.Count > 0)
+		{
+			_logger.Debug($"Skipping remaining options ({playerRestSite.options.Count}) in rest site for local player {me.NetId} because we're exiting the rest site");
+			playerRestSite.options.Clear();
+			playerRestSite.completionTaskSource.SetResult();
+			_netService.SendMessage(new RestSiteSkippedMessage
+			{
+				Location = _messageBuffer.CurrentLocation
+			});
+		}
+	}
+
+	/// <summary>
+	/// Waits for all players' rest sites to be completed.
+	/// This must be awaited before the room-exit checksum is generated so that we know that we won't be receiving any
+	/// more OptionIndexChosenMessages for this room.
+	/// </summary>
+	public async Task AfterAllRestSitesCompleted()
+	{
+		foreach (PlayerRestSite restSite in _restSites)
+		{
+			await restSite.completionTaskSource.Task;
+		}
 	}
 
 	public void LocalOptionHovered(RestSiteOption? option)

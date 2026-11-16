@@ -21,6 +21,7 @@ using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Models;
 
@@ -56,7 +57,11 @@ public abstract class MonsterModel : AbstractModel
 
 	public abstract int MaxInitialHp { get; }
 
-	public virtual bool IsHealthBarVisible => true;
+	/// <summary>
+	/// If this is set to false, the creature is untargetable and its health bar will not be shown.
+	/// DO NOT return a dynamic value - it will not be respected. Only return static values. Call <see cref="M:MegaCrit.Sts2.Core.Nodes.Combat.NCreature.SetIsInteractable(System.Boolean,System.Boolean)" /> to change interactability dynamically.
+	/// </summary>
+	public virtual bool IsInteractable => true;
 
 	/// <summary>
 	/// At time of death, a SubViewport is created with the bounds of the creature's spine body in its current pose.
@@ -170,6 +175,8 @@ public abstract class MonsterModel : AbstractModel
 
 	public virtual bool ShouldDisappearFromDoom => true;
 
+	public virtual float HurtAnimationTrackOffsetForDoom => 0.1f;
+
 	public virtual bool ShouldShowInCompendium => true;
 
 	/// <summary>
@@ -210,10 +217,8 @@ public abstract class MonsterModel : AbstractModel
 
 	/// <summary>
 	/// The CombatState that this monster's creature exists in.
-	/// Will technically be null on a canonical monster model, but we should never be checking that, so we leave this as
-	/// non-nullable for convenience.
 	/// </summary>
-	public ICombatState CombatState => Creature.CombatState;
+	public ICombatState CombatState => Creature.CombatState ?? NullCombatState.Instance;
 
 	/// <summary>
 	/// Get this monster's move state machine.
@@ -440,7 +445,10 @@ public abstract class MonsterModel : AbstractModel
 			IsPerformingMove = true;
 			MoveState move = NextMove;
 			IReadOnlyList<Creature> targets = combatState.PlayerCreatures;
-			Log.Info("Monster " + base.Id.Entry + " performing move " + move.Id);
+			if (TestMode.IsOff)
+			{
+				Log.Info("Monster " + base.Id.Entry + " performing move " + move.Id);
+			}
 			await move.PerformMove(targets);
 			MoveStateMachine?.OnMovePerformed(move);
 			CombatManager.Instance.History.MonsterPerformedMove(combatState, this, move, targets);
@@ -474,6 +482,15 @@ public abstract class MonsterModel : AbstractModel
 		creatureAnimator.AddAnyState("Dead", state);
 		creatureAnimator.AddAnyState("Hit", animState4);
 		return creatureAnimator;
+	}
+
+	/// <summary>
+	/// Called before a monster's move animation is played in the compendium.
+	/// Used to trigger things that normally get triggered in gameplay.
+	/// ie turning of the soul nexuses extra vfx when it dies
+	/// </summary>
+	public virtual void BeforeAnimPlayedInCompendium(string id)
+	{
 	}
 
 	public void OnSideSwitch()

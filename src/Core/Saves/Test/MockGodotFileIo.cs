@@ -89,6 +89,13 @@ public class MockGodotFileIo : ISaveStore
 	public bool DoSteamSpecificError;
 
 	/// <summary>
+	/// Per-file raw Unix-seconds timestamps. When set for a path, GetLastModifiedTime routes the raw value through
+	/// the real <see cref="T:MegaCrit.Sts2.Core.Saves.SaveTimestamps" /> guard, exactly as SteamRemoteSaveStore/GodotFileIo do, so tests can
+	/// exercise the out-of-range path (PRG-7045) end to end. Set via <see cref="M:MegaCrit.Sts2.Core.Saves.Test.MockGodotFileIo.SetRawTimestampSeconds(System.String,System.Int64)" />.
+	/// </summary>
+	protected readonly ConcurrentDictionary<string, long> _rawTimestampSeconds = new ConcurrentDictionary<string, long>();
+
+	/// <summary>
 	/// Tracks all method calls for verification in tests
 	/// </summary>
 	public List<(string Method, object[] Args)> Calls { get; } = new List<(string, object[])>();
@@ -97,6 +104,11 @@ public class MockGodotFileIo : ISaveStore
 	/// Custom callback for RenameFile operation to allow tests to intercept and verify behavior
 	/// </summary>
 	public Action<string, string>? RenameFileAction { get; set; }
+
+	/// <summary>
+	/// Paths whose ReadFile throws, to simulate a file that exists but cannot be read.
+	/// </summary>
+	public HashSet<string> UnreadablePaths { get; } = new HashSet<string>();
 
 	/// <summary>
 	/// Creates a new instance of the mock save store with the specified base directory
@@ -109,18 +121,32 @@ public class MockGodotFileIo : ISaveStore
 		CreateDirectory(_saveDir);
 	}
 
+	/// <summary>
+	/// Makes GetLastModifiedTime for the given path return the guarded conversion of a raw Unix-seconds value,
+	/// mirroring how the real stores read timestamps from Steam/the OS.
+	/// </summary>
+	public void SetRawTimestampSeconds(string path, long seconds)
+	{
+		CanonicalizePath(ref path);
+		_rawTimestampSeconds[path] = seconds;
+	}
+
 	public DateTimeOffset GetLastModifiedTime(string path)
 	{
 		CanonicalizePath(ref path);
-		if (!_files.TryGetValue(path, out File value))
+		if (_rawTimestampSeconds.TryGetValue(path, out var value))
+		{
+			return SaveTimestamps.FromUnixTimeSecondsOrEpoch(value, path);
+		}
+		if (!_files.TryGetValue(path, out File value2))
 		{
 			throw new InvalidOperationException("No file at " + path + "!");
 		}
-		if (!value.lastModifiedTime.HasValue)
+		if (!value2.lastModifiedTime.HasValue)
 		{
 			throw new InvalidOperationException("getCurrentTime was not set when file " + path + " was created!");
 		}
-		return value.lastModifiedTime.Value;
+		return value2.lastModifiedTime.Value;
 	}
 
 	public int GetFileSize(string path)
@@ -176,6 +202,10 @@ public class MockGodotFileIo : ISaveStore
 	/// </summary>
 	public string? ReadFile(string path)
 	{
+		if (UnreadablePaths.Contains(path))
+		{
+			throw new IOException("Simulated read failure for " + path);
+		}
 		CanonicalizePath(ref path);
 		Calls.Add(("ReadFile", new object[1] { path }));
 		if (!_files.TryGetValue(path, out File value))
@@ -202,6 +232,7 @@ public class MockGodotFileIo : ISaveStore
 	/// </summary>
 	public void WriteFile(string path, string content)
 	{
+		bool flag = UnreadablePaths.Contains(path);
 		CanonicalizePath(ref path);
 		Calls.Add(("WriteFile", new object[2] { path, content }));
 		if (ShouldFailWrites)
@@ -209,7 +240,7 @@ public class MockGodotFileIo : ISaveStore
 			throw new InvalidOperationException("Simulated write failure");
 		}
 		string key = path + ".backup";
-		if (_files.TryGetValue(path, out File value))
+		if (_files.TryGetValue(path, out File value) && !flag && SaveContent.IsWhole(value.content))
 		{
 			_files[key] = value;
 		}
@@ -366,7 +397,7 @@ public class MockGodotFileIo : ISaveStore
 	protected void CanonicalizePath(ref string path, bool getFullPath = true)
 	{
 		path = path.Replace('\\', '/');
-		if (getFullPath)
+		if (getFullPath && _saveDir != "")
 		{
 			path = _saveDir + "/" + path;
 		}

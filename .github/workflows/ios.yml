@@ -32,8 +32,9 @@ jobs:
 
     env:
       BUNDLE_ID: ${{ github.event.inputs.bundle_id || 'com.placeholder.sts2' }}
-      PCK_TAG: v0.107.1-ios
-      PCK_ASSET: sts2.pck
+      PCK_TAG: v0.113.1-ios
+      PCK_ASSET: sts2.pck.zip
+      FW_TAG: v0.107.1-ios
       FW_ASSET: sts2-frameworks.zip
 
     steps:
@@ -61,10 +62,16 @@ jobs:
             ls -lh sts2.pck
             exit 0
           fi
+          # The iOS pack is 2.15 GB, just past GitHub's 2 GiB per-asset cap, so the
+          # release carries it deflated. Godot's pack is highly compressible because
+          # the ASTC/ETC2 blocks and the font data dominate it.
           URL="https://github.com/${{ github.repository }}/releases/download/${PCK_TAG}/${PCK_ASSET}"
           echo "downloading $URL"
           curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
-               -o sts2.pck "$URL"
+               -o "$PCK_ASSET" "$URL"
+          ls -lh "$PCK_ASSET"
+          unzip -q "$PCK_ASSET" -d .
+          rm -f "$PCK_ASSET"
           ls -lh sts2.pck
 
       - name: Fetch engine xcframeworks from release
@@ -73,7 +80,7 @@ jobs:
             echo "xcframeworks already in checkout, skipping download"
             exit 0
           fi
-          URL="https://github.com/${{ github.repository }}/releases/download/${PCK_TAG}/${FW_ASSET}"
+          URL="https://github.com/${{ github.repository }}/releases/download/${FW_TAG}/${FW_ASSET}"
           echo "downloading $URL"
           curl -fL --retry 5 --retry-delay 5 --retry-all-errors \
                -o "$FW_ASSET" "$URL"

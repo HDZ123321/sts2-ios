@@ -26,15 +26,14 @@ public sealed class Stabbot : MonsterModel
 
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Armor;
 
-	public override Task AfterAddedToRoom()
+	public override async Task AfterAddedToRoom()
 	{
-		base.AfterAddedToRoom();
+		await base.AfterAddedToRoom();
 		if (TestMode.IsOff)
 		{
 			NCreature creatureNode = NCombatRoom.Instance.GetCreatureNode(base.Creature);
 			FabricatorNormal.SetBotFallPosition(creatureNode);
 		}
-		return Task.CompletedTask;
 	}
 
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()

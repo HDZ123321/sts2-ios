@@ -32,6 +32,6 @@ public sealed class Burn : CardModel
 	{
 		NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(NGroundFireVfx.Create(base.Owner.Creature));
 		SfxCmd.Play("event:/sfx/characters/attack_fire");
-		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this);
+		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this, null);
 	}
 }

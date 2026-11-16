@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
@@ -11,6 +12,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.UI;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
@@ -26,10 +28,15 @@ using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
+using MegaCrit.Sts2.Core.Timeline;
+using MegaCrit.Sts2.Core.Timeline.Epochs;
 using MegaCrit.Sts2.Core.Unlocks;
 using MegaCrit.Sts2.addons.mega_text;
 
@@ -92,6 +99,16 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		public new static readonly StringName OnSubmenuClosed = "OnSubmenuClosed";
 
 		/// <summary>
+		/// Cached name for the 'OnRandomizePressed' method.
+		/// </summary>
+		public static readonly StringName OnRandomizePressed = "OnRandomizePressed";
+
+		/// <summary>
+		/// Cached name for the 'RandomizeLocalCharacter' method.
+		/// </summary>
+		public static readonly StringName RandomizeLocalCharacter = "RandomizeLocalCharacter";
+
+		/// <summary>
 		/// Cached name for the 'OnEmbarkPressed' method.
 		/// </summary>
 		public static readonly StringName OnEmbarkPressed = "OnEmbarkPressed";
@@ -122,6 +139,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		public static readonly StringName GetModifiersString = "GetModifiersString";
 
 		/// <summary>
+		/// Cached name for the 'SelectCharacter' method.
+		/// </summary>
+		public static readonly StringName SelectCharacter = "SelectCharacter";
+
+		/// <summary>
 		/// Cached name for the 'OnAscensionPanelLevelChanged' method.
 		/// </summary>
 		public static readonly StringName OnAscensionPanelLevelChanged = "OnAscensionPanelLevelChanged";
@@ -150,6 +172,21 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		/// Cached name for the 'ModifiersChanged' method.
 		/// </summary>
 		public static readonly StringName ModifiersChanged = "ModifiersChanged";
+
+		/// <summary>
+		/// Cached name for the 'GameModeChanged' method.
+		/// </summary>
+		public static readonly StringName GameModeChanged = "GameModeChanged";
+
+		/// <summary>
+		/// Cached name for the 'OnGameModeDropdownChanged' method.
+		/// </summary>
+		public static readonly StringName OnGameModeDropdownChanged = "OnGameModeDropdownChanged";
+
+		/// <summary>
+		/// Cached name for the 'UpdateGameModeDropdownOptionsAndVisibility' method.
+		/// </summary>
+		public static readonly StringName UpdateGameModeDropdownOptionsAndVisibility = "UpdateGameModeDropdownOptionsAndVisibility";
 
 		/// <summary>
 		/// Cached name for the 'AfterInitialized' method.
@@ -198,6 +235,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		public static readonly StringName _charButtonContainer = "_charButtonContainer";
 
 		/// <summary>
+		/// Cached name for the '_randomizeButton' field.
+		/// </summary>
+		public static readonly StringName _randomizeButton = "_randomizeButton";
+
+		/// <summary>
 		/// Cached name for the '_confirmButton' field.
 		/// </summary>
 		public static readonly StringName _confirmButton = "_confirmButton";
@@ -243,6 +285,16 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		public static readonly StringName _modifiersHotkeyIcon = "_modifiersHotkeyIcon";
 
 		/// <summary>
+		/// Cached name for the '_gameModeDropdownPositioner' field.
+		/// </summary>
+		public static readonly StringName _gameModeDropdownPositioner = "_gameModeDropdownPositioner";
+
+		/// <summary>
+		/// Cached name for the '_gameModeDropdown' field.
+		/// </summary>
+		public static readonly StringName _gameModeDropdown = "_gameModeDropdown";
+
+		/// <summary>
 		/// Cached name for the '_uiMode' field.
 		/// </summary>
 		public static readonly StringName _uiMode = "_uiMode";
@@ -265,6 +317,8 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 
 	private Control _charButtonContainer;
 
+	private NCustomRunRandomizeButton _randomizeButton;
+
 	private NConfirmButton _confirmButton;
 
 	private NBackButton _backButton;
@@ -281,7 +335,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 
 	private NCustomRunModifiersList _modifiersList;
 
-	private TextureRect _modifiersHotkeyIcon;
+	private NHotkeyIcon _modifiersHotkeyIcon;
+
+	private NDropdownPositioner _gameModeDropdownPositioner;
+
+	private NCustomGameModeDropdown _gameModeDropdown;
 
 	private StartRunLobby _lobby;
 
@@ -314,10 +372,14 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		_readyAndWaitingContainer = GetNode<Control>("%ReadyAndWaitingPanel");
 		_modifiersList = GetNode<NCustomRunModifiersList>("%ModifiersList");
 		_seedInput = GetNode<LineEdit>("%SeedInput");
+		_randomizeButton = GetNode<NCustomRunRandomizeButton>("%CustomRunRandomizeButton");
 		_confirmButton = GetNode<NConfirmButton>("ConfirmButton");
 		_backButton = GetNode<NBackButton>("BackButton");
 		_unreadyButton = GetNode<NBackButton>("UnreadyButton");
-		_modifiersHotkeyIcon = GetNode<TextureRect>("%ModifiersHotkeyIcon");
+		_modifiersHotkeyIcon = GetNode<NHotkeyIcon>("%ModifiersHotkeyIcon");
+		_gameModeDropdownPositioner = GetNode<NDropdownPositioner>("%GameModeDropdownContainer");
+		_gameModeDropdown = GetNode<NCustomGameModeDropdown>("%GameModeDropdown");
+		_randomizeButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnRandomizePressed));
 		_confirmButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnEmbarkPressed));
 		_unreadyButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnUnreadyPressed));
 		_ascensionPanel.Connect(NAscensionPanel.SignalName.AscensionLevelChanged, Callable.From(OnAscensionPanelLevelChanged));
@@ -329,6 +391,10 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		_seedInput.PlaceholderText = new LocString("main_menu_ui", "CUSTOM_RUN_SCREEN.SEED_RANDOM_PLACEHOLDER").GetFormattedText();
 		_seedInput.Connect(LineEdit.SignalName.TextChanged, Callable.From<string>(OnSeedInputSubmitted));
 		InitCharacterButtons();
+		_gameModeDropdownPositioner.FocusNeighborLeft = _gameModeDropdown.GetPath();
+		_gameModeDropdownPositioner.FocusNeighborRight = _seedInput.GetPath();
+		_gameModeDropdownPositioner.FocusNeighborTop = _gameModeDropdown.GetPath();
+		_gameModeDropdown.Connect(NCustomGameModeDropdown.SignalName.GameModeUpdated, Callable.From(OnGameModeDropdownChanged));
 		NControllerManager.Instance.Connect(NControllerManager.SignalName.MouseDetected, Callable.From(UpdateControllerButton));
 		NControllerManager.Instance.Connect(NControllerManager.SignalName.ControllerDetected, Callable.From(UpdateControllerButton));
 		NInputManager.Instance.Connect(NInputManager.SignalName.InputRebound, Callable.From(UpdateControllerButton));
@@ -340,10 +406,10 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		{
 			throw new InvalidOperationException($"Initialized character select screen with GameService of type {gameService.Type} when hosting!");
 		}
-		_lobby = new StartRunLobby(GameMode.Custom, gameService, this, maxPlayers);
-		_ascensionPanel.Initialize(MultiplayerUiMode.Host);
+		_lobby = new StartRunLobby(_gameModeDropdown.SelectedGameMode, isCustom: true, gameService, this, maxPlayers);
+		_ascensionPanel.Initialize(MultiplayerUiMode.Host, _gameModeDropdown.SelectedGameMode);
 		_modifiersList.Initialize(MultiplayerUiMode.Host);
-		_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), SaveManager.Instance.Progress.MaxMultiplayerAscension);
+		_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), SaveManager.Instance.Progress.MaxMultiplayerAscension, SaveManager.Instance.Progress.MaxBlitzAscension);
 		_uiMode = MultiplayerUiMode.Host;
 		_remotePlayerContainer.Visible = true;
 		UpdateControllerButton();
@@ -357,25 +423,28 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		{
 			throw new InvalidOperationException($"Initialized character select screen with GameService of type {gameService.Type} when joining!");
 		}
-		_lobby = new StartRunLobby(GameMode.Custom, gameService, this, -1);
-		_ascensionPanel.Initialize(MultiplayerUiMode.Client);
+		_lobby = new StartRunLobby(_gameModeDropdown.SelectedGameMode, isCustom: true, gameService, this, -1);
+		_ascensionPanel.Initialize(MultiplayerUiMode.Client, _gameModeDropdown.SelectedGameMode);
 		_modifiersList.Initialize(MultiplayerUiMode.Client);
 		_lobby.InitializeFromMessage(message);
 		_seedInput.Editable = false;
+		_randomizeButton.Disable();
 		_uiMode = MultiplayerUiMode.Client;
 		UpdateControllerButton();
+		GameModeChanged();
 		AfterInitialized();
 	}
 
 	public void InitializeSingleplayer()
 	{
-		_lobby = new StartRunLobby(GameMode.Custom, new NetSingleplayerGameService(), this, 1);
+		_lobby = new StartRunLobby(_gameModeDropdown.SelectedGameMode, isCustom: true, new NetSingleplayerGameService(), this, 1);
 		_remotePlayerContainer.Visible = false;
-		_ascensionPanel.Initialize(MultiplayerUiMode.Singleplayer);
+		_ascensionPanel.Initialize(MultiplayerUiMode.Singleplayer, _gameModeDropdown.SelectedGameMode);
 		_modifiersList.Initialize(MultiplayerUiMode.Singleplayer);
-		_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), 0);
+		_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), 0, SaveManager.Instance.Progress.MaxBlitzAscension);
 		_uiMode = MultiplayerUiMode.Singleplayer;
 		UpdateControllerButton();
+		OnAscensionPanelLevelChanged();
 		AfterInitialized();
 	}
 
@@ -450,11 +519,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			_seedInput.Text = _lobby.Seed ?? "";
 		}
 		_readyAndWaitingContainer.Visible = false;
-		foreach (LobbyPlayer player in _lobby.Players)
+		foreach (StartRunLobbyPlayer player in _lobby.Players)
 		{
 			RefreshButtonSelectionForPlayer(player);
 		}
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(ModifiersHotkey, TryFocusOnModifiersList);
+		NHotkeyManager.Instance.PushHotkeyPressedBinding(ModifiersHotkey, TryFocusOnModifiersList, 0L);
 	}
 
 	public override void OnSubmenuClosed()
@@ -470,8 +539,36 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		NHotkeyManager.Instance.RemoveHotkeyPressedBinding(ModifiersHotkey, TryFocusOnModifiersList);
 	}
 
+	private void OnRandomizePressed(NButton _)
+	{
+		if (_lobby.NetService.Type == NetGameType.Client)
+		{
+			throw new InvalidOperationException("In multiplayer, only the host can randomize custom runs.");
+		}
+		if (_lobby.NetService.Type == NetGameType.Singleplayer)
+		{
+			RandomizeLocalCharacter();
+		}
+		IReadOnlyCollection<ModifierModel> tickedModifiers = ModifierModel.Pick2Good1Bad(Rng.Chaotic, _lobby.Players.Select((StartRunLobbyPlayer p) => p.character));
+		_modifiersList.SetTickedModifiers(tickedModifiers);
+	}
+
+	/// <summary>
+	/// Randomly selects one of the unlocked characters for the local player only. Selecting through the button routes
+	/// to <see cref="M:MegaCrit.Sts2.Core.Nodes.Screens.CustomRun.NCustomRunScreen.SelectCharacter(MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect.NCharacterSelectButton)" /> -&gt; SetLocalCharacter, so other players in a multiplayer lobby keep their own
+	/// selections.
+	/// </summary>
+	private void RandomizeLocalCharacter()
+	{
+		IEnumerable<NCharacterSelectButton> items = from b in _charButtonContainer.GetChildren().OfType<NCharacterSelectButton>()
+			where b != null && !b.IsLocked && !b.IsRandom
+			select b;
+		Rng.Chaotic.NextItem(items)?.Select();
+	}
+
 	private void OnEmbarkPressed(NButton _)
 	{
+		_randomizeButton.Disable();
 		_confirmButton.Disable();
 		_backButton.Disable();
 		_lobby.SetReady(ready: true);
@@ -488,6 +585,10 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 
 	private void OnUnreadyPressed(NButton _)
 	{
+		if (_lobby.NetService.Type != NetGameType.Client)
+		{
+			_randomizeButton.Enable();
+		}
 		_confirmButton.Enable();
 		_backButton.Enable();
 		_unreadyButton.Disable();
@@ -515,8 +616,19 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		}
 	}
 
+	private void RemoteClientFailedToConnectToLocalHost(ulong sender, NetErrorInfo info)
+	{
+		bool showReportBugButton;
+		string formattedText = NErrorPopup.LocStringFromNetError(info, out showReportBugButton).GetFormattedText();
+		LocString locString = new LocString("main_menu_ui", "NETWORK_ERROR.HOST.PREFIX.body");
+		locString.Add("playerName", PlatformUtil.GetPlayerName(_lobby.NetService.Platform, sender));
+		locString.Add("info", formattedText);
+		this.AddChildSafely(NFailedJoinVfx.Create(locString.GetFormattedText()));
+	}
+
 	private void CleanUpLobby(bool disconnectSession, NetError error = NetError.Quit)
 	{
+		_lobby.PlayerFailedToConnect -= RemoteClientFailedToConnectToLocalHost;
 		_lobby.CleanUp(disconnectSession, error);
 		_lobby = null;
 	}
@@ -526,9 +638,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		try
 		{
 			Log.Info($"Embarking on a CUSTOM {_lobby.LocalPlayer.character.Id.Entry} run. Ascension: {_lobby.Ascension} Seed: {_lobby.Seed} Modifiers: {GetModifiersString()}");
-			SfxCmd.Play(_lobby.LocalPlayer.character.CharacterTransitionSfx);
-			await NGame.Instance.Transition.FadeOut(0.8f, _lobby.LocalPlayer.character.CharacterSelectTransitionPath);
-			await NGame.Instance.StartNewSingleplayerRun(_lobby.LocalPlayer.character, shouldSave: true, acts, modifiers, seed, GameMode.Custom, _lobby.Ascension);
+			Player player = _lobby.GeneratePlayers(seed)[0];
+			SfxCmd.Play(player.Character.CharacterTransitionSfx);
+			await NGame.Instance.Transition.FadeOut(0.8f, player.Character.CharacterSelectTransitionPath);
+			int ascensionLevel = ((_lobby.GameMode == GameMode.Dread) ? 10 : _lobby.Ascension);
+			await NGame.Instance.StartNewSingleplayerRun(player, shouldSave: true, acts, modifiers, seed, _lobby.GameMode, isCustomGame: true, ascensionLevel);
 		}
 		catch (Exception ex)
 		{
@@ -545,9 +659,12 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		try
 		{
 			Log.Info($"Embarking on a CUSTOM multiplayer run. Players: {string.Join(",", _lobby.Players)}. Ascension: {_lobby.Ascension} Seed: {_lobby.Seed} Modifiers: {GetModifiersString()}");
-			SfxCmd.Play(_lobby.LocalPlayer.character.CharacterTransitionSfx);
-			await NGame.Instance.Transition.FadeOut(0.8f, _lobby.LocalPlayer.character.CharacterSelectTransitionPath);
-			await NGame.Instance.StartNewMultiplayerRun(_lobby, shouldSave: true, acts, modifiers, seed, _lobby.Ascension);
+			List<Player> players = _lobby.GeneratePlayers(seed);
+			Player player = players.First((Player p) => p.NetId == _lobby.LocalPlayer.id);
+			SfxCmd.Play(player.Character.CharacterTransitionSfx);
+			await NGame.Instance.Transition.FadeOut(0.8f, player.Character.CharacterSelectTransitionPath);
+			int ascensionLevel = ((_lobby.GameMode == GameMode.Dread) ? 10 : _lobby.Ascension);
+			await NGame.Instance.StartNewMultiplayerRun(players, _lobby, shouldSave: true, acts, modifiers, seed, ascensionLevel);
 		}
 		catch (Exception ex)
 		{
@@ -564,13 +681,14 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		return string.Join(",", _lobby.Modifiers.Select((ModifierModel m) => m.Id));
 	}
 
-	public void SelectCharacter(NCharacterSelectButton charSelectButton, CharacterModel characterModel)
+	public void SelectCharacter(NCharacterSelectButton charSelectButton)
 	{
 		if (_lobby == null)
 		{
 			throw new InvalidOperationException("Cannot select character while loading!");
 		}
-		SfxCmd.Play(characterModel.CharacterSelectSfx);
+		CharacterModel character = charSelectButton.Character;
+		SfxCmd.Play(character.CharacterSelectSfx);
 		_selectedButton = charSelectButton;
 		foreach (NCharacterSelectButton item in _charButtonContainer.GetChildren().OfType<NCharacterSelectButton>())
 		{
@@ -579,7 +697,8 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 				item.Deselect();
 			}
 		}
-		_lobby.SetLocalCharacter(characterModel);
+		_lobby.SetLocalCharacter(character);
+		_gameModeDropdown.FocusNeighborBottom = _selectedButton.GetPath();
 	}
 
 	/// <summary>
@@ -620,24 +739,21 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		_ascensionPanel.SetMaxAscension(_lobby.MaxAscension);
 	}
 
-	public void PlayerConnected(LobbyPlayer player)
+	public void PlayerConnected(StartRunLobbyPlayer player)
 	{
 		_remotePlayerContainer.OnPlayerConnected(player);
 		RefreshButtonSelectionForPlayer(player);
+		UpdateGameModeDropdownOptionsAndVisibility();
 		UpdateRichPresence();
 	}
 
-	public void PlayerChanged(LobbyPlayer player, bool isRandomCharacterResolution)
+	public void PlayerChanged(StartRunLobbyPlayer player)
 	{
-		if (isRandomCharacterResolution)
-		{
-			throw new InvalidOperationException("Random character is not currently allowed in custom!");
-		}
 		_remotePlayerContainer.OnPlayerChanged(player);
 		RefreshButtonSelectionForPlayer(player);
 	}
 
-	private void RefreshButtonSelectionForPlayer(LobbyPlayer player)
+	private void RefreshButtonSelectionForPlayer(StartRunLobbyPlayer player)
 	{
 		if (player.id == _lobby.LocalPlayer.id)
 		{
@@ -658,10 +774,6 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 
 	public void AscensionChanged()
 	{
-		if (_lobby.NetService.Type == NetGameType.Client)
-		{
-			_ascensionPanel.Visible = _lobby.Ascension > 0;
-		}
 		_ascensionPanel.SetAscensionLevel(_lobby.Ascension);
 	}
 
@@ -683,7 +795,15 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		}
 	}
 
-	public void RemotePlayerDisconnected(LobbyPlayer player)
+	public void GameModeChanged()
+	{
+		_gameModeDropdown.SetSelectedGameMode(_lobby.GameMode);
+		_ascensionPanel.SwitchGameMode(_lobby.GameMode);
+		_ascensionPanel.SetAscensionLevel(_lobby.Ascension);
+		_ascensionPanel.SetMaxAscension(_lobby.MaxAscension);
+	}
+
+	public void RemotePlayerDisconnected(StartRunLobbyPlayer player)
 	{
 		_remotePlayerContainer.OnPlayerDisconnected(player);
 		foreach (NCharacterSelectButton item in _charButtonContainer.GetChildren().OfType<NCharacterSelectButton>())
@@ -694,6 +814,7 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			}
 		}
 		UpdateRichPresence();
+		UpdateGameModeDropdownOptionsAndVisibility();
 	}
 
 	public void BeginRun(string seed, List<ActModel> acts, IReadOnlyList<ModifierModel> modifiers)
@@ -731,12 +852,65 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		}
 	}
 
+	private void OnGameModeDropdownChanged()
+	{
+		if (_lobby.NetService.Type != NetGameType.Client)
+		{
+			Lobby.SetGameMode(_gameModeDropdown.SelectedGameMode);
+		}
+	}
+
+	private void UpdateGameModeDropdownOptionsAndVisibility()
+	{
+		if (_lobby.NetService.Type == NetGameType.Client)
+		{
+			_gameModeDropdown.Disable();
+		}
+		int num = 1;
+		List<GameMode> list = new List<GameMode>(num);
+		CollectionsMarshal.SetCount(list, num);
+		Span<GameMode> span = CollectionsMarshal.AsSpan(list);
+		int index = 0;
+		span[index] = GameMode.Standard;
+		List<GameMode> list2 = list;
+		if (_lobby.Players.All((StartRunLobbyPlayer p) => p.unlockState.UnlockedEpochs.Contains(EpochModel.GetId<BlitzEpoch>())))
+		{
+			list2.Add(GameMode.Blitz);
+		}
+		if (_lobby.Players.All((StartRunLobbyPlayer p) => p.unlockState.UnlockedEpochs.Contains(EpochModel.GetId<DreadEpoch>())))
+		{
+			list2.Add(GameMode.Dread);
+		}
+		_gameModeDropdown.SetOptions(list2);
+		_gameModeDropdownPositioner.Visible = list2.Count > 1;
+		_gameModeDropdown.Visible = list2.Count > 1;
+		if (_gameModeDropdown.Visible)
+		{
+			_gameModeDropdown.FocusNeighborBottom = _charButtonContainer.GetChild<NCharacterSelectButton>(0).GetPath();
+			_seedInput.FocusNeighborLeft = _gameModeDropdown.GetPath();
+			{
+				foreach (NCharacterSelectButton item in _charButtonContainer.GetChildren().OfType<NCharacterSelectButton>())
+				{
+					item.FocusNeighborTop = _gameModeDropdown.GetPath();
+				}
+				return;
+			}
+		}
+		_seedInput.FocusNeighborLeft = _seedInput.GetPath();
+		foreach (NCharacterSelectButton item2 in _charButtonContainer.GetChildren().OfType<NCharacterSelectButton>())
+		{
+			item2.FocusNeighborTop = _seedInput.GetPath();
+		}
+	}
+
 	private void AfterInitialized()
 	{
-		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.Players.Select((LobbyPlayer p) => p.id));
+		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.Players.Select((StartRunLobbyPlayer p) => p.id));
 		NGame.Instance.ReactionContainer.InitializeNetworking(_lobby.NetService);
 		NGame.Instance.TimeoutOverlay.Initialize(_lobby.NetService, isGameLevel: true);
+		_lobby.PlayerFailedToConnect += RemoteClientFailedToConnectToLocalHost;
 		UpdateRichPresence();
+		UpdateGameModeDropdownOptionsAndVisibility();
 		if (!string.IsNullOrEmpty(_seedInput.Text))
 		{
 			_lobby.SetSeed(_seedInput.Text);
@@ -752,8 +926,8 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		MultiplayerUiMode uiMode = _uiMode;
 		if ((uint)(uiMode - 1) <= 1u)
 		{
-			_modifiersHotkeyIcon.Visible = NControllerManager.Instance.IsUsingController;
-			_modifiersHotkeyIcon.Texture = NInputManager.Instance.GetHotkeyIcon(ModifiersHotkey);
+			_modifiersHotkeyIcon.Visible = NControllerManager.Instance.IsUsingDirectionalNavigation;
+			_modifiersHotkeyIcon.UpdateInput(ModifiersHotkey);
 		}
 		else
 		{
@@ -782,7 +956,7 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(24);
+		List<MethodInfo> list = new List<MethodInfo>(30);
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.InitializeSingleplayer, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -798,6 +972,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		list.Add(new MethodInfo(MethodName.DebugUnlockAllCharacters, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnSubmenuOpened, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnSubmenuClosed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnRandomizePressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.RandomizeLocalCharacter, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnEmbarkPressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -817,12 +996,19 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			new PropertyInfo(Variant.Type.Int, "error", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.GetModifiersString, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.SelectCharacter, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "charSelectButton", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnAscensionPanelLevelChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnModifiersListChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.MaxAscensionChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.AscensionChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SeedChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ModifiersChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.GameModeChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnGameModeDropdownChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.UpdateGameModeDropdownOptionsAndVisibility, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.AfterInitialized, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateControllerButton, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.TryFocusOnModifiersList, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -886,6 +1072,18 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.OnRandomizePressed && args.Count == 1)
+		{
+			OnRandomizePressed(VariantUtils.ConvertTo<NButton>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.RandomizeLocalCharacter && args.Count == 0)
+		{
+			RandomizeLocalCharacter();
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.OnEmbarkPressed && args.Count == 1)
 		{
 			OnEmbarkPressed(VariantUtils.ConvertTo<NButton>(in args[0]));
@@ -921,6 +1119,12 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			ret = VariantUtils.CreateFrom<string>(GetModifiersString());
 			return true;
 		}
+		if (method == MethodName.SelectCharacter && args.Count == 1)
+		{
+			SelectCharacter(VariantUtils.ConvertTo<NCharacterSelectButton>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.OnAscensionPanelLevelChanged && args.Count == 0)
 		{
 			OnAscensionPanelLevelChanged();
@@ -954,6 +1158,24 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		if (method == MethodName.ModifiersChanged && args.Count == 0)
 		{
 			ModifiersChanged();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.GameModeChanged && args.Count == 0)
+		{
+			GameModeChanged();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnGameModeDropdownChanged && args.Count == 0)
+		{
+			OnGameModeDropdownChanged();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.UpdateGameModeDropdownOptionsAndVisibility && args.Count == 0)
+		{
+			UpdateGameModeDropdownOptionsAndVisibility();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -1030,6 +1252,14 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		{
 			return true;
 		}
+		if (method == MethodName.OnRandomizePressed)
+		{
+			return true;
+		}
+		if (method == MethodName.RandomizeLocalCharacter)
+		{
+			return true;
+		}
 		if (method == MethodName.OnEmbarkPressed)
 		{
 			return true;
@@ -1054,6 +1284,10 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		{
 			return true;
 		}
+		if (method == MethodName.SelectCharacter)
+		{
+			return true;
+		}
 		if (method == MethodName.OnAscensionPanelLevelChanged)
 		{
 			return true;
@@ -1075,6 +1309,18 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			return true;
 		}
 		if (method == MethodName.ModifiersChanged)
+		{
+			return true;
+		}
+		if (method == MethodName.GameModeChanged)
+		{
+			return true;
+		}
+		if (method == MethodName.OnGameModeDropdownChanged)
+		{
+			return true;
+		}
+		if (method == MethodName.UpdateGameModeDropdownOptionsAndVisibility)
 		{
 			return true;
 		}
@@ -1110,6 +1356,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		if (name == PropertyName._charButtonContainer)
 		{
 			_charButtonContainer = VariantUtils.ConvertTo<Control>(in value);
+			return true;
+		}
+		if (name == PropertyName._randomizeButton)
+		{
+			_randomizeButton = VariantUtils.ConvertTo<NCustomRunRandomizeButton>(in value);
 			return true;
 		}
 		if (name == PropertyName._confirmButton)
@@ -1154,7 +1405,17 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		}
 		if (name == PropertyName._modifiersHotkeyIcon)
 		{
-			_modifiersHotkeyIcon = VariantUtils.ConvertTo<TextureRect>(in value);
+			_modifiersHotkeyIcon = VariantUtils.ConvertTo<NHotkeyIcon>(in value);
+			return true;
+		}
+		if (name == PropertyName._gameModeDropdownPositioner)
+		{
+			_gameModeDropdownPositioner = VariantUtils.ConvertTo<NDropdownPositioner>(in value);
+			return true;
+		}
+		if (name == PropertyName._gameModeDropdown)
+		{
+			_gameModeDropdown = VariantUtils.ConvertTo<NCustomGameModeDropdown>(in value);
 			return true;
 		}
 		if (name == PropertyName._uiMode)
@@ -1192,6 +1453,11 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		if (name == PropertyName._charButtonContainer)
 		{
 			value = VariantUtils.CreateFrom(in _charButtonContainer);
+			return true;
+		}
+		if (name == PropertyName._randomizeButton)
+		{
+			value = VariantUtils.CreateFrom(in _randomizeButton);
 			return true;
 		}
 		if (name == PropertyName._confirmButton)
@@ -1239,6 +1505,16 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 			value = VariantUtils.CreateFrom(in _modifiersHotkeyIcon);
 			return true;
 		}
+		if (name == PropertyName._gameModeDropdownPositioner)
+		{
+			value = VariantUtils.CreateFrom(in _gameModeDropdownPositioner);
+			return true;
+		}
+		if (name == PropertyName._gameModeDropdown)
+		{
+			value = VariantUtils.CreateFrom(in _gameModeDropdown);
+			return true;
+		}
 		if (name == PropertyName._uiMode)
 		{
 			value = VariantUtils.CreateFrom(in _uiMode);
@@ -1260,6 +1536,7 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._disclaimer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._selectedButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._charButtonContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._randomizeButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._confirmButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._backButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._unreadyButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1269,6 +1546,8 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._remotePlayerContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._modifiersList, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._modifiersHotkeyIcon, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._gameModeDropdownPositioner, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._gameModeDropdown, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.InitialFocusedControl, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Int, PropertyName._uiMode, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
@@ -1282,6 +1561,7 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		info.AddProperty(PropertyName._disclaimer, Variant.From(in _disclaimer));
 		info.AddProperty(PropertyName._selectedButton, Variant.From(in _selectedButton));
 		info.AddProperty(PropertyName._charButtonContainer, Variant.From(in _charButtonContainer));
+		info.AddProperty(PropertyName._randomizeButton, Variant.From(in _randomizeButton));
 		info.AddProperty(PropertyName._confirmButton, Variant.From(in _confirmButton));
 		info.AddProperty(PropertyName._backButton, Variant.From(in _backButton));
 		info.AddProperty(PropertyName._unreadyButton, Variant.From(in _unreadyButton));
@@ -1291,6 +1571,8 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		info.AddProperty(PropertyName._remotePlayerContainer, Variant.From(in _remotePlayerContainer));
 		info.AddProperty(PropertyName._modifiersList, Variant.From(in _modifiersList));
 		info.AddProperty(PropertyName._modifiersHotkeyIcon, Variant.From(in _modifiersHotkeyIcon));
+		info.AddProperty(PropertyName._gameModeDropdownPositioner, Variant.From(in _gameModeDropdownPositioner));
+		info.AddProperty(PropertyName._gameModeDropdown, Variant.From(in _gameModeDropdown));
 		info.AddProperty(PropertyName._uiMode, Variant.From(in _uiMode));
 	}
 
@@ -1311,45 +1593,57 @@ public class NCustomRunScreen : NSubmenu, IStartRunLobbyListener, ICharacterSele
 		{
 			_charButtonContainer = value3.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._confirmButton, out var value4))
+		if (info.TryGetProperty(PropertyName._randomizeButton, out var value4))
 		{
-			_confirmButton = value4.As<NConfirmButton>();
+			_randomizeButton = value4.As<NCustomRunRandomizeButton>();
 		}
-		if (info.TryGetProperty(PropertyName._backButton, out var value5))
+		if (info.TryGetProperty(PropertyName._confirmButton, out var value5))
 		{
-			_backButton = value5.As<NBackButton>();
+			_confirmButton = value5.As<NConfirmButton>();
 		}
-		if (info.TryGetProperty(PropertyName._unreadyButton, out var value6))
+		if (info.TryGetProperty(PropertyName._backButton, out var value6))
 		{
-			_unreadyButton = value6.As<NBackButton>();
+			_backButton = value6.As<NBackButton>();
 		}
-		if (info.TryGetProperty(PropertyName._ascensionPanel, out var value7))
+		if (info.TryGetProperty(PropertyName._unreadyButton, out var value7))
 		{
-			_ascensionPanel = value7.As<NAscensionPanel>();
+			_unreadyButton = value7.As<NBackButton>();
 		}
-		if (info.TryGetProperty(PropertyName._readyAndWaitingContainer, out var value8))
+		if (info.TryGetProperty(PropertyName._ascensionPanel, out var value8))
 		{
-			_readyAndWaitingContainer = value8.As<Control>();
+			_ascensionPanel = value8.As<NAscensionPanel>();
 		}
-		if (info.TryGetProperty(PropertyName._seedInput, out var value9))
+		if (info.TryGetProperty(PropertyName._readyAndWaitingContainer, out var value9))
 		{
-			_seedInput = value9.As<LineEdit>();
+			_readyAndWaitingContainer = value9.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._remotePlayerContainer, out var value10))
+		if (info.TryGetProperty(PropertyName._seedInput, out var value10))
 		{
-			_remotePlayerContainer = value10.As<NRemoteLobbyPlayerContainer>();
+			_seedInput = value10.As<LineEdit>();
 		}
-		if (info.TryGetProperty(PropertyName._modifiersList, out var value11))
+		if (info.TryGetProperty(PropertyName._remotePlayerContainer, out var value11))
 		{
-			_modifiersList = value11.As<NCustomRunModifiersList>();
+			_remotePlayerContainer = value11.As<NRemoteLobbyPlayerContainer>();
 		}
-		if (info.TryGetProperty(PropertyName._modifiersHotkeyIcon, out var value12))
+		if (info.TryGetProperty(PropertyName._modifiersList, out var value12))
 		{
-			_modifiersHotkeyIcon = value12.As<TextureRect>();
+			_modifiersList = value12.As<NCustomRunModifiersList>();
 		}
-		if (info.TryGetProperty(PropertyName._uiMode, out var value13))
+		if (info.TryGetProperty(PropertyName._modifiersHotkeyIcon, out var value13))
 		{
-			_uiMode = value13.As<MultiplayerUiMode>();
+			_modifiersHotkeyIcon = value13.As<NHotkeyIcon>();
+		}
+		if (info.TryGetProperty(PropertyName._gameModeDropdownPositioner, out var value14))
+		{
+			_gameModeDropdownPositioner = value14.As<NDropdownPositioner>();
+		}
+		if (info.TryGetProperty(PropertyName._gameModeDropdown, out var value15))
+		{
+			_gameModeDropdown = value15.As<NCustomGameModeDropdown>();
+		}
+		if (info.TryGetProperty(PropertyName._uiMode, out var value16))
+		{
+			_uiMode = value16.As<MultiplayerUiMode>();
 		}
 	}
 }

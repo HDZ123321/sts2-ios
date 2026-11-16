@@ -47,8 +47,8 @@ public sealed class Permafrost : RelicModel
 		if (CombatManager.Instance.IsInProgress && cardPlay.Card.Owner == base.Owner && cardPlay.Card.Type == CardType.Power && !ActivatedThisCombat)
 		{
 			Flash();
-			await CreatureCmd.GainBlock(base.Owner.Creature, base.DynamicVars.Block, null);
 			ActivatedThisCombat = true;
+			await CreatureCmd.GainBlock(base.Owner.Creature, base.DynamicVars.Block, null);
 		}
 	}
 }

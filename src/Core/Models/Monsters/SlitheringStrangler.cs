@@ -95,7 +95,7 @@ public sealed class SlitheringStrangler : MonsterModel
 		creatureAnimator.AddAnyState("Attack", animState4);
 		creatureAnimator.AddAnyState("Dead", state);
 		creatureAnimator.AddAnyState("Hit", animState5);
-		creatureAnimator.AddAnyState("AttackDefendTrigger", animState5);
+		creatureAnimator.AddAnyState("AttackDefendTrigger", animState3);
 		return creatureAnimator;
 	}
 }

@@ -9,12 +9,17 @@ public static class SharedMigrationHelper
 	/// <summary>
 	/// Renames used by SerializableRun V15-&gt;V16 and RunHistory V8-&gt;V9.
 	/// </summary>
-	public static readonly IReadOnlyDictionary<string, string> V100Renames = new Dictionary<string, string>
+	public static readonly IReadOnlyDictionary<string, string> v100Renames = new Dictionary<string, string>
 	{
 		["CARD.PREPARE"] = "CARD.PREPARED",
 		["ENCOUNTER.TOADPOLES_NORMAL"] = "ENCOUNTER.SEAPUNK_NORMAL",
 		["MONSTER.DOOR"] = "MONSTER.DEPRECATED_MONSTER"
 	};
+
+	/// <summary>
+	/// Renames used by SerializableRun V19-&gt;V20 and RunHistory V9-&gt;V10.
+	/// </summary>
+	public static readonly IReadOnlyDictionary<string, string> v110Renames = new Dictionary<string, string> { ["CARD.SCARE"] = "CARD.SIDESTEP" };
 
 	/// <summary>
 	/// Recursively walks a JSON tree and replaces string values found in the renames dictionary.

@@ -8,6 +8,8 @@ public static class MessageTypes
 {
 	private static NetTypeCache<INetMessage>? _cache;
 
+	public static int Count => (_cache ?? throw new InvalidOperationException()).Count;
+
 	public static void Initialize()
 	{
 		List<Type> list = new List<Type>();

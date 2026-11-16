@@ -28,6 +28,8 @@ public sealed class CorpseSlug : MonsterModel
 
 	private const string _attackLightSfx = "event:/sfx/enemy/enemy_attacks/corpse_slugs/corpse_slugs_attack_light";
 
+	private const string _goopSfx = "event:/sfx/enemy/enemy_attacks/corpse_slugs/corpse_slugs_goop";
+
 	public const string ravenousSfx = "event:/sfx/enemy/enemy_attacks/corpse_slugs/corpse_slugs_ravenous";
 
 	public const string ravenousUpSfxDouble = "event:/sfx/enemy/enemy_attacks/corpse_slugs/corpse_slugs_ravenous_up_double";
@@ -129,6 +131,7 @@ public sealed class CorpseSlug : MonsterModel
 	private async Task GoopMove(IReadOnlyList<Creature> targets)
 	{
 		await CreatureCmd.TriggerAnim(base.Creature, "Attack", 0.2f);
+		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/corpse_slugs/corpse_slugs_goop");
 		await PowerCmd.Apply<FrailPower>(new ThrowingPlayerChoiceContext(), targets, GoopFrailAmt, base.Creature, null);
 	}
 

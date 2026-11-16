@@ -51,7 +51,7 @@ public sealed class Tunneler : MonsterModel
 
 	private int BlockGain => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 37, 32);
 
-	private int BelowDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 26, 23);
+	private int FromBelowDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 28, 24);
 
 	public bool IsStunned
 	{
@@ -71,7 +71,7 @@ public sealed class Tunneler : MonsterModel
 		List<MonsterState> list = new List<MonsterState>();
 		MoveState moveState = new MoveState("BITE_MOVE", BiteMove, new SingleAttackIntent(BiteDamage));
 		MoveState moveState2 = new MoveState("BURROW_MOVE", BurrowMove, new BuffIntent(), new DefendIntent());
-		MoveState moveState3 = new MoveState("BELOW_MOVE", BelowMove, new SingleAttackIntent(BelowDamage));
+		MoveState moveState3 = new MoveState("FROM_BELOW_MOVE", FromBelowMove, new SingleAttackIntent(FromBelowDamage));
 		MoveState moveState4 = new MoveState("DIZZY_MOVE", StillDizzyMove, new StunIntent());
 		moveState.FollowUpState = moveState2;
 		moveState2.FollowUpState = moveState3;
@@ -86,6 +86,7 @@ public sealed class Tunneler : MonsterModel
 
 	private async Task BiteMove(IReadOnlyList<Creature> targets)
 	{
+		IsStunned = false;
 		await DamageCmd.Attack(BiteDamage).FromMonster(this).WithAttackerAnim("Attack", 0.25f)
 			.WithAttackerFx(null, AttackSfx)
 			.WithHitFx("vfx/vfx_attack_slash")
@@ -94,14 +95,16 @@ public sealed class Tunneler : MonsterModel
 
 	private async Task BurrowMove(IReadOnlyList<Creature> targets)
 	{
+		IsStunned = false;
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/burrowing_bug/burrowing_bug_burrow");
 		await CreatureCmd.TriggerAnim(base.Creature, "Burrow", 0.25f);
 		await PowerCmd.Apply<BurrowedPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
 		await CreatureCmd.GainBlock(base.Creature, BlockGain, ValueProp.Move, null);
 	}
 
-	private async Task BelowMove(IReadOnlyList<Creature> targets)
+	private async Task FromBelowMove(IReadOnlyList<Creature> targets)
 	{
+		IsStunned = false;
 		if (TestMode.IsOff)
 		{
 			NCreature creatureNode = base.Creature.GetCreatureNode();
@@ -110,7 +113,12 @@ public sealed class Tunneler : MonsterModel
 			{
 				if (targets.Count > 0)
 				{
-					node2D.Position = Vector2.Right * (targets[0].GetCreatureNode().GlobalPosition.X - creatureNode.GlobalPosition.X) * 3f / creatureNode.Visuals.Scale;
+					NCreature creatureNode2 = targets[0].GetCreatureNode();
+					if (creatureNode2 != null)
+					{
+						float num = 400f * creatureNode.Visuals.Scale.X;
+						node2D.GlobalPosition = new Vector2(creatureNode2.GlobalPosition.X + num, node2D.GlobalPosition.Y);
+					}
 				}
 				else
 				{
@@ -121,7 +129,8 @@ public sealed class Tunneler : MonsterModel
 			await CreatureCmd.TriggerAnim(base.Creature, "BurrowAttack", 0.25f);
 			await Cmd.Wait(1f);
 		}
-		await DamageCmd.Attack(BelowDamage).FromMonster(this).WithHitFx("vfx/vfx_attack_slash")
+		await DamageCmd.Attack(FromBelowDamage).FromMonster(this).WithNoAttackerAnim()
+			.WithHitFx("vfx/vfx_attack_slash")
 			.Execute(null);
 	}
 
@@ -163,16 +172,18 @@ public sealed class Tunneler : MonsterModel
 		creatureAnimator.AddAnyState("Hit", animState5, () => !base.Creature.HasPower<BurrowedPower>() && IsStunned);
 		creatureAnimator.AddAnyState("Dead", state, () => !base.Creature.HasPower<BurrowedPower>());
 		creatureAnimator.AddAnyState("Dead", state2, () => base.Creature.HasPower<BurrowedPower>());
-		creatureAnimator.AddAnyState("Attack", animState3, () => !base.Creature.HasPower<BurrowedPower>());
-		creatureAnimator.AddAnyState("BurrowAttack", animState8, () => base.Creature.HasPower<BurrowedPower>());
+		creatureAnimator.AddAnyState("Attack", animState3);
+		creatureAnimator.AddAnyState("BurrowAttack", animState8);
 		creatureAnimator.AddAnyState("Burrow", animState7);
 		creatureAnimator.AddAnyState("Stun", animState4);
 		creatureAnimator.AddAnyState("WakeUp", animState6);
 		return creatureAnimator;
 	}
 
-	protected override bool ShouldShowMoveInBestiary(string moveStateId)
+	public override List<BestiaryMonsterMove> GenerateBestiaryMoveList(NCreatureVisuals? creatureVisuals)
 	{
-		return moveStateId != "DIZZY_MOVE";
+		List<BestiaryMonsterMove> list = base.GenerateBestiaryMoveList(creatureVisuals);
+		list.Insert(3, BestiaryMonsterMove.FromStun(GetStunned));
+		return list;
 	}
 }

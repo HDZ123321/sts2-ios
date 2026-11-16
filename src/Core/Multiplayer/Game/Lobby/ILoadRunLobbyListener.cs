@@ -13,8 +13,7 @@ public interface ILoadRunLobbyListener
 	/// If we are a client newly connecting to a host, and there are already players in the lobby, then this is called
 	/// once for each player that is already in the lobby.
 	/// </summary>
-	/// <param name="playerId">The ID of the newly connected player.</param>
-	void PlayerConnected(ulong playerId);
+	void PlayerConnected(LoadRunLobbyPlayer player);
 
 	/// <summary>
 	/// Called when another player has left the lobby.

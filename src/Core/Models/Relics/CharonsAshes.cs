@@ -20,7 +20,7 @@ public sealed class CharonsAshes : RelicModel
 		{
 			Flash();
 			DamageVar damage = base.DynamicVars.Damage;
-			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.HittableEnemies, damage.BaseValue, damage.Props, base.Owner.Creature, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.HittableEnemies, damage.BaseValue, damage.Props, base.Owner.Creature);
 		}
 	}
 }

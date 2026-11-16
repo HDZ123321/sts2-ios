@@ -196,34 +196,31 @@ public class NChooseARelicSelection : Control, IOverlayScreen, IScreenContext
 		for (int i = 0; i < _relics.Count; i++)
 		{
 			RelicModel relic = _relics[i];
-			NRelicBasicHolder holder = NRelicBasicHolder.Create(relic);
-			holder.Scale = Vector2.One * 2f;
-			_relicRow.AddChildSafely(holder);
-			holder.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(delegate
-			{
-				SelectHolder(holder);
-			}));
+			NRelicBasicHolder nRelicBasicHolder = NRelicBasicHolder.Create(relic);
+			nRelicBasicHolder.Scale = Vector2.One * 2f;
+			_relicRow.AddChildSafely(nRelicBasicHolder);
+			nRelicBasicHolder.Connect(NClickableControl.SignalName.Released, Callable.From<NRelicBasicHolder>(SelectHolder));
 			_cardTween = CreateTween().SetParallel();
-			_cardTween.TweenProperty(holder, "position", holder.Position + vector + Vector2.Right * 200f * i, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
-			_cardTween.TweenProperty(holder, "modulate", Colors.White, 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
+			_cardTween.TweenProperty(nRelicBasicHolder, "position", nRelicBasicHolder.Position + vector + Vector2.Right * 200f * i, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
+			_cardTween.TweenProperty(nRelicBasicHolder, "modulate", Colors.White, 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
 				.From(Colors.Black);
 		}
 		_skipButton = GetNode<NChoiceSelectionSkipButton>("SkipButton");
 		_skipButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnSkipButtonReleased));
 		_skipButton.AnimateIn();
 		List<NRelicBasicHolder> list = _relicRow.GetChildren().OfType<NRelicBasicHolder>().ToList();
-		NRelicBasicHolder nRelicBasicHolder = _relicRow.GetChildren().OfType<NRelicBasicHolder>().ToList()[list.Count / 2];
-		_skipButton.FocusNeighborTop = nRelicBasicHolder.GetPath();
+		NRelicBasicHolder nRelicBasicHolder2 = _relicRow.GetChildren().OfType<NRelicBasicHolder>().ToList()[list.Count / 2];
+		_skipButton.FocusNeighborTop = nRelicBasicHolder2.GetPath();
 		_skipButton.FocusNeighborBottom = _skipButton.GetPath();
 		_skipButton.FocusNeighborLeft = _skipButton.GetPath();
 		_skipButton.FocusNeighborRight = _skipButton.GetPath();
-		for (int num = 0; num < _relicRow.GetChildCount(); num++)
+		for (int j = 0; j < _relicRow.GetChildCount(); j++)
 		{
-			Control child = _relicRow.GetChild<Control>(num);
+			Control child = _relicRow.GetChild<Control>(j);
 			child.FocusNeighborBottom = child.GetPath();
 			child.FocusNeighborTop = child.GetPath();
-			child.FocusNeighborLeft = ((num > 0) ? _relicRow.GetChild(num - 1).GetPath() : _relicRow.GetChild(_relicRow.GetChildCount() - 1).GetPath());
-			child.FocusNeighborRight = ((num < _relicRow.GetChildCount() - 1) ? _relicRow.GetChild(num + 1).GetPath() : _relicRow.GetChild(0).GetPath());
+			child.FocusNeighborLeft = ((j > 0) ? _relicRow.GetChild(j - 1).GetPath() : _relicRow.GetChild(_relicRow.GetChildCount() - 1).GetPath());
+			child.FocusNeighborRight = ((j < _relicRow.GetChildCount() - 1) ? _relicRow.GetChild(j + 1).GetPath() : _relicRow.GetChild(0).GetPath());
 		}
 	}
 

@@ -9,35 +9,35 @@ namespace MegaCrit.Sts2.Core.Saves;
 public class SerializablePlayerRngSet : IPacketSerializable
 {
 	[JsonPropertyName("seed")]
-	public uint Seed { get; set; }
+	public ulong Seed { get; set; }
 
-	[JsonPropertyName("counters")]
-	public Dictionary<PlayerRngType, int> Counters { get; set; } = new Dictionary<PlayerRngType, int>();
+	[JsonPropertyName("rngs")]
+	public Dictionary<PlayerRngType, SerializableRng> Rngs { get; set; } = new Dictionary<PlayerRngType, SerializableRng>();
 
 	public void Serialize(PacketWriter writer)
 	{
-		writer.WriteUInt(Seed);
-		writer.WriteInt(Counters.Count, 8);
+		writer.WriteULong(Seed);
+		writer.WriteInt(Rngs.Count, 8);
 		PlayerRngType[] values = Enum.GetValues<PlayerRngType>();
 		foreach (PlayerRngType playerRngType in values)
 		{
-			if (Counters.TryGetValue(playerRngType, out var value))
+			if (Rngs.TryGetValue(playerRngType, out SerializableRng value))
 			{
 				writer.WriteEnum(playerRngType);
-				writer.WriteInt(value);
+				writer.Write(value);
 			}
 		}
 	}
 
 	public void Deserialize(PacketReader reader)
 	{
-		Seed = reader.ReadUInt();
+		Seed = reader.ReadULong();
 		int num = reader.ReadInt(8);
 		for (int i = 0; i < num; i++)
 		{
 			PlayerRngType key = reader.ReadEnum<PlayerRngType>();
-			int value = reader.ReadInt();
-			Counters[key] = value;
+			SerializableRng value = reader.Read<SerializableRng>();
+			Rngs[key] = value;
 		}
 	}
 }

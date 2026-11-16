@@ -16,5 +16,6 @@ public enum EncounterTag
 	Scrolls,
 	Seapunk,
 	Slugs,
-	Exoskeletons
+	Exoskeletons,
+	Jaxfruit
 }

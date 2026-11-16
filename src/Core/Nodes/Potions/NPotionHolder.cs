@@ -131,6 +131,11 @@ public class NPotionHolder : NClickableControl
 		public static readonly StringName HasPotion = "HasPotion";
 
 		/// <summary>
+		/// Cached name for the 'HoverTipPosition' property.
+		/// </summary>
+		public static readonly StringName HoverTipPosition = "HoverTipPosition";
+
+		/// <summary>
 		/// Cached name for the 'IsPotionUsable' property.
 		/// </summary>
 		public static readonly StringName IsPotionUsable = "IsPotionUsable";
@@ -144,6 +149,11 @@ public class NPotionHolder : NClickableControl
 		/// Cached name for the '_emptyIcon' field.
 		/// </summary>
 		public static readonly StringName _emptyIcon = "_emptyIcon";
+
+		/// <summary>
+		/// Cached name for the '_selectionReticle' field.
+		/// </summary>
+		public static readonly StringName _selectionReticle = "_selectionReticle";
 
 		/// <summary>
 		/// Cached name for the '_popup' field.
@@ -192,6 +202,8 @@ public class NPotionHolder : NClickableControl
 
 	private TextureRect _emptyIcon;
 
+	private NSelectionReticle _selectionReticle;
+
 	private NPotionPopup? _popup;
 
 	private bool _potionTargeting;
@@ -216,6 +228,11 @@ public class NPotionHolder : NClickableControl
 
 	public bool HasPotion => Potion != null;
 
+	/// <summary>
+	/// Just under the potion, wherever it is drawn: the potion belt draws it at 1x, the epoch unlock screen at 3x.
+	/// </summary>
+	private Vector2 HoverTipPosition => base.GlobalPosition + Vector2.Down * base.Size.Y * Mathf.Max(1.5f, base.Scale.Y);
+
 	public bool IsPotionUsable => _popup.IsUsable;
 
 	private static string ScenePath => SceneHelper.GetScenePath("/potions/potion_holder");
@@ -237,6 +254,7 @@ public class NPotionHolder : NClickableControl
 	public override void _Ready()
 	{
 		_emptyIcon = GetNode<TextureRect>("%EmptyIcon");
+		_selectionReticle = GetNode<NSelectionReticle>("%SelectionReticle");
 		ConnectSignals();
 	}
 
@@ -262,15 +280,17 @@ public class NPotionHolder : NClickableControl
 			NDebugAudioManager.Instance?.Play(Rng.Chaotic.NextItem(TmpSfx.PotionSlosh), 0.5f, PitchVariance.Large);
 			if (!GodotObject.IsInstanceValid(_popup) || _popup.IsMarkedForRemoval)
 			{
-				NHoverTipSet.CreateAndShow(this, Potion.Model.HoverTips, HoverTipAlignment.Center)?.SetGlobalPosition(base.GlobalPosition + Vector2.Down * base.Size.Y * Mathf.Max(1.5f, base.Scale.Y));
+				NHoverTipSet.CreateAndShow(this, Potion.Model.HoverTips)?.SetAlignmentBelow(HoverTipPosition);
 			}
 		}
 		else
 		{
 			_hoverTween.TweenProperty(_emptyIcon, "scale", _potionScale * 1.15f, 0.05);
-			NHoverTipSet nHoverTipSet = NHoverTipSet.CreateAndShow(this, EmptyHoverTip);
-			nHoverTipSet?.SetGlobalPosition(base.GlobalPosition + Vector2.Down * base.Size.Y * Mathf.Max(1.5f, base.Scale.Y));
-			nHoverTipSet?.SetAlignment(this, HoverTipAlignment.Center);
+			NHoverTipSet.CreateAndShow(this, EmptyHoverTip)?.SetAlignmentBelow(HoverTipPosition);
+		}
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
+		{
+			_selectionReticle.OnSelect();
 		}
 	}
 
@@ -292,6 +312,7 @@ public class NPotionHolder : NClickableControl
 			_hoverTween = CreateTween().SetParallel();
 			_hoverTween.TweenProperty(_emptyIcon, "scale", _potionScale, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 		}
+		_selectionReticle.OnDeselect();
 	}
 
 	protected override void OnPress()
@@ -392,9 +413,7 @@ public class NPotionHolder : NClickableControl
 		}));
 		if (base.IsFocused)
 		{
-			NHoverTipSet nHoverTipSet = NHoverTipSet.CreateAndShow(this, EmptyHoverTip);
-			nHoverTipSet?.SetGlobalPosition(base.GlobalPosition + Vector2.Down * base.Size.Y * 1.5f);
-			nHoverTipSet?.SetAlignment(this, HoverTipAlignment.Center);
+			NHoverTipSet.CreateAndShow(this, EmptyHoverTip)?.SetAlignmentBelow(HoverTipPosition);
 		}
 		_emptyPotionTween?.Kill();
 		_emptyPotionTween = CreateTween();
@@ -459,10 +478,10 @@ public class NPotionHolder : NClickableControl
 	{
 		Vector2 startPosition = base.GlobalPosition + Vector2.Right * base.Size.X * 0.5f + Vector2.Down * 50f;
 		NTargetManager instance = NTargetManager.Instance;
-		bool isUsingController = NControllerManager.Instance.IsUsingController;
-		instance.StartTargeting(targetType, startPosition, isUsingController ? TargetMode.Controller : TargetMode.ClickMouseToTarget, ShouldCancelTargeting, null);
+		bool isUsingDirectionalNavigation = NControllerManager.Instance.IsUsingDirectionalNavigation;
+		instance.StartTargeting(targetType, startPosition, isUsingDirectionalNavigation ? TargetMode.Controller : TargetMode.ClickMouseToTarget, ShouldCancelTargeting, null);
 		Creature creature = Potion.Model.Owner.Creature;
-		if (isUsingController && CombatManager.Instance.IsInProgress)
+		if (isUsingDirectionalNavigation && CombatManager.Instance.IsInProgress)
 		{
 			ICombatState combatState = creature.CombatState;
 			List<Creature> source = (targetType switch
@@ -474,7 +493,7 @@ public class NPotionHolder : NClickableControl
 			NCombatRoom.Instance.RestrictControllerNavigation(source.Select((Creature c) => NCombatRoom.Instance.GetCreatureNode(c).Hitbox));
 			NCombatRoom.Instance.GetCreatureNode(source.First()).Hitbox.TryGrabFocus();
 		}
-		else if (isUsingController && targetType == TargetType.AnyPlayer)
+		else if (isUsingDirectionalNavigation && targetType == TargetType.AnyPlayer)
 		{
 			NMultiplayerPlayerStateContainer multiplayerPlayerContainer = NRun.Instance.GlobalUi.MultiplayerPlayerContainer;
 			multiplayerPlayerContainer.FirstPlayerState?.Hitbox.TryGrabFocus();
@@ -484,7 +503,7 @@ public class NPotionHolder : NClickableControl
 		FocusBehaviorRecursiveEnum? savedFocusBehavior = null;
 		Control merchantScreenContext = null;
 		bool merchantButtonWasDisabled = false;
-		if (isUsingController && Potion.Model is FoulPotion)
+		if (isUsingDirectionalNavigation && Potion.Model is FoulPotion)
 		{
 			(merchantButton, merchantScreenContext) = FoulPotion.GetFoulPotionMerchantTarget(creature.Player.RunState.CurrentRoom);
 			if (merchantButton != null)
@@ -492,7 +511,7 @@ public class NPotionHolder : NClickableControl
 				if (merchantScreenContext != null)
 				{
 					savedFocusBehavior = merchantScreenContext.FocusBehaviorRecursive;
-					merchantScreenContext.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Enabled;
+					merchantScreenContext.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Inherited;
 				}
 				if (!merchantButton.IsEnabled)
 				{
@@ -508,7 +527,7 @@ public class NPotionHolder : NClickableControl
 			Node node = await instance.SelectionFinished();
 			NCombatRoom.Instance?.EnableControllerNavigation();
 			NRun.Instance.GlobalUi.MultiplayerPlayerContainer.UnlockNavigation();
-			if (node != null)
+			if (node != null && !RunManager.Instance.IsPotionUseLocked)
 			{
 				Creature creature2;
 				if (!(node is NCreature nCreature))
@@ -805,6 +824,11 @@ public class NPotionHolder : NClickableControl
 			_emptyIcon = VariantUtils.ConvertTo<TextureRect>(in value);
 			return true;
 		}
+		if (name == PropertyName._selectionReticle)
+		{
+			_selectionReticle = VariantUtils.ConvertTo<NSelectionReticle>(in value);
+			return true;
+		}
 		if (name == PropertyName._popup)
 		{
 			_popup = VariantUtils.ConvertTo<NPotionPopup>(in value);
@@ -859,6 +883,11 @@ public class NPotionHolder : NClickableControl
 			value = VariantUtils.CreateFrom(in from);
 			return true;
 		}
+		if (name == PropertyName.HoverTipPosition)
+		{
+			value = VariantUtils.CreateFrom<Vector2>(HoverTipPosition);
+			return true;
+		}
 		if (name == PropertyName.IsPotionUsable)
 		{
 			from = IsPotionUsable;
@@ -873,6 +902,11 @@ public class NPotionHolder : NClickableControl
 		if (name == PropertyName._emptyIcon)
 		{
 			value = VariantUtils.CreateFrom(in _emptyIcon);
+			return true;
+		}
+		if (name == PropertyName._selectionReticle)
+		{
+			value = VariantUtils.CreateFrom(in _selectionReticle);
 			return true;
 		}
 		if (name == PropertyName._popup)
@@ -925,7 +959,9 @@ public class NPotionHolder : NClickableControl
 		list.Add(new PropertyInfo(Variant.Type.Vector2, PropertyName._potionScale, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.Potion, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._emptyIcon, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._selectionReticle, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.HasPotion, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Vector2, PropertyName.HoverTipPosition, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._popup, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._potionTargeting, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._isUsable, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -945,6 +981,7 @@ public class NPotionHolder : NClickableControl
 		info.AddProperty(PropertyName.Potion, Variant.From<NPotion>(Potion));
 		info.AddProperty(PropertyName._potionScale, Variant.From(in _potionScale));
 		info.AddProperty(PropertyName._emptyIcon, Variant.From(in _emptyIcon));
+		info.AddProperty(PropertyName._selectionReticle, Variant.From(in _selectionReticle));
 		info.AddProperty(PropertyName._popup, Variant.From(in _popup));
 		info.AddProperty(PropertyName._potionTargeting, Variant.From(in _potionTargeting));
 		info.AddProperty(PropertyName._isUsable, Variant.From(in _isUsable));
@@ -971,33 +1008,37 @@ public class NPotionHolder : NClickableControl
 		{
 			_emptyIcon = value3.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._popup, out var value4))
+		if (info.TryGetProperty(PropertyName._selectionReticle, out var value4))
 		{
-			_popup = value4.As<NPotionPopup>();
+			_selectionReticle = value4.As<NSelectionReticle>();
 		}
-		if (info.TryGetProperty(PropertyName._potionTargeting, out var value5))
+		if (info.TryGetProperty(PropertyName._popup, out var value5))
 		{
-			_potionTargeting = value5.As<bool>();
+			_popup = value5.As<NPotionPopup>();
 		}
-		if (info.TryGetProperty(PropertyName._isUsable, out var value6))
+		if (info.TryGetProperty(PropertyName._potionTargeting, out var value6))
 		{
-			_isUsable = value6.As<bool>();
+			_potionTargeting = value6.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._emptyPotionTween, out var value7))
+		if (info.TryGetProperty(PropertyName._isUsable, out var value7))
 		{
-			_emptyPotionTween = value7.As<Tween>();
+			_isUsable = value7.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._hoverTween, out var value8))
+		if (info.TryGetProperty(PropertyName._emptyPotionTween, out var value8))
 		{
-			_hoverTween = value8.As<Tween>();
+			_emptyPotionTween = value8.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._disabledUntilPotionRemoved, out var value9))
+		if (info.TryGetProperty(PropertyName._hoverTween, out var value9))
 		{
-			_disabledUntilPotionRemoved = value9.As<bool>();
+			_hoverTween = value9.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._isFocused, out var value10))
+		if (info.TryGetProperty(PropertyName._disabledUntilPotionRemoved, out var value10))
 		{
-			_isFocused = value10.As<bool>();
+			_disabledUntilPotionRemoved = value10.As<bool>();
+		}
+		if (info.TryGetProperty(PropertyName._isFocused, out var value11))
+		{
+			_isFocused = value11.As<bool>();
 		}
 	}
 }

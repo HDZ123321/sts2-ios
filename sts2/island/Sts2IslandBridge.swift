@@ -24,8 +24,10 @@ private let islandStateFileName = "island_state.json"
 private let islandStatusFileName = "island_status.txt"
 private let islandStatusLimit = 8000
 
-/// Refuse to put a runaway file into the content state; the app side targets under 48 KB.
-private let islandAvatarLimit = 256 * 1024
+/// ActivityKit archives attributes plus content state into one blob and rejects anything over 4 KB
+/// with `ActivityAuthorizationError.attributesTooLarge`. IslandAvatar.cs targets 3 KB so the
+/// envelope fits; this is the hard ceiling we refuse to cross even if the file says otherwise.
+private let islandAvatarLimit = 3 * 1024
 
 private final class Sts2IslandPoller {
 	static let shared = Sts2IslandPoller()
@@ -89,7 +91,41 @@ private final class Sts2IslandPoller {
 			return
 		}
 		let avatar = avatarData(dir: dir, named: snapshot.avatar)
-		let state = Sts2RunActivityAttributes.ContentState(
+		let runId = "run-\(snapshot.act)-\(snapshot.character)"
+		if let existing = Activity<Sts2RunActivityAttributes>.activities.first {
+			lastActiveRunId = existing.attributes.runId
+			Task {
+				await existing.update(using: makeState(snapshot, avatar: avatar))
+			}
+			return
+		}
+		if lastActiveRunId == nil {
+			status("requesting activity hp=\(snapshot.hp)/\(snapshot.maxHp) floor=\(snapshot.floor) avatar=\(avatar?.count ?? 0)B")
+		}
+		// The portrait is a nicety; the island itself is the feature. If the payload is still over
+		// ActivityKit's 4 KB ceiling, retry without it rather than losing the activity entirely.
+		for attempt in [avatar, nil] as [Data?] {
+			do {
+				_ = try Activity<Sts2RunActivityAttributes>.request(
+					attributes: Sts2RunActivityAttributes(runId: runId),
+					contentState: makeState(snapshot, avatar: attempt),
+					pushType: nil)
+				lastActiveRunId = runId
+				status("activity started \(runId)\(attempt == nil ? " (no avatar)" : "")")
+				if attempt == nil {
+					// Remember the failure so the next run does not pay for the encode again.
+					avatarCache = (snapshot.avatar, avatarCache.stamp, nil)
+				}
+				return
+			} catch {
+				status("request failed\(attempt == nil ? " without avatar" : ""): \(error.localizedDescription)")
+			}
+		}
+	}
+
+	@available(iOS 16.1, *)
+	private func makeState(_ snapshot: Snapshot, avatar: Data?) -> Sts2RunActivityAttributes.ContentState {
+		Sts2RunActivityAttributes.ContentState(
 			hp: snapshot.hp,
 			maxHp: snapshot.maxHp,
 			floor: snapshot.floor,
@@ -97,27 +133,6 @@ private final class Sts2IslandPoller {
 			gold: snapshot.gold,
 			character: snapshot.character,
 			avatar: avatar)
-		let runId = "run-\(snapshot.act)-\(snapshot.character)"
-		if let existing = Activity<Sts2RunActivityAttributes>.activities.first {
-			lastActiveRunId = existing.attributes.runId
-			Task {
-				await existing.update(using: state)
-			}
-			return
-		}
-		if lastActiveRunId == nil {
-			status("requesting activity hp=\(snapshot.hp)/\(snapshot.maxHp) floor=\(snapshot.floor) avatar=\(avatar?.count ?? 0)B")
-		}
-		do {
-			_ = try Activity<Sts2RunActivityAttributes>.request(
-				attributes: Sts2RunActivityAttributes(runId: runId),
-				contentState: state,
-				pushType: nil)
-			lastActiveRunId = runId
-			status("activity started \(runId)")
-		} catch {
-			status("request failed: \(error.localizedDescription)")
-		}
 	}
 
 	@available(iOS 16.1, *)
@@ -180,9 +195,13 @@ private final class Sts2IslandPoller {
 
 	// MARK: - Where the reporter writes
 
-	/// Godot's iOS user directory is Library/Application Support/Godot/app_userdata/<project>/.
-	/// The project name is baked into the pck, so rather than hard-code it we look for the state
-	/// file (or the single app_userdata subdirectory, which is ours) and cache the result.
+	/// Godot's iOS `user://` is **NSDocumentDirectory**, not Application Support.
+	/// `OS_AppleEmbedded::get_user_data_dir()` in `os_ae.mm` calls
+	/// `NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)` and returns
+	/// the first object, so `user://island_state.json` lands in `Documents/`. The earlier order put
+	/// Application Support first, which only worked because the fallback chain eventually reached
+	/// Documents - and would lock onto the wrong directory the moment anything created
+	/// `Library/Application Support/Godot/app_userdata`. Documents now leads.
 	private func userDir() -> URL? {
 		if let cached = resolvedUserDir, (try? cached.checkResourceIsReachable()) == true {
 			let stateFile = cached.appendingPathComponent(islandStateFileName)
@@ -195,12 +214,12 @@ private final class Sts2IslandPoller {
 		}
 		let fm = FileManager.default
 		var candidateRoots: [URL] = []
+		if let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
+			candidateRoots.append(documents)
+		}
 		if let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
 			candidateRoots.append(appSupport.appendingPathComponent("Godot/app_userdata", isDirectory: true))
 			candidateRoots.append(appSupport)
-		}
-		if let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
-			candidateRoots.append(documents)
 		}
 		if let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first {
 			candidateRoots.append(caches)
@@ -209,6 +228,7 @@ private final class Sts2IslandPoller {
 			if let direct = stateFileIn(root) {
 				resolvedUserDir = direct
 				lastResolvedAt = Date()
+				status("state directory resolved to \(direct.path)")
 				return direct
 			}
 			guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else {
@@ -218,18 +238,17 @@ private final class Sts2IslandPoller {
 				if let found = stateFileIn(entry) {
 					resolvedUserDir = found
 					lastResolvedAt = Date()
+					status("state directory resolved to \(found.path)")
 					return found
 				}
 			}
 		}
-		// Nothing written yet. Fall back to the single app_userdata subdirectory so that the log
-		// file lands next to where the state file will appear.
-		if let godotRoot = candidateRoots.first,
-		   let entries = try? fm.contentsOfDirectory(at: godotRoot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]),
-		   entries.count == 1 {
-			resolvedUserDir = entries[0]
+		// Nothing written yet. Fall back to the first candidate so the log file lands next to where
+		// the state file will appear, and re-resolve on the next tick.
+		if let first = candidateRoots.first {
+			resolvedUserDir = first
 			lastResolvedAt = Date()
-			return entries[0]
+			return first
 		}
 		resolvedUserDir = nil
 		lastResolvedAt = Date()

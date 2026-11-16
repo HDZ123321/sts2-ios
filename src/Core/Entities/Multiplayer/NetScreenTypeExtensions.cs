@@ -15,7 +15,7 @@ public static class NetScreenTypeExtensions
 			NetScreenType.Map => "res://images/atlases/ui_atlas.sprites/top_bar/top_bar_map.tres", 
 			NetScreenType.Settings => "res://images/atlases/ui_atlas.sprites/top_bar/top_bar_settings.tres", 
 			NetScreenType.PauseMenu => "res://images/atlases/ui_atlas.sprites/top_bar/top_bar_settings.tres", 
-			NetScreenType.Compendium => "res://images/atlases/ui_atlas.sprites/compendium.tres", 
+			NetScreenType.Compendium => null, 
 			NetScreenType.DeckView => "res://images/atlases/ui_atlas.sprites/top_bar/top_bar_deck.tres", 
 			NetScreenType.CardPile => "res://images/packed/combat_ui/discard_pile.png", 
 			NetScreenType.SimpleCardsView => "res://images/ui/reward_screen/reward_icon_card.png", 

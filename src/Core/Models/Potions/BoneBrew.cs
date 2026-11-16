@@ -18,7 +18,7 @@ public sealed class BoneBrew : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new SummonVar(15m));
 
@@ -26,7 +26,8 @@ public sealed class BoneBrew : PotionModel
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, new Color("6876bd"));
-		await OstyCmd.Summon(choiceContext, base.Owner, base.DynamicVars.Summon.BaseValue, this);
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, new Color("6876bd"));
+		await OstyCmd.Summon(choiceContext, target.Player, base.DynamicVars.Summon.BaseValue, this);
 	}
 }

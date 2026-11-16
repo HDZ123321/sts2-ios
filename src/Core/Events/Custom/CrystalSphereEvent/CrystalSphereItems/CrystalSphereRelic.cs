@@ -14,7 +14,7 @@ public class CrystalSphereRelic : CrystalSphereItem
 
 	protected override string TexturePath => ImageHelper.GetImagePath("events/crystal_sphere/crystal_sphere_relic.png");
 
-	public override Reward? ToReward(Player owner, Rng rng)
+	public override Reward ToReward(Player owner, Rng rng)
 	{
 		return new RelicReward(owner).SetRng(rng);
 	}

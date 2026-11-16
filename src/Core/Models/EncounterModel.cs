@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Encounters;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Models.Dread;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
@@ -65,7 +66,7 @@ public abstract class EncounterModel : AbstractModel
 	{
 		get
 		{
-			double num = RoomType switch
+			decimal num = RoomType switch
 			{
 				RoomType.Monster => 10, 
 				RoomType.Elite => 35, 
@@ -74,7 +75,7 @@ public abstract class EncounterModel : AbstractModel
 			};
 			if (AscensionHelper.HasAscension(AscensionLevel.Poverty))
 			{
-				num *= AscensionHelper.PovertyAscensionGoldMultiplier;
+				num *= 0.75m;
 			}
 			return (int)num;
 		}
@@ -84,7 +85,7 @@ public abstract class EncounterModel : AbstractModel
 	{
 		get
 		{
-			double num = RoomType switch
+			decimal num = RoomType switch
 			{
 				RoomType.Monster => 20, 
 				RoomType.Elite => 45, 
@@ -93,7 +94,7 @@ public abstract class EncounterModel : AbstractModel
 			};
 			if (AscensionHelper.HasAscension(AscensionLevel.Poverty))
 			{
-				num *= AscensionHelper.PovertyAscensionGoldMultiplier;
+				num *= 0.75m;
 			}
 			return (int)num;
 		}
@@ -105,11 +106,6 @@ public abstract class EncounterModel : AbstractModel
 	/// back, and we use this field to specify the "Take your stolen card back" text for the reward button.
 	/// </summary>
 	public LocString? CustomRewardDescription => LocString.GetIfExists("encounters", base.Id.Entry + ".customRewardDescription");
-
-	/// <summary>
-	/// Is this an encounter that's used for debugging, testing, etc.?
-	/// </summary>
-	public virtual bool IsDebugEncounter => false;
 
 	public virtual IEnumerable<EncounterTag> Tags => Array.Empty<EncounterTag>();
 
@@ -183,7 +179,7 @@ public abstract class EncounterModel : AbstractModel
 	/// </summary>
 	public virtual bool FullyCenterPlayers => false;
 
-	private string ScenePath => SceneHelper.GetScenePath("encounters/" + base.Id.Entry.ToLowerInvariant());
+	protected virtual string ScenePath => SceneHelper.GetScenePath("encounters/" + base.Id.Entry.ToLowerInvariant());
 
 	protected virtual bool HasCustomBackground => false;
 
@@ -265,7 +261,7 @@ public abstract class EncounterModel : AbstractModel
 		}
 		if (_rng == null)
 		{
-			uint seed = (uint)((int)runState.Rng.Seed + runState.TotalFloor + StringHelper.GetDeterministicHashCode(base.Id.Entry));
+			ulong seed = (ulong)((long)runState.Rng.Seed + (long)runState.TotalFloor) + StringHelper.GetDeterministicHashCode(base.Id.Entry);
 			_rng = new Rng(seed);
 		}
 		_monstersWithSlots = GenerateMonsters();
@@ -347,10 +343,23 @@ public abstract class EncounterModel : AbstractModel
 	/// Should only be used for debugging (like in the `encounter` console command) to keep from
 	/// rolling the same
 	/// </summary>
-	public void DebugRandomizeRng()
+	/// <returns>The seed it picked, so a caller that has to record what it ran with can.</returns>
+	public ulong DebugRandomizeRng()
 	{
 		AssertMutable();
-		_rng = new Rng((uint)(DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds);
+		ulong num = MegaCrit.Sts2.Core.Random.Rng.CreateChaoticSeed();
+		_rng = new Rng(num);
+		return num;
+	}
+
+	/// <summary>
+	/// Pin the per-encounter RNG to a known seed, so two debug jumps to the same encounter compose
+	/// it the same way. Debug only, like <see cref="M:MegaCrit.Sts2.Core.Models.EncounterModel.DebugRandomizeRng" />.
+	/// </summary>
+	public void DebugSetRng(ulong seed)
+	{
+		AssertMutable();
+		_rng = new Rng(seed);
 	}
 
 	/// <summary>
@@ -415,5 +424,14 @@ public abstract class EncounterModel : AbstractModel
 			}
 			_spawnedEnemies.Add(monsterModel);
 		}
+	}
+
+	/// <summary>
+	/// Returns the dominion associated with this encounter, for use in Dread Mode.
+	/// This should only be overridden for boss encounters. It does nothing when overridden by other encounters.
+	/// </summary>
+	public virtual DominionModel? GetDominion()
+	{
+		return null;
 	}
 }

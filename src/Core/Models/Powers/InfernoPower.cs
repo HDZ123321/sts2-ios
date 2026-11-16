@@ -30,7 +30,7 @@ public sealed class InfernoPower : PowerModel
 			NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(NFireSmokePuffVfx.Create(base.Owner));
 			await Cmd.CustomScaledWait(0.2f, 0.4f);
 			DamageVar damageVar = (DamageVar)base.DynamicVars["SelfDamage"];
-			await CreatureCmd.Damage(choiceContext, base.Owner, damageVar.BaseValue, damageVar.Props, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner, damageVar.BaseValue, damageVar.Props, base.Owner);
 		}
 	}
 
@@ -45,7 +45,7 @@ public sealed class InfernoPower : PowerModel
 			NFireBurstVfx child = NFireBurstVfx.Create(hittableEnemy, 0.75f);
 			NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(child);
 		}
-		await CreatureCmd.Damage(choiceContext, base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner, null);
+		await CreatureCmd.Damage(choiceContext, base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner);
 	}
 
 	public void IncrementSelfDamage()

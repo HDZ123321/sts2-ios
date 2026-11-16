@@ -23,7 +23,7 @@ public sealed class SleightOfFleshPower : PowerModel
 		if (!(amount == 0m) && power.GetTypeForAmount(amount) == PowerType.Debuff && power.Owner.IsEnemy && applier == base.Owner && !(power is ITemporaryPower))
 		{
 			Flash();
-			await CreatureCmd.Damage(choiceContext, power.Owner, base.Amount, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, power.Owner, base.Amount, ValueProp.Unpowered, base.Owner);
 		}
 	}
 }

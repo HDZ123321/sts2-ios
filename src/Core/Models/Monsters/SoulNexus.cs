@@ -60,6 +60,18 @@ public sealed class SoulNexus : MonsterModel
 		}
 	}
 
+	public override void BeforeAnimPlayedInCompendium(string id)
+	{
+		if (id == "die")
+		{
+			base.Creature.GetCreatureNode()?.SpineAnimation.SetAnimation("tracks/empty", loop: true, 1);
+		}
+		else
+		{
+			base.Creature.GetCreatureNode()?.SpineAnimation.SetAnimation("tracks/writhe", loop: true, 1);
+		}
+	}
+
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()
 	{
 		List<MonsterState> list = new List<MonsterState>();

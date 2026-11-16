@@ -16,17 +16,23 @@ public sealed class JeweledMask : RelicModel
 
 	public override async Task BeforeHandDraw(Player player, PlayerChoiceContext choiceContext, ICombatState combatState)
 	{
-		if (player == base.Owner && base.Owner.PlayerCombatState.TurnNumber <= 1)
+		if (player != base.Owner || base.Owner.PlayerCombatState.TurnNumber > 1)
 		{
-			IReadOnlyList<CardModel> cards = PileType.Draw.GetPile(player).Cards;
-			List<CardModel> list = cards.Where((CardModel c) => c.Type == CardType.Power).ToList();
-			if (list.Count != 0)
+			return;
+		}
+		IReadOnlyList<CardModel> cards = PileType.Draw.GetPile(player).Cards;
+		List<CardModel> list = cards.Where((CardModel c) => c.Type == CardType.Power).ToList();
+		if (list.Count != 0)
+		{
+			List<CardModel> list2 = list.Where((CardModel c) => !c.Keywords.Contains(CardKeyword.Innate)).ToList();
+			if (list2.Count > 0)
 			{
-				CardModel cardModel = player.RunState.Rng.CombatCardSelection.NextItem(list);
-				Flash();
-				cardModel.SetToFreeThisTurn();
-				await CardPileCmd.Add(cardModel, PileType.Hand);
+				list = list2;
 			}
+			CardModel cardModel = player.RunState.Rng.CombatCardSelection.NextItem(list);
+			Flash();
+			cardModel.SetToFreeThisCombat();
+			await CardPileCmd.Add(cardModel, PileType.Hand);
 		}
 	}
 }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Godot;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Rooms;
@@ -172,7 +173,6 @@ public class RunSaveManager
 			catch (Exception value)
 			{
 				Log.Error($"Multiplayer run save validation failed: {value}");
-				RenameBrokenMultiplayerRunSave(ReadSaveStatus.ValidationFailed);
 				return new ReadSaveResult<SerializableRun>(ReadSaveStatus.ValidationFailed, $"Save file validation failed: {value}");
 			}
 		}
@@ -191,35 +191,8 @@ public class RunSaveManager
 		_saveStore.DeleteFile(CurrentMultiplayerRunSavePath + ".backup");
 	}
 
-	public void RenameBrokenMultiplayerRunSave(ReadSaveStatus status)
+	public static string GetRunSavePath(int profileId, string fileName, bool? forceModState = null)
 	{
-		try
-		{
-			if (HasMultiplayerRunSave)
-			{
-				if (_saveStore.FileExists(CurrentMultiplayerRunSavePath))
-				{
-					string text = CorruptFileHandler.GenerateCorruptFilePath(CurrentMultiplayerRunSavePath, status);
-					_saveStore.RenameFile(CurrentMultiplayerRunSavePath, text);
-					Log.Error($"Corrupt multiplayer run save detected: Renamed '{CurrentMultiplayerRunSavePath}' to '{text}'");
-				}
-				string text2 = CurrentMultiplayerRunSavePath + ".backup";
-				if (_saveStore.FileExists(text2))
-				{
-					string text3 = CorruptFileHandler.GenerateCorruptFilePath(text2, status);
-					_saveStore.RenameFile(text2, text3);
-					Log.Error($"Corrupt multiplayer run backup detected: Renamed '{text2}' to '{text3}'");
-				}
-			}
-		}
-		catch (Exception ex)
-		{
-			Log.Warn("Failed to rename broken multiplayer run save: " + ex.Message);
-		}
-	}
-
-	public static string GetRunSavePath(int profileId, string fileName)
-	{
-		return Path.Combine(UserDataPathProvider.GetProfileDir(profileId), UserDataPathProvider.SavesDir, fileName);
+		return UserDataPathProvider.GetProfileDir(profileId, forceModState).PathJoin(UserDataPathProvider.SavesDir).PathJoin(fileName);
 	}
 }

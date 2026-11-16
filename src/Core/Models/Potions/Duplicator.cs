@@ -14,10 +14,11 @@ public sealed class Duplicator : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		await PowerCmd.Apply<DuplicationPower>(choiceContext, base.Owner.Creature, 1m, base.Owner.Creature, null);
+		PotionModel.AssertValidForTargetedPotion(target);
+		await PowerCmd.Apply<DuplicationPower>(choiceContext, target, 1m, target, null);
 	}
 }

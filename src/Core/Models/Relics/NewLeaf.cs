@@ -24,7 +24,7 @@ public sealed class NewLeaf : RelicModel
 		List<CardModel> list = (await CardSelectCmd.FromDeckForTransformation(prefs: new CardSelectorPrefs(CardSelectorPrefs.TransformSelectionPrompt, base.DynamicVars.Cards.IntValue), player: base.Owner)).ToList();
 		foreach (CardModel item in list)
 		{
-			await CardCmd.TransformToRandom(item, base.Owner.RunState.Rng.Niche);
+			await CardCmd.TransformToRandom(item, base.Owner.PlayerRng.Transformations);
 		}
 	}
 }

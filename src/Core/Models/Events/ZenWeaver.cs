@@ -24,7 +24,7 @@ public sealed class ZenWeaver : EventModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
-		new DynamicVar("BreathingTechniquesCost", 50m),
+		new DynamicVar("BreathingTechniquesCost", 25m),
 		new DynamicVar("EmotionalAwarenessCost", 125m),
 		new DynamicVar("ArachnidAcupunctureCost", 250m)
 	});
@@ -46,7 +46,7 @@ public sealed class ZenWeaver : EventModel
 	private async Task BreathingTechniques()
 	{
 		await PlayerCmd.LoseGold(base.DynamicVars["BreathingTechniquesCost"].IntValue, base.Owner, GoldLossType.Spent);
-		CardModel[] array = new CardModel[2];
+		CardModel[] array = new CardModel[1];
 		for (int i = 0; i < array.Length; i++)
 		{
 			array[i] = base.Owner.RunState.CreateCard<Enlightenment>(base.Owner);

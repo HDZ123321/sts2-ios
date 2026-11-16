@@ -6,6 +6,7 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Nodes.Screens.Capstones;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 
@@ -118,6 +119,19 @@ public class NOverlayStack : Control
 
 	public int ScreenCount => _overlays.Count;
 
+	private static bool StackIsCovered
+	{
+		get
+		{
+			NMapScreen? instance = NMapScreen.Instance;
+			if (instance == null || !instance.IsOpen)
+			{
+				return NCapstoneContainer.Instance?.InUse ?? false;
+			}
+			return true;
+		}
+	}
+
 	/// <inheritdoc cref="T:MegaCrit.Sts2.Core.Nodes.Screens.Overlays.NOverlayStack.ChangedEventHandler" />
 	public event ChangedEventHandler Changed
 	{
@@ -166,7 +180,12 @@ public class NOverlayStack : Control
 		_backstop.MouseFilter = MouseFilterEnum.Stop;
 		_backstopFade?.Kill();
 		this.MoveChildSafely(_backstop, _overlays.IndexOf(screen));
-		if (!screen.UseSharedBackstop)
+		bool stackIsCovered = StackIsCovered;
+		if (stackIsCovered)
+		{
+			screen.AfterOverlayHidden();
+		}
+		if (!screen.UseSharedBackstop || stackIsCovered)
 		{
 			_backstop.Modulate = Colors.Transparent;
 		}
@@ -292,7 +311,7 @@ public class NOverlayStack : Control
 		{
 			if (ActiveScreenContext.Instance.IsCurrent(overlayScreen))
 			{
-				base.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Enabled;
+				base.FocusBehaviorRecursive = FocusBehaviorRecursiveEnum.Inherited;
 			}
 			else
 			{

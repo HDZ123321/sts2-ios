@@ -11,7 +11,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.TestSupport;
 
-namespace MegaCrit.Sts2.Core.Nodes.Vfx;
+namespace MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 
 [ScriptPath("res://src/Core/Nodes/Vfx/Ui/NPowerAppliedDebuffVfx.cs")]
 public class NPowerAppliedDebuffVfx : Node2D
@@ -22,11 +22,6 @@ public class NPowerAppliedDebuffVfx : Node2D
 	public new class MethodName : Node2D.MethodName
 	{
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
-		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
-
-		/// <summary>
 		/// Cached name for the 'Create' method.
 		/// </summary>
 		public static readonly StringName Create = "Create";
@@ -35,6 +30,11 @@ public class NPowerAppliedDebuffVfx : Node2D
 		/// Cached name for the '_Ready' method.
 		/// </summary>
 		public new static readonly StringName _Ready = "_Ready";
+
+		/// <summary>
+		/// Cached name for the '_ExitTree' method.
+		/// </summary>
+		public new static readonly StringName _ExitTree = "_ExitTree";
 	}
 
 	/// <summary>
@@ -64,11 +64,6 @@ public class NPowerAppliedDebuffVfx : Node2D
 
 	public static IEnumerable<string> AssetPaths => new global::_003C_003Ez__ReadOnlySingleElementList<string>(scenePath);
 
-	public override void _ExitTree()
-	{
-		_cts?.Cancel();
-	}
-
 	public static NPowerAppliedDebuffVfx? Create(Vector2 globalPosition)
 	{
 		if (TestMode.IsOn)
@@ -88,12 +83,17 @@ public class NPowerAppliedDebuffVfx : Node2D
 	private async Task PlaySequence()
 	{
 		_cts = new CancellationTokenSource();
-		for (int i = 0; i < _particles.Count; i++)
+		foreach (GpuParticles2D particle in _particles)
 		{
-			_particles[i].Restart();
+			particle.Restart();
 		}
 		await Cmd.Wait(2f, _cts.Token);
 		this.QueueFreeSafely();
+	}
+
+	public override void _ExitTree()
+	{
+		_cts?.Cancel();
 	}
 
 	/// <summary>
@@ -105,12 +105,12 @@ public class NPowerAppliedDebuffVfx : Node2D
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
 		List<MethodInfo> list = new List<MethodInfo>(3);
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node2D"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Vector2, "globalPosition", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
 
@@ -118,12 +118,6 @@ public class NPowerAppliedDebuffVfx : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool InvokeGodotClassMethod(in godot_string_name method, NativeVariantPtrArgs args, out godot_variant ret)
 	{
-		if (method == MethodName._ExitTree && args.Count == 0)
-		{
-			_ExitTree();
-			ret = default(godot_variant);
-			return true;
-		}
 		if (method == MethodName.Create && args.Count == 1)
 		{
 			ret = VariantUtils.CreateFrom<NPowerAppliedDebuffVfx>(Create(VariantUtils.ConvertTo<Vector2>(in args[0])));
@@ -132,6 +126,12 @@ public class NPowerAppliedDebuffVfx : Node2D
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName._ExitTree && args.Count == 0)
+		{
+			_ExitTree();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -154,15 +154,15 @@ public class NPowerAppliedDebuffVfx : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
-		if (method == MethodName._ExitTree)
-		{
-			return true;
-		}
 		if (method == MethodName.Create)
 		{
 			return true;
 		}
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}

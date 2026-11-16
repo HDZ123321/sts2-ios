@@ -4,6 +4,7 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
+using MegaCrit.Sts2.Core.Entities.Save;
 using MegaCrit.Sts2.Core.Multiplayer.Game.PeerInput;
 using MegaCrit.Sts2.Core.Nodes.Audio;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
@@ -14,7 +15,6 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.Overlays;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.addons.mega_text;
 
 namespace MegaCrit.Sts2.Core.Nodes;
@@ -179,6 +179,7 @@ public class NRun : Control
 	{
 		NRun nRun = PreloadManager.Cache.GetScene("res://scenes/run.tscn").Instantiate<NRun>(PackedScene.GenEditState.Disabled);
 		nRun._state = state;
+		NHotkeyManager.Instance?.ClearHotkeys();
 		return nRun;
 	}
 
@@ -217,11 +218,11 @@ public class NRun : Control
 		}
 	}
 
-	public void ShowGameOverScreen(SerializableRun serializableRun)
+	public void ShowGameOverScreen(PostRunProgressUpdateResult result)
 	{
 		NCapstoneContainer.Instance.Close();
 		NMapScreen.Instance.Close();
-		NOverlayStack.Instance.Push(NGameOverScreen.Create(_state, serializableRun));
+		NOverlayStack.Instance.Push(NGameOverScreen.Create(_state, result));
 	}
 
 	/// <summary>

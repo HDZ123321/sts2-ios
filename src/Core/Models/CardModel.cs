@@ -19,6 +19,7 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Cards;
@@ -50,6 +51,8 @@ public abstract class CardModel : AbstractModel
 
 	private int _baseReplayCount;
 
+	private int _extraReplayThisTurn;
+
 	private bool _starCostSet;
 
 	private int _baseStarCost;
@@ -66,6 +69,24 @@ public abstract class CardModel : AbstractModel
 	private int _lastStarsSpent;
 
 	private HashSet<CardKeyword>? _keywords;
+
+	/// <summary>
+	/// Keywords added to this card by something other than its own upgrade (Ethereal from Ghost Seed, Retain from
+	/// Snap), and keywords removed the same way. <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.DowngradeInternal" /> resets to the base
+	/// keywords and replays these. The keyword set alone cannot say which source asked for a keyword, which matters
+	/// when an upgrade and an outside effect both grant the same one.
+	///
+	/// Keywords are not serialized. If that changes, serialize these sets too, or downgrades drop keywords again.
+	/// </summary>
+	private HashSet<CardKeyword> _keywordsAddedFromOutside = new HashSet<CardKeyword>();
+
+	private HashSet<CardKeyword> _keywordsRemovedFromOutside = new HashSet<CardKeyword>();
+
+	/// <summary>
+	/// True while <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.OnUpgrade" /> runs, so keyword changes made by the upgrade itself are not recorded as
+	/// coming from outside the card.
+	/// </summary>
+	private bool _isUpgrading;
 
 	private HashSet<CardTag>? _tags;
 
@@ -102,6 +123,8 @@ public abstract class CardModel : AbstractModel
 	private int _currentPlayIndex;
 
 	private CardModel? _deckVersion;
+
+	private CardModel? _transformIntoAfterPlay;
 
 	private CardModel? _canonicalInstance;
 
@@ -140,10 +163,6 @@ public abstract class CardModel : AbstractModel
 		}
 	}
 
-	/// <summary>
-	/// Portraits from the baked-in art rework win over the atlas sprite. The lookup is by
-	/// CLR type name, so a ported character that reuses a vanilla class name is unaffected.
-	/// </summary>
 	public virtual string PortraitPath
 	{
 		get
@@ -160,7 +179,7 @@ public abstract class CardModel : AbstractModel
 
 	public static string MissingPortraitPath => ImageHelper.GetImagePath("atlases/card_atlas.sprites/beta.tres");
 
-	private string PortraitPngPath => ImageHelper.GetImagePath($"packed/card_portraits/{Pool.Title.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}.png");
+	protected virtual string PortraitPngPath => ImageHelper.GetImagePath($"packed/card_portraits/{Pool.Title.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}.png");
 
 	private string BetaPortraitPngPath => ImageHelper.GetImagePath($"packed/card_portraits/{Pool.Title.ToLowerInvariant()}/beta/{base.Id.Entry.ToLowerInvariant()}.png");
 
@@ -169,6 +188,22 @@ public abstract class CardModel : AbstractModel
 	public bool HasBetaPortrait => ResourceLoader.Exists(BetaPortraitPngPath);
 
 	public Texture2D Portrait => ResourceLoader.Load<Texture2D>(PortraitPath, null, ResourceLoader.CacheMode.Reuse);
+
+	/// <summary>
+	/// Used by the card inspect screen. It uses the non-packed standalone PNG, not a .sprites/ path, fallback to the atlas
+	/// portrait for cards without standalone art.
+	/// </summary>
+	public Texture2D BigPortrait
+	{
+		get
+		{
+			if (!HasPortrait)
+			{
+				return Portrait;
+			}
+			return PreloadManager.Cache.GetTexture2D(PortraitPngPath);
+		}
+	}
 
 	private string FramePath
 	{
@@ -226,7 +261,7 @@ public abstract class CardModel : AbstractModel
 		}
 	}
 
-	private static string AncientBorderPath => ImageHelper.GetImagePath("atlases/compressed_atlas.sprites/ancient_card_border.png.tres");
+	private static string AncientBorderPath => ImageHelper.GetImagePath("atlases/compressed_atlas.sprites/ancient_card_border.tres");
 
 	private string AncientTextBgPath
 	{
@@ -254,7 +289,7 @@ public abstract class CardModel : AbstractModel
 				throw new ArgumentOutOfRangeException();
 			}
 			CardType cardType2 = cardType;
-			return ImageHelper.GetImagePath("atlases/compressed_atlas.sprites/ancient_text_bg_" + cardType2.ToString().ToLowerInvariant() + ".png.tres");
+			return ImageHelper.GetImagePath("atlases/compressed_atlas.sprites/ancient_text_bg_" + cardType2.ToString().ToLowerInvariant() + ".tres");
 		}
 	}
 
@@ -269,6 +304,27 @@ public abstract class CardModel : AbstractModel
 	public Texture2D EnergyIcon => ResourceLoader.Load<Texture2D>(EnergyIconPath, null, ResourceLoader.CacheMode.Reuse);
 
 	protected IHoverTip EnergyHoverTip => HoverTipFactory.ForEnergy(this);
+
+	protected IHoverTip ArrowHoverTip
+	{
+		get
+		{
+			object player;
+			if (base.IsMutable)
+			{
+				CardPile? pile = Pile;
+				if (pile != null && pile.IsCombatPile)
+				{
+					player = _owner;
+					goto IL_0025;
+				}
+			}
+			player = null;
+			goto IL_0025;
+			IL_0025:
+			return HoverTipFactory.ForArrow((Player?)player);
+		}
+	}
 
 	private string BannerTexturePath
 	{
@@ -308,6 +364,8 @@ public abstract class CardModel : AbstractModel
 	/// Manages card restrictions based on how many players there are in a run.
 	/// </summary>
 	public virtual CardMultiplayerConstraint MultiplayerConstraint => CardMultiplayerConstraint.None;
+
+	public virtual bool IsAllowedInBlitz => true;
 
 	public virtual CardPoolModel Pool
 	{
@@ -417,6 +475,25 @@ public abstract class CardModel : AbstractModel
 		{
 			AssertMutable();
 			_baseReplayCount = value;
+			this.ReplayCountChanged?.Invoke();
+		}
+	}
+
+	/// <summary>
+	/// The number of extra times this card's logic should be executed when it's played THIS TURN, excluding any effects from
+	/// other models.
+	/// required for things like Limbs Of Cho
+	/// </summary>
+	public int ExtraReplayThisTurn
+	{
+		get
+		{
+			return _extraReplayThisTurn;
+		}
+		set
+		{
+			AssertMutable();
+			_extraReplayThisTurn = value;
 			this.ReplayCountChanged?.Invoke();
 		}
 	}
@@ -599,7 +676,7 @@ public abstract class CardModel : AbstractModel
 
 	/// <summary>
 	/// Should this card be retained this turn?
-	/// True if the card has the Retain keyword, or if some effect like Well-Laid Plans has made it retain for a single
+	/// True if the card has the Retain keyword, or if some effect like Expertise has made it retain for a single
 	/// turn and it's still that turn.
 	/// </summary>
 	public bool ShouldRetainThisTurn
@@ -955,6 +1032,26 @@ public abstract class CardModel : AbstractModel
 	}
 
 	/// <summary>
+	/// If assigned during <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.OnPlay(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" />, then this card will be transformed into the assigned card afterward.
+	/// Transforming the card directly using <see cref="M:MegaCrit.Sts2.Core.Commands.CardCmd.Transform(MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Nodes.CommonUi.CardPreviewStyle)" /> in
+	/// <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.OnPlay(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" /> results in undesirable effects and buggy behavior because we don't expect the card to
+	/// change, so assign this property instead.
+	/// If this is assigned outside of <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.OnPlay(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" />, nothing happens.
+	/// </summary>
+	public CardModel? TransformIntoAfterPlay
+	{
+		get
+		{
+			return _transformIntoAfterPlay;
+		}
+		protected set
+		{
+			AssertMutable();
+			_transformIntoAfterPlay = value;
+		}
+	}
+
+	/// <summary>
 	/// Set to true when this card is removed from the combat/run state (happens pretty rarely, like when a card is
 	/// transformed or removed from the player's deck).
 	/// Set to false when the card is added _back_ to the combat/run state (even more rarely, like when
@@ -1107,6 +1204,26 @@ public abstract class CardModel : AbstractModel
 		ShouldShowInCardLibrary = shouldShowInCardLibrary;
 	}
 
+	public bool IsAllowedInRun(IRunState runState)
+	{
+		if (runState.Players.Count > 1)
+		{
+			if (MultiplayerConstraint == CardMultiplayerConstraint.SingleplayerOnly)
+			{
+				return false;
+			}
+		}
+		else if (MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly)
+		{
+			return false;
+		}
+		if (runState.GameMode == GameMode.Blitz && !IsAllowedInBlitz)
+		{
+			return false;
+		}
+		return true;
+	}
+
 	/// <summary>
 	/// WARNING: Only use this in tests.
 	/// Set this card's energy cost.
@@ -1143,7 +1260,7 @@ public abstract class CardModel : AbstractModel
 	/// </summary>
 	public int GetEnchantedReplayCount()
 	{
-		return Enchantment?.EnchantPlayCount(BaseReplayCount) ?? BaseReplayCount;
+		return Enchantment?.EnchantPlayCount(BaseReplayCount + ExtraReplayThisTurn) ?? (BaseReplayCount + ExtraReplayThisTurn);
 	}
 
 	/// <summary>
@@ -1213,6 +1330,18 @@ public abstract class CardModel : AbstractModel
 			hashSet.Add(keywordsWithSource);
 		}
 		_keywords = hashSet;
+		HashSet<CardKeyword> hashSet2 = new HashSet<CardKeyword>();
+		foreach (CardKeyword item in _keywordsAddedFromOutside)
+		{
+			hashSet2.Add(item);
+		}
+		_keywordsAddedFromOutside = hashSet2;
+		HashSet<CardKeyword> hashSet3 = new HashSet<CardKeyword>();
+		foreach (CardKeyword item2 in _keywordsRemovedFromOutside)
+		{
+			hashSet3.Add(item2);
+		}
+		_keywordsRemovedFromOutside = hashSet3;
 		_dynamicVars = DynamicVars.Clone(this);
 		_energyCost = _energyCost?.Clone(this);
 		_temporaryStarCosts = _temporaryStarCosts.ToList();
@@ -1241,6 +1370,8 @@ public abstract class CardModel : AbstractModel
 		CurrentPlayIndex = 0;
 		DeckVersion = null;
 		HasBeenRemovedFromState = false;
+		TransformIntoAfterPlay = null;
+		_isUpgrading = false;
 		this.AfflictionChanged = null;
 		this.Drawn = null;
 		this.EnchantmentChanged = null;
@@ -1345,6 +1476,11 @@ public abstract class CardModel : AbstractModel
 	{
 		AssertMutable();
 		LocalKeywords.Add(keyword);
+		if (!_isUpgrading)
+		{
+			_keywordsAddedFromOutside.Add(keyword);
+			_keywordsRemovedFromOutside.Remove(keyword);
+		}
 		this.KeywordsChanged?.Invoke();
 	}
 
@@ -1352,6 +1488,20 @@ public abstract class CardModel : AbstractModel
 	{
 		AssertMutable();
 		LocalKeywords.Remove(keyword);
+		if (!_isUpgrading)
+		{
+			_keywordsRemovedFromOutside.Add(keyword);
+			_keywordsAddedFromOutside.Remove(keyword);
+		}
+		this.KeywordsChanged?.Invoke();
+	}
+
+	/// <summary>
+	/// For models whose <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryModifyKeywordsInCombat(MegaCrit.Sts2.Core.Models.CardModel,System.Collections.Generic.ISet{MegaCrit.Sts2.Core.Entities.Cards.CardKeyword})" /> result changed for this card without a
+	/// local keyword change, so the hand card flashes the way it does for <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.AddKeyword(MegaCrit.Sts2.Core.Entities.Cards.CardKeyword)" />.
+	/// </summary>
+	public void InvokeKeywordsChanged()
+	{
 		this.KeywordsChanged?.Invoke();
 	}
 
@@ -1627,6 +1777,10 @@ public abstract class CardModel : AbstractModel
 		ExhaustOnNextPlay = false;
 		HasSingleTurnRetain = false;
 		HasSingleTurnSly = false;
+		if (ExtraReplayThisTurn != 0)
+		{
+			ExtraReplayThisTurn = 0;
+		}
 		if (EnergyCost.EndOfTurnCleanup())
 		{
 			this.EnergyCostChanged?.Invoke();
@@ -1637,11 +1791,16 @@ public abstract class CardModel : AbstractModel
 		}
 	}
 
-	public virtual void AfterTransformedFrom()
+	public void AfterThisWasTransformedInto(CardModel card)
+	{
+		AfterThisWasTransformedIntoInternal(card);
+	}
+
+	protected virtual void AfterThisWasTransformedIntoInternal(CardModel card)
 	{
 	}
 
-	public virtual void AfterTransformedTo()
+	public virtual void AfterThisWasTransformedFrom(CardModel card)
 	{
 	}
 
@@ -1694,22 +1853,12 @@ public abstract class CardModel : AbstractModel
 		return Task.CompletedTask;
 	}
 
-	public async Task OnTurnEndInHandWrapper(PlayerChoiceContext choiceContext)
+	/// <summary>
+	/// This can probably get removed if it stays this way, but I didn't want to change OnTurnEndInHand to public.
+	/// </summary>
+	public Task OnTurnEndInHandWrapper(PlayerChoiceContext choiceContext)
 	{
-		await CardPileCmd.Add(this, PileType.Play);
-		if (LocalContext.IsMe(Owner))
-		{
-			await Cmd.CustomScaledWait(0.3f, 0.6f);
-		}
-		await OnTurnEndInHand(choiceContext);
-		if (Keywords.Contains(CardKeyword.Ethereal))
-		{
-			await CardCmd.Exhaust(choiceContext, this, causedByEthereal: true);
-		}
-		else
-		{
-			await CardPileCmd.Add(this, PileType.Discard.GetPile(Owner));
-		}
+		return OnTurnEndInHand(choiceContext);
 	}
 
 	/// <summary>
@@ -1902,10 +2051,11 @@ public abstract class CardModel : AbstractModel
 		{
 			return;
 		}
-		var (resultPileType, resultPilePosition) = Hook.ModifyCardPlayResultPileTypeAndPosition(combatState, this, isAutoPlay, resources, GetResultPileTypeForCardPlay(), CardPilePosition.Bottom, out IEnumerable<AbstractModel> modifiers);
+		CardLocation resultLocation = GetResultLocationForCardPlay();
+		resultLocation = Hook.ModifyCardPlayResultLocation(combatState, this, isAutoPlay, resources, resultLocation, out IEnumerable<AbstractModel> modifiers);
 		foreach (AbstractModel item in modifiers)
 		{
-			await item.AfterModifyingCardPlayResultPileOrPosition(this, resultPileType, resultPilePosition);
+			await item.AfterModifyingCardPlayResultLocation(this, resultLocation);
 		}
 		int playCount = await GeneratePlayCount(combatState, target);
 		if (Owner.Creature.IsDead)
@@ -1913,11 +2063,21 @@ public abstract class CardModel : AbstractModel
 			return;
 		}
 		ulong playStartTime = Time.GetTicksMsec();
-		CombatManager.Instance.BeginCardOrPotionEffect(Owner);
+		if (TransformIntoAfterPlay != null)
+		{
+			Log.Error("Card TransformIntoAfterPlay field was set outside of OnPlay! Ignoring");
+			TransformIntoAfterPlay = null;
+		}
+		CombatId? effectCombatId = CombatManager.Instance.BeginCardOrPotionEffect(Owner);
+		CardModel card = this;
 		try
 		{
 			for (int i = 0; i < playCount; i++)
 			{
+				if (CombatManager.Instance.IsOverOrEnding)
+				{
+					break;
+				}
 				CurrentPlayIndex = i;
 				if (Type == CardType.Power)
 				{
@@ -1934,16 +2094,23 @@ public abstract class CardModel : AbstractModel
 				CardPlay cardPlay = new CardPlay
 				{
 					Card = this,
+					Player = Owner,
 					Target = target,
-					ResultPile = resultPileType,
+					ResultPile = resultLocation.pileType,
 					Resources = resources,
 					IsAutoPlay = isAutoPlay,
 					PlayIndex = i,
 					PlayCount = playCount
 				};
 				await Hook.BeforeCardPlayed(combatState, cardPlay);
-				CombatManager.Instance.History.CardPlayStarted(combatState, cardPlay);
-				await OnPlay(choiceContext, cardPlay);
+				if (CombatManager.Instance.IsCurrentLiveCombat(effectCombatId))
+				{
+					CombatManager.Instance.History.CardPlayStarted(combatState, cardPlay);
+				}
+				BranchingPlayerChoiceContext branchingPlayerChoiceContext = new BranchingPlayerChoiceContext(this, LocalContext.NetId.Value, choiceContext);
+				branchingPlayerChoiceContext.PushModel(this);
+				Task task = OnPlay(branchingPlayerChoiceContext, cardPlay);
+				await branchingPlayerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 				if (Owner.Creature.IsDead)
 				{
 					return;
@@ -1951,12 +2118,13 @@ public abstract class CardModel : AbstractModel
 				InvokeExecutionFinished();
 				if (Enchantment != null)
 				{
-					await Enchantment.OnPlay(choiceContext, cardPlay);
+					EnchantmentModel enchantment = Enchantment;
+					await enchantment.OnPlay(choiceContext, cardPlay);
 					if (Owner.Creature.IsDead)
 					{
 						return;
 					}
-					Enchantment.InvokeExecutionFinished();
+					enchantment.InvokeExecutionFinished();
 				}
 				if (Affliction != null)
 				{
@@ -1968,7 +2136,10 @@ public abstract class CardModel : AbstractModel
 					}
 					affliction.InvokeExecutionFinished();
 				}
-				CombatManager.Instance.History.CardPlayFinished(combatState, cardPlay);
+				if (CombatManager.Instance.IsCurrentLiveCombat(effectCombatId))
+				{
+					CombatManager.Instance.History.CardPlayFinished(combatState, cardPlay);
+				}
 				if (CombatManager.Instance.IsInProgress)
 				{
 					await Hook.AfterCardPlayed(combatState, choiceContext, cardPlay);
@@ -1977,34 +2148,52 @@ public abstract class CardModel : AbstractModel
 						return;
 					}
 				}
+				if (TransformIntoAfterPlay != null)
+				{
+					CardPileAddResult? cardPileAddResult = await CardCmd.Transform(this, TransformIntoAfterPlay);
+					if (cardPileAddResult.HasValue)
+					{
+						TransformIntoAfterPlay = null;
+						card = cardPileAddResult.Value.cardAdded;
+						break;
+					}
+				}
 			}
 		}
 		finally
 		{
-			CombatManager.Instance.EndCardOrPotionEffect(Owner);
+			await CombatManager.Instance.EndCardOrPotionEffect(effectCombatId, Owner);
 		}
 		if (!skipCardPileVisuals)
 		{
 			float num = (float)(Time.GetTicksMsec() - playStartTime) / 1000f;
 			await Cmd.CustomScaledWait(0.15f - num, 0.3f - num);
 		}
-		CardPile? pile = Pile;
-		if (pile != null && pile.Type == PileType.Play)
+		Player originalOwner = Owner;
+		if (CombatManager.Instance.CurrentCombatId == effectCombatId)
 		{
-			switch (resultPileType)
+			if (originalOwner != resultLocation.player && resultLocation.pileType != PileType.None)
 			{
-			case PileType.None:
-				await CardPileCmd.RemoveFromCombat(this, skipCardPileVisuals);
-				break;
-			case PileType.Exhaust:
-				await CardCmd.Exhaust(choiceContext, this, causedByEthereal: false, skipCardPileVisuals);
-				break;
-			default:
-				await CardPileCmd.Add(this, resultPileType, resultPilePosition, null, skipCardPileVisuals);
-				break;
+				await CardPileCmd.GiveToAnotherPlayer(card, resultLocation.player, resultLocation.pileType, resultLocation.position);
+			}
+			CardPile? pile = card.Pile;
+			if (pile != null && pile.Type == PileType.Play)
+			{
+				switch (resultLocation.pileType)
+				{
+				case PileType.None:
+					await CardPileCmd.RemoveFromCombat(card, skipCardPileVisuals);
+					break;
+				case PileType.Exhaust:
+					await CardCmd.Exhaust(choiceContext, card, causedByEthereal: false, skipCardPileVisuals);
+					break;
+				default:
+					await CardPileCmd.Add(card, resultLocation.pileType, resultLocation.position, null, skipCardPileVisuals);
+					break;
+				}
 			}
 		}
-		await CombatManager.Instance.CheckForEmptyHand(choiceContext, Owner);
+		await CombatManager.Instance.CheckForEmptyHand(effectCombatId, choiceContext, originalOwner);
 		if (EnergyCost.AfterCardPlayedCleanup())
 		{
 			this.EnergyCostChanged?.Invoke();
@@ -2080,20 +2269,20 @@ public abstract class CardModel : AbstractModel
 	}
 
 	/// <summary>
-	/// Get the pile that this card should be moved to after being played.
+	/// Get the pile that this card should be moved to after being played, and the position it should be added to.
 	/// </summary>
-	protected virtual PileType GetResultPileTypeForCardPlay()
+	protected virtual CardLocation GetResultLocationForCardPlay()
 	{
 		if (IsDupe || Type == CardType.Power)
 		{
-			return PileType.None;
+			return new CardLocation(Owner, PileType.None, CardPilePosition.Bottom);
 		}
 		if (ExhaustOnNextPlay || Keywords.Contains(CardKeyword.Exhaust))
 		{
 			ExhaustOnNextPlay = false;
-			return PileType.Exhaust;
+			return new CardLocation(Owner, PileType.Exhaust, CardPilePosition.Bottom);
 		}
-		return PileType.Discard;
+		return new CardLocation(Owner, PileType.Discard, CardPilePosition.Bottom);
 	}
 
 	/// <summary>
@@ -2131,7 +2320,15 @@ public abstract class CardModel : AbstractModel
 	{
 		AssertMutable();
 		CurrentUpgradeLevel++;
-		OnUpgrade();
+		_isUpgrading = true;
+		try
+		{
+			OnUpgrade();
+		}
+		finally
+		{
+			_isUpgrading = false;
+		}
 		DynamicVars.RecalculateForUpgradeOrEnchant();
 		this.Upgraded?.Invoke();
 	}
@@ -2153,9 +2350,18 @@ public abstract class CardModel : AbstractModel
 		CurrentUpgradeLevel = 0;
 		CardModel cardModel = ModelDb.GetById<CardModel>(base.Id).ToMutable();
 		_dynamicVars = cardModel.DynamicVars.Clone(this);
+		_dynamicVars.InitializeWithOwner(this);
 		EnergyCost.ResetForDowngrade();
 		_baseStarCost = cardModel.CanonicalStarCost;
-		_keywords = cardModel.GetKeywordsWithSources(KeywordSources.Local).ToHashSet();
+		HashSet<CardKeyword> hashSet = new HashSet<CardKeyword>();
+		foreach (CardKeyword keywordsWithSource in cardModel.GetKeywordsWithSources(KeywordSources.Local))
+		{
+			hashSet.Add(keywordsWithSource);
+		}
+		HashSet<CardKeyword> hashSet2 = hashSet;
+		hashSet2.UnionWith(_keywordsAddedFromOutside);
+		hashSet2.ExceptWith(_keywordsRemovedFromOutside);
+		_keywords = hashSet2;
 		AfterDowngraded();
 		Enchantment?.ModifyCard();
 		Affliction?.AfterApplied();
@@ -2187,24 +2393,45 @@ public abstract class CardModel : AbstractModel
 			throw new InvalidOperationException("Cannot create a clone of a card that is not in a combat pile.");
 		}
 		AssertMutable();
-		CardModel cardModel = CardScope.CloneCard(this);
-		cardModel._cloneOf = this;
-		cardModel.ExhaustOnNextPlay = false;
+		CardModel cardModel = this;
+		if (cardModel != null && cardModel.IsDupe && cardModel.DupeOf != null)
+		{
+			cardModel = cardModel.DupeOf;
+		}
+		CardModel cardModel2 = CardScope.CloneCard(cardModel);
+		cardModel2._cloneOf = cardModel;
+		cardModel2.ExhaustOnNextPlay = false;
+		return cardModel2;
+	}
+
+	/// <summary>
+	/// Creates a clone of this card for a given player.
+	/// Required because normally clone cards retain the same player as the original.
+	/// </summary>
+	public CardModel CreateCloneForPlayer(Player player)
+	{
+		CardModel cardModel = CreateClone();
+		cardModel._owner = player;
 		return cardModel;
+	}
+
+	public void GiveToAnotherPlayer(Player player)
+	{
+		_owner = player;
 	}
 
 	/// <summary>
 	/// Create a dupe of this card.
 	/// See <see cref="P:MegaCrit.Sts2.Core.Models.CardModel.DupeOf" /> for more info on dupes, and the difference between a clone and a dupe.
 	/// </summary>
-	public CardModel CreateDupe()
+	public CardModel CreateDupe(Player newOwner)
 	{
 		if (IsDupe)
 		{
-			return DupeOf.CreateDupe();
+			return DupeOf.CreateDupe(newOwner);
 		}
 		AssertMutable();
-		CardModel cardModel = CreateClone();
+		CardModel cardModel = CreateCloneForPlayer(newOwner);
 		cardModel.IsDupe = true;
 		cardModel.RemoveKeyword(CardKeyword.Exhaust);
 		return cardModel;
@@ -2274,6 +2501,37 @@ public abstract class CardModel : AbstractModel
 		if (num2 != 0)
 		{
 			return num2;
+		}
+		int num3 = ModelId.Compare(Enchantment?.Id, cardModel.Enchantment?.Id);
+		if (num3 != 0)
+		{
+			return num3;
+		}
+		int num4 = ModelId.Compare(Affliction?.Id, cardModel.Affliction?.Id);
+		if (num4 != 0)
+		{
+			return num4;
+		}
+		int num5 = EnergyCost.GetResolved().CompareTo(cardModel.EnergyCost.GetResolved());
+		if (num5 != 0)
+		{
+			return num5;
+		}
+		int num6 = BaseReplayCount.CompareTo(cardModel.BaseReplayCount);
+		if (num6 != 0)
+		{
+			return num6;
+		}
+		foreach (string item in DynamicVars.Keys.Order<string>(StringComparer.Ordinal))
+		{
+			if (cardModel.DynamicVars.TryGetValue(item, out DynamicVar value))
+			{
+				int num7 = DynamicVars[item].BaseValue.CompareTo(value.BaseValue);
+				if (num7 != 0)
+				{
+					return num7;
+				}
+			}
 		}
 		return 0;
 	}

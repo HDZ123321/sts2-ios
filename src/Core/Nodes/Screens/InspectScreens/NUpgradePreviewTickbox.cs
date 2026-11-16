@@ -40,7 +40,7 @@ public class NUpgradePreviewTickbox : NTickbox
 	{
 	}
 
-	protected override string[] Hotkeys => new string[1] { MegaInput.accept };
+	protected override string[] Hotkeys => new string[1] { MegaInput.confirm };
 
 	public override void _Ready()
 	{

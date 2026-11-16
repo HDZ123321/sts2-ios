@@ -26,11 +26,12 @@ public sealed class Soul : CardModel
 	/// <param name="owner">Player who will own the Soul cards.</param>
 	/// <param name="amount">Number of Soul cards to create.</param>
 	/// <param name="combatState">CombatState to create the Soul cards in.</param>
+	/// <param name="creator">The player that created the cards. If null, owner is used.</param>
 	/// <returns>The newly-created Soul cards.</returns>
-	public static async Task<IEnumerable<Soul>> CreateInHand(Player owner, int amount, ICombatState combatState)
+	public static async Task<IEnumerable<Soul>> CreateInHand(Player owner, int amount, ICombatState combatState, Player? creator = null)
 	{
 		IEnumerable<Soul> souls = Create(owner, amount, combatState);
-		await CardPileCmd.AddGeneratedCardsToCombat(souls, PileType.Hand, owner);
+		await CardPileCmd.AddGeneratedCardsToCombat(souls, PileType.Hand, creator ?? owner);
 		return souls;
 	}
 

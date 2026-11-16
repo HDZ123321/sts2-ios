@@ -30,9 +30,9 @@ public class NTopBarHp : NClickableControl
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'UpdateHealth' method.
@@ -83,21 +83,21 @@ public class NTopBarHp : NClickableControl
 		ConnectSignals();
 	}
 
-	public override void _ExitTree()
-	{
-		if (_player != null)
-		{
-			_player.Creature.CurrentHpChanged -= UpdateHealth;
-			_player.Creature.MaxHpChanged -= UpdateHealth;
-		}
-	}
-
 	public void Initialize(Player player)
 	{
 		_player = player;
 		_player.Creature.CurrentHpChanged += UpdateHealth;
 		_player.Creature.MaxHpChanged += UpdateHealth;
 		UpdateHealth(0, 0);
+	}
+
+	public override void _Notification(int what)
+	{
+		if ((long)what == 1 && _player != null)
+		{
+			_player.Creature.CurrentHpChanged -= UpdateHealth;
+			_player.Creature.MaxHpChanged -= UpdateHealth;
+		}
 	}
 
 	private void UpdateHealth(int _, int __)
@@ -154,7 +154,10 @@ public class NTopBarHp : NClickableControl
 	{
 		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.UpdateHealth, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "_", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
@@ -179,9 +182,9 @@ public class NTopBarHp : NClickableControl
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -220,7 +223,7 @@ public class NTopBarHp : NClickableControl
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

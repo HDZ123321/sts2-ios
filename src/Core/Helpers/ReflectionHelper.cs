@@ -45,8 +45,8 @@ public static class ReflectionHelper
 			}
 			if (_modTypes == null)
 			{
-				_modTypes = (from m in ModManager.GetLoadedMods()
-					select m.assembly).OfType<Assembly>().SelectMany((Assembly a) => a.GetTypes()).ToArray();
+				_modTypes = ModManager.GetLoadedMods().SelectMany((Mod m) => m.assemblies).SelectMany((Assembly a) => a.GetTypes())
+					.ToArray();
 			}
 			return _modTypes;
 		}

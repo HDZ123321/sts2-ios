@@ -1,19 +1,18 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Relics;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
-using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Cards;
 
 namespace MegaCrit.Sts2.Core.Models.Relics;
 
 public sealed class SereTalon : RelicModel
 {
-	private const string _cursesKey = "Curses";
+	public const int maxHpLoss = 9;
 
 	private const string _wishesKey = "Wishes";
 
@@ -23,7 +22,7 @@ public sealed class SereTalon : RelicModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new DynamicVar("Curses", 2m),
+		new HpLossVar(9m),
 		new DynamicVar("Wishes", 3m)
 	});
 
@@ -31,25 +30,12 @@ public sealed class SereTalon : RelicModel
 
 	public override async Task AfterObtained()
 	{
-		List<CardModel> availableCurses = (from c in ModelDb.CardPool<CurseCardPool>().GetUnlockedCards(base.Owner.UnlockState, base.Owner.RunState.CardMultiplayerConstraint)
-			where c.CanBeGeneratedByModifiers
-			orderby c.Id
-			select c).ToList();
-		List<CardPileAddResult> curseResults = new List<CardPileAddResult>();
-		for (int i = 0; i < base.DynamicVars["Curses"].IntValue; i++)
-		{
-			CardModel cardModel = base.Owner.RunState.Rng.Niche.NextItem(availableCurses);
-			availableCurses.Remove(cardModel);
-			CardModel card = base.Owner.RunState.CreateCard(cardModel, base.Owner);
-			curseResults.Add(await CardPileCmd.Add(card, PileType.Deck));
-		}
-		CardCmd.PreviewCardPileAdd(curseResults, 2f);
-		await Cmd.Wait(0.75f);
+		await CreatureCmd.LoseMaxHp(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.HpLoss.BaseValue, null);
 		List<CardPileAddResult> wishResults = new List<CardPileAddResult>();
 		for (int i = 0; i < base.DynamicVars["Wishes"].IntValue; i++)
 		{
-			CardModel card2 = base.Owner.RunState.CreateCard(ModelDb.Card<Wish>(), base.Owner);
-			wishResults.Add(await CardPileCmd.Add(card2, PileType.Deck));
+			CardModel card = base.Owner.RunState.CreateCard(ModelDb.Card<Wish>(), base.Owner);
+			wishResults.Add(await CardPileCmd.Add(card, PileType.Deck));
 		}
 		CardCmd.PreviewCardPileAdd(wishResults, 2f);
 		await Cmd.Wait(0.75f);

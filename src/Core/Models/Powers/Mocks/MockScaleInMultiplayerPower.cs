@@ -12,6 +12,8 @@ public class MockScaleInMultiplayerPower : PowerModel
 
 	public static GetScaledAmountForMultiplayerDelegate? getScaledAmountForMultiplayer;
 
+	public override bool IsMock => true;
+
 	public override PowerType Type => PowerType.Debuff;
 
 	public override PowerStackType StackType => PowerStackType.Counter;

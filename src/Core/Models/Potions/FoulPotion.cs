@@ -56,15 +56,30 @@ public sealed class FoulPotion : PotionModel
 			{
 				return true;
 			}
-			if (base.Owner.RunState.CurrentRoom is MerchantRoom)
+			AbstractRoom currentRoom = base.Owner.RunState.CurrentRoom;
+			if (currentRoom is MerchantRoom)
 			{
-				return GetFoulPotionMerchantTarget(base.Owner.RunState.CurrentRoom).button != null;
+				goto IL_0040;
 			}
-			if (base.Owner.RunState.CurrentRoom is EventRoom eventRoom && eventRoom.CanonicalEvent is FakeMerchant)
+			if (currentRoom is EventRoom eventRoom)
 			{
-				return GetFoulPotionMerchantTarget(base.Owner.RunState.CurrentRoom).button != null;
+				EventModel canonicalEvent = eventRoom.CanonicalEvent;
+				if (canonicalEvent is FakeMerchant)
+				{
+					goto IL_0040;
+				}
+			}
+			bool flag = false;
+			goto IL_0046;
+			IL_0046:
+			if (flag)
+			{
+				return GetFoulPotionMerchantTarget(currentRoom).button != null;
 			}
 			return false;
+			IL_0040:
+			flag = true;
+			goto IL_0046;
 		}
 	}
 
@@ -74,7 +89,7 @@ public sealed class FoulPotion : PotionModel
 		{
 			Creature creature = base.Owner.Creature;
 			DamageVar damage = base.DynamicVars.Damage;
-			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.Creatures.Where((Creature c) => !c.IsPet), damage.BaseValue, damage.Props, creature, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.Creatures.Where((Creature c) => !c.IsPet), damage.BaseValue, damage.Props, creature, null, null);
 		}
 		else if (base.Owner.RunState.CurrentRoom is MerchantRoom)
 		{

@@ -64,7 +64,7 @@ public class DamageConsoleCmd : AbstractConsoleCmd
 
 	private async Task DamageAndCheckWinCondition(IEnumerable<Creature> creatures, decimal amount)
 	{
-		await CreatureCmd.Damage(new BlockingPlayerChoiceContext(), creatures.ToList(), amount, ValueProp.Unpowered, null, null);
+		await CreatureCmd.Damage(new BlockingPlayerChoiceContext(), creatures.ToList(), amount, ValueProp.Unpowered, null, null, null);
 		await CombatManager.Instance.CheckWinCondition();
 	}
 }

@@ -16,7 +16,7 @@ public static class ScoreUtility
 {
 	/// <summary>
 	/// A sentinel value for clients in a multiplayer run to submit when uploading a daily run score.
-	/// For more information on why this is needed, see <see cref="M:MegaCrit.Sts2.Core.Daily.DailyRunUtility.ShouldUploadScore(MegaCrit.Sts2.Core.Leaderboard.ILeaderboardHandle,System.Collections.Generic.IReadOnlyList{System.UInt64},System.Threading.CancellationToken)" />.
+	/// For more information on why this is needed, see <see cref="M:MegaCrit.Sts2.Core.Daily.DailyRunUtility.ShouldUploadScore(MegaCrit.Sts2.Core.Leaderboard.ILeaderboardHandle,System.Collections.Generic.List{System.UInt64},System.Threading.CancellationToken)" />.
 	/// </summary>
 	public const int clientScore = -999999999;
 
@@ -28,7 +28,7 @@ public static class ScoreUtility
 	/// <returns>The final score for the run.</returns>
 	public static int CalculateScore(IRunState runState, bool won)
 	{
-		return CalculateScore(runState.MapPointHistory, runState.AscensionLevel, won, runState.Players.Count);
+		return CalculateScore(runState.MapPointHistory, runState.AscensionLevel, runState.GameMode, won, runState.Players.Count);
 	}
 
 	/// <summary>
@@ -39,16 +39,20 @@ public static class ScoreUtility
 	/// <returns>The final score for the run.</returns>
 	public static int CalculateScore(SerializableRun run, bool won)
 	{
-		return CalculateScore(run.MapPointHistory, run.Ascension, won, run.Players.Count);
+		return CalculateScore(run.MapPointHistory, run.Ascension, run.GameMode, won, run.Players.Count);
 	}
 
-	private static int CalculateScore(IReadOnlyList<IReadOnlyList<MapPointHistoryEntry>> history, int ascension, bool won, int playerCount)
+	private static int CalculateScore(IReadOnlyList<IReadOnlyList<MapPointHistoryEntry>> history, int ascension, GameMode gameMode, bool won, int playerCount)
 	{
 		int num = 0;
 		num += GetScoreForFloor(history);
 		num += GetScoreForGoldGained(history, playerCount);
 		num += GetScoreForElitesKilled(GetElitesKilledCount(history));
 		num += GetScoreForBossesSlain(GetBossesSlainCount(history, won));
+		if (gameMode == GameMode.Dread)
+		{
+			return num * 3;
+		}
 		return (int)((double)num * (1.0 + (double)ascension * 0.1));
 	}
 

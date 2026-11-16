@@ -15,22 +15,29 @@ public sealed class SlowPower : PowerModel
 {
 	private const string _slowAmountKey = "SlowAmount";
 
+	private const string _displayAmountKey = "DisplayAmount";
+
 	public override PowerType Type => PowerType.Debuff;
 
 	public override PowerStackType StackType => PowerStackType.Counter;
 
 	public override int DisplayAmount => base.DynamicVars["SlowAmount"].IntValue * 10;
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DynamicVar("SlowAmount", 0m));
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
+	{
+		new DynamicVar("SlowAmount", 0m),
+		new DynamicVar("DisplayAmount", 0m)
+	});
 
 	public override Task AfterCardPlayed(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		base.DynamicVars["SlowAmount"].BaseValue++;
+		base.DynamicVars["DisplayAmount"].BaseValue = base.DynamicVars["SlowAmount"].BaseValue * 10m;
 		InvokeDisplayAmountChanged();
 		return Task.CompletedTask;
 	}
 
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (target != base.Owner)
 		{
@@ -56,6 +63,7 @@ public sealed class SlowPower : PowerModel
 			return Task.CompletedTask;
 		}
 		base.DynamicVars["SlowAmount"].BaseValue = 0m;
+		base.DynamicVars["DisplayAmount"].BaseValue = 0m;
 		InvokeDisplayAmountChanged();
 		return Task.CompletedTask;
 	}

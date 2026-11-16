@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using System.Linq;
 using System.Threading.Tasks;
 using BaseLib.Patches.Localization;
@@ -34,7 +35,7 @@ public sealed class BlockReturnPower : WatcherPowerModel, IAddDumbVariablesToPow
 		return Task.CompletedTask;
 	}
 
-	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (!(((PowerModel)(object)this).Applier == null || wasRemovalPrevented) && _applierIsAttacking && creature == ((PowerModel)(object)this).Owner)
 		{

@@ -11,7 +11,7 @@ namespace MegaCrit.Sts2.Core.Models.Cards;
 
 public sealed class GiantRock : CardModel
 {
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DamageVar(16m, ValueProp.Move));
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DamageVar(20m, ValueProp.Move));
 
 	public GiantRock()
 		: base(1, CardType.Attack, CardRarity.Token, TargetType.AnyEnemy)
@@ -21,7 +21,7 @@ public sealed class GiantRock : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).Targeting(cardPlay.Target)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).Targeting(cardPlay.Target)
 			.WithHitFx("vfx/vfx_rock_shatter", null, "blunt_attack.mp3")
 			.Execute(choiceContext);
 	}

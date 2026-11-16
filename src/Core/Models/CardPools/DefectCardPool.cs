@@ -23,7 +23,7 @@ public sealed class DefectCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[88]
+		return new CardModel[91]
 		{
 			ModelDb.Card<AdaptiveStrike>(),
 			ModelDb.Card<AllForOne>(),
@@ -67,11 +67,13 @@ public sealed class DefectCardPool : CardPoolModel
 			ModelDb.Card<GunkUp>(),
 			ModelDb.Card<Hailstorm>(),
 			ModelDb.Card<HelixDrill>(),
+			ModelDb.Card<Hibernate>(),
 			ModelDb.Card<Hologram>(),
 			ModelDb.Card<Hotfix>(),
 			ModelDb.Card<Hyperbeam>(),
 			ModelDb.Card<IceLance>(),
 			ModelDb.Card<Ignition>(),
+			ModelDb.Card<ImitationLearning>(),
 			ModelDb.Card<Iteration>(),
 			ModelDb.Card<Leap>(),
 			ModelDb.Card<LightningRod>(),
@@ -82,6 +84,7 @@ public sealed class DefectCardPool : CardPoolModel
 			ModelDb.Card<MomentumStrike>(),
 			ModelDb.Card<MultiCast>(),
 			ModelDb.Card<Null>(),
+			ModelDb.Card<OneForAll>(),
 			ModelDb.Card<Overclock>(),
 			ModelDb.Card<Quadcast>(),
 			ModelDb.Card<Rainbow>(),

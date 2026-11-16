@@ -28,6 +28,6 @@ public sealed class Corrupted : EnchantmentModel
 
 	public override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay? cardPlay)
 	{
-		await CreatureCmd.Damage(choiceContext, base.Card.Owner.Creature, 2m, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, base.Card);
+		await CreatureCmd.Damage(choiceContext, base.Card.Owner.Creature, 2m, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, base.Card, cardPlay);
 	}
 }

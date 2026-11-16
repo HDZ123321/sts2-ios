@@ -6,9 +6,9 @@ namespace MegaCrit.Sts2.Core.Models.Encounters.Mocks;
 
 public sealed class MockNoRewardsEncounter : EncounterModel
 {
-	public override RoomType RoomType => RoomType.Monster;
+	public override bool IsMock => true;
 
-	public override bool IsDebugEncounter => true;
+	public override RoomType RoomType => RoomType.Monster;
 
 	public override bool ShouldGiveRewards => false;
 

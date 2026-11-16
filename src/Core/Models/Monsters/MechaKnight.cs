@@ -51,6 +51,8 @@ public sealed class MechaKnight : MonsterModel
 
 	private static int ChargeDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 30, 25);
 
+	private static int FlamethrowerDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 12, 8);
+
 	private static int HeavyCleaveDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 40, 35);
 
 	public override string DeathSfx => "event:/sfx/enemy/enemy_attacks/mechaknight/mechaknight_die";
@@ -80,7 +82,7 @@ public sealed class MechaKnight : MonsterModel
 	{
 		List<MonsterState> list = new List<MonsterState>();
 		MoveState moveState = new MoveState("CHARGE_MOVE", ChargeMove, new SingleAttackIntent(ChargeDamage));
-		MoveState moveState2 = new MoveState("FLAMETHROWER_MOVE", FlamethrowerMove, new StatusIntent(4));
+		MoveState moveState2 = new MoveState("FLAMETHROWER_MOVE", FlamethrowerMove, new SingleAttackIntent(FlamethrowerDamage), new StatusIntent(4));
 		MoveState moveState3 = new MoveState("WINDUP_MOVE", WindupMove, new DefendIntent(), new BuffIntent());
 		MoveState moveState4 = new MoveState("HEAVY_CLEAVE_MOVE", HeavyCleaveMove, new SingleAttackIntent(HeavyCleaveDamage));
 		moveState.FollowUpState = moveState2;
@@ -131,8 +133,10 @@ public sealed class MechaKnight : MonsterModel
 
 	private async Task FlamethrowerMove(IReadOnlyList<Creature> targets)
 	{
-		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/mechaknight/mechaknight_flamethrower");
-		await CreatureCmd.TriggerAnim(base.Creature, "flamethrower", 1.5f);
+		await DamageCmd.Attack(FlamethrowerDamage).FromMonster(this).WithAttackerAnim("flamethrower", 1.5f)
+			.WithAttackerFx(null, "event:/sfx/enemy/enemy_attacks/mechaknight/mechaknight_flamethrower")
+			.WithHitVfxNode((Creature target) => NFireBurstVfx.Create(target, 0.75f))
+			.Execute(null);
 		await CardPileCmd.AddToCombatAndPreview<Burn>(targets, PileType.Hand, 4, null);
 	}
 

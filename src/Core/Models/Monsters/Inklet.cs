@@ -27,6 +27,8 @@ public sealed class Inklet : MonsterModel
 
 	private const string _attackTripleSfx = "event:/sfx/enemy/enemy_attacks/inklet/inklet_attack_triple";
 
+	public override float HurtAnimationTrackOffsetForDoom => 0.04f;
+
 	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 12, 11);
 
 	public override int MaxInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 18, 17);

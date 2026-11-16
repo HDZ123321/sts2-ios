@@ -8,7 +8,6 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Game.Checksums;
 using MegaCrit.Sts2.Core.Multiplayer.Replay;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.TestSupport;
 using Sentry;
@@ -59,7 +58,7 @@ public class ChecksumTracker : IDisposable
 
 	public bool IsEnabled { get; set; } = true;
 
-	public event Action<NetFullCombatState>? StateDiverged;
+	public event Action<ulong, NetFullCombatState>? StateDiverged;
 
 	public event Action<NetChecksumData, string, NetFullCombatState>? ChecksumGenerated;
 
@@ -150,11 +149,6 @@ public class ChecksumTracker : IDisposable
 		if (_netService.Type == NetGameType.Host)
 		{
 			(_netService as NetHostGameService)?.DisconnectClient(senderId, NetError.StateDivergence);
-			NErrorPopup nErrorPopup = NErrorPopup.Create(new NetErrorInfo(NetError.StateDivergence, selfInitiated: true));
-			if (nErrorPopup != null)
-			{
-				NModalContainer.Instance?.Add(nErrorPopup);
-			}
 		}
 	}
 
@@ -240,8 +234,8 @@ public class ChecksumTracker : IDisposable
 				senderCombatState = localChecksum.fullState
 			};
 			_netService.SendMessage(message2);
-			this.StateDiverged?.Invoke(message.senderCombatState);
 		}
+		this.StateDiverged?.Invoke(remoteId, message.senderCombatState);
 	}
 
 	private void ReportDivergenceToSentry(TrackedChecksum localChecksum, StateDivergenceMessage message, ulong remoteId, int checksumIndex)

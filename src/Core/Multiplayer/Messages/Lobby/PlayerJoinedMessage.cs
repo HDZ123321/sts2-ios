@@ -7,11 +7,11 @@ namespace MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 
 /// <summary>
 /// Sent from host to clients when a client has joined.
-/// The newly joined client receives ClientSlotGrantedMessage and not this message.
+/// The newly joined client receives ClientLobbyJoinResponseMessage and not this message.
 /// </summary>
 public struct PlayerJoinedMessage : INetMessage, IPacketSerializable
 {
-	public LobbyPlayer lobbyPlayer;
+	public StartRunLobbyPlayer lobbyPlayer;
 
 	public bool ShouldBroadcast => false;
 
@@ -28,6 +28,6 @@ public struct PlayerJoinedMessage : INetMessage, IPacketSerializable
 
 	public void Deserialize(PacketReader reader)
 	{
-		lobbyPlayer = reader.Read<LobbyPlayer>();
+		lobbyPlayer = reader.Read<StartRunLobbyPlayer>();
 	}
 }

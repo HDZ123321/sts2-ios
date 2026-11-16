@@ -20,14 +20,15 @@ public sealed class Ashwater : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	public override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.FromKeyword(CardKeyword.Exhaust));
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, _tint);
-		foreach (CardModel item in await CardSelectCmd.FromHand(prefs: new CardSelectorPrefs(base.SelectionScreenPrompt, 0, 999999999), context: choiceContext, player: base.Owner, filter: null, source: this))
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, _tint);
+		foreach (CardModel item in await CardSelectCmd.FromHand(prefs: new CardSelectorPrefs(base.SelectionScreenPrompt, 0, 999999999), context: choiceContext, player: target.Player, filter: null, source: this))
 		{
 			await CardCmd.Exhaust(choiceContext, item);
 		}

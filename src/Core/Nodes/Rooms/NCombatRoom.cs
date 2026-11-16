@@ -2,12 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.IO;
 using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
-using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
@@ -293,6 +291,10 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public Control CombatVfxContainer { get; private set; }
 
+	/// <summary>
+	/// The time reported by Time.GetTicksMsec when _Ready was called on the combat room, OR when an event transitioned
+	/// to combat - whichever was more recent.
+	/// </summary>
 	public ulong CreatedMsec { get; private set; }
 
 	/// <summary>
@@ -323,113 +325,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	public event Action? ProceedButtonPressed;
 
 	/// <summary>
-	/// Creature nodes built a frame or two before the room exists, keyed by the creature they belong to.
-	/// Instantiating <see cref="NCreature" /> is the expensive half of adding an enemy - the packed
-	/// scene, its visuals scene and their textures all get instantiated there - and it happens for every
-	/// enemy in the single frame that builds the room. <see cref="PrepareCreatureNodes" /> does that half
-	/// earlier, one per frame, while the map is still on screen; <see cref="AddCreature" /> then only has
-	/// to parent them.
-	/// </summary>
-	private static readonly Dictionary<Creature, NCreature> _preparedCreatureNodes = new Dictionary<Creature, NCreature>();
-
-	private static NCombatRoom? _preparedRoom;
-
-	/// <summary>
-	/// The background node built alongside the room. <see cref="NCombatBackground.Create" /> instantiates one
-	/// scene per parallax layer and every layer's textures on the spot, which used to land in the frame that
-	/// already had the room and the enemies in it. The layer set is derived from the encounter and a fresh
-	/// <see cref="Rng" /> seeded off the run, so it can be built before the room is on screen.
-	/// </summary>
-	private static NCombatBackground? _preparedBackground;
-
-	/// <summary>
-	/// The encounter's slot layout scene, built with the room. Encounters that place their enemies
-	/// by hand ship a scene for it (<see cref="EncounterModel.CreateScene" />), and instantiating it
-	/// inside the room's frame is another few hundred nodes on top of everything else.
-	/// </summary>
-	private static Control? _preparedEncounterSlots;
-
-	private static ICombatRoomVisuals? _preparedRoomVisuals;
-
-	private static CombatRoomMode _preparedRoomMode;
-
-	private static bool? _prewarmEnabled;
-
-	/// <summary>
-	/// Whether the room node and its creature nodes are built ahead of time. On by default; a <c>user://combat_prewarm.txt</c>
-	/// containing <c>off</c> turns it back off, for comparing a run against the old single-frame build.
-	/// </summary>
-	public static bool PrewarmEnabled
-	{
-		get
-		{
-			if (!_prewarmEnabled.HasValue)
-			{
-				_prewarmEnabled = true;
-				try
-				{
-					string path = ProjectSettings.GlobalizePath("user://combat_prewarm.txt");
-					if (File.Exists(path))
-					{
-						_prewarmEnabled = !File.ReadAllText(path).Trim().Equals("off", StringComparison.OrdinalIgnoreCase);
-					}
-				}
-				catch (Exception ex)
-				{
-					Log.Warn($"[Perf] could not read combat_prewarm.txt, assuming it is on: {ex.Message}");
-				}
-			}
-			return _prewarmEnabled.Value;
-		}
-	}
-
-	/// <summary>
-	/// Builds an <see cref="NCreature" /> for every creature that will be added to the room, spreading the
-	/// work one creature per frame so no single frame carries all of them. The nodes are not in the tree
-	/// yet: their <c>_Ready</c> still runs in the same frame as before, when they are parented.
-	/// </summary>
-	public static async Task PrepareCreatureNodes(ICombatState combatState)
-	{
-		ClearPreparedCreatureNodes();
-		if (!PrewarmEnabled || TestMode.IsOn)
-		{
-			return;
-		}
-		NGame? game = NGame.Instance;
-		if (game == null)
-		{
-			return;
-		}
-		// Players are prepared too: the ally side goes through the same AddCreature path
-		// (CreateAllyNodes), and a playable character's visuals scene is usually the heaviest
-		// atlas in the room.
-		foreach (Creature creature in combatState.Creatures)
-		{
-			NCreature? node = NCreature.Create(creature);
-			if (node != null)
-			{
-				_preparedCreatureNodes[creature] = node;
-			}
-			await game.AwaitProcessFrame();
-		}
-	}
-
-	/// <summary>Frees any creature node that was prepared but never added, so a skipped room cannot leak them.</summary>
-	public static void ClearPreparedCreatureNodes()
-	{
-		foreach (NCreature node in _preparedCreatureNodes.Values)
-		{
-			if (GodotObject.IsInstanceValid(node))
-			{
-				DiscardNode(node);
-			}
-		}
-		_preparedCreatureNodes.Clear();
-	}
-
-	/// <summary>
-	/// Create a new combat room node, reusing the one <see cref="PrepareRoom" /> built ahead of time
-	/// when it belongs to the same room.
+	/// Create a new combat room node.
 	/// </summary>
 	/// <param name="visuals">Data used to determine what visuals should appear in the combat room.</param>
 	/// <param name="mode">The mode that the combat room should start in.</param>
@@ -437,134 +333,16 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	{
 		if (TestMode.IsOn)
 		{
-			DiscardPreparedRoom();
 			return null;
 		}
-		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom) && _preparedRoomMode == mode && ReferenceEquals(_preparedRoomVisuals, visuals))
-		{
-			NCombatRoom nCombatRoom = _preparedRoom;
-			_preparedRoom = null;
-			_preparedRoomVisuals = null;
-			return nCombatRoom;
-		}
-		DiscardPreparedRoom();
-		NCombatRoom fresh = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
-		fresh._visuals = visuals;
-		fresh.Mode = mode;
-		return fresh;
-	}
-
-	/// <summary>
-	/// Instantiates the room's own node tree before the room is needed. Building it is what used to
-	/// make the fight appear late - two thousand nodes, all in the frame that swaps the map out - and
-	/// it cannot be split across frames, so instead it happens while the map is still on screen.
-	/// </summary>
-	public static void PrepareRoom(ICombatRoomVisuals visuals, CombatRoomMode mode, IRunState? runState = null)
-	{
-		DiscardPreparedRoom();
-		if (!PrewarmEnabled || TestMode.IsOn)
-		{
-			return;
-		}
-		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
+		NCombatRoom nCombatRoom = PreloadManager.Cache.GetScene("res://scenes/rooms/combat_room.tscn").Instantiate<NCombatRoom>(PackedScene.GenEditState.Disabled);
 		nCombatRoom._visuals = visuals;
 		nCombatRoom.Mode = mode;
-		_preparedRoom = nCombatRoom;
-		_preparedRoomVisuals = visuals;
-		_preparedRoomMode = mode;
-		if (runState == null)
-		{
-			return;
-		}
-		try
-		{
-			_preparedBackground = visuals.Encounter.CreateBackground(visuals.Act, GenerateBackgroundRngForCurrentPoint(runState));
-			if (visuals.Encounter.HasScene)
-			{
-				_preparedEncounterSlots = visuals.Encounter.CreateScene();
-			}
-		}
-		catch (Exception ex)
-		{
-			Log.Warn($"[Perf] could not prepare the combat background, it will be built on the frame instead: {ex.Message}");
-			_preparedBackground = null;
-			DiscardPreparedEncounterSlots();
-		}
-	}
-
-	/// <summary>Drops the room built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
-	public static void DiscardPreparedRoom()
-	{
-		if (_preparedRoom != null && GodotObject.IsInstanceValid(_preparedRoom))
-		{
-			DiscardNode(_preparedRoom);
-		}
-		_preparedRoom = null;
-		_preparedRoomVisuals = null;
-		DiscardPreparedBackground();
-		DiscardPreparedEncounterSlots();
-	}
-
-	/// <summary>Drops the background built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
-	public static void DiscardPreparedBackground()
-	{
-		if (_preparedBackground != null && GodotObject.IsInstanceValid(_preparedBackground))
-		{
-			DiscardNode(_preparedBackground);
-		}
-		_preparedBackground = null;
-	}
-
-	/// <summary>Drops the slot layout built by <see cref="PrepareRoom" /> without ever adding it to the tree.</summary>
-	private static void DiscardPreparedEncounterSlots()
-	{
-		if (_preparedEncounterSlots != null && GodotObject.IsInstanceValid(_preparedEncounterSlots))
-		{
-			DiscardNode(_preparedEncounterSlots);
-		}
-		_preparedEncounterSlots = null;
-	}
-
-	/// <summary>Takes the prepared slot layout if there is a live one, otherwise null.</summary>
-	private static Control? TakePreparedEncounterSlots()
-	{
-		Control? slots = _preparedEncounterSlots;
-		_preparedEncounterSlots = null;
-		if (slots != null && GodotObject.IsInstanceValid(slots))
-		{
-			return slots;
-		}
-		return null;
-	}
-
-	/// <summary>Takes the prepared background if there is a live one, otherwise null.</summary>
-	private static NCombatBackground? TakePreparedBackground()
-	{
-		NCombatBackground? background = _preparedBackground;
-		_preparedBackground = null;
-		if (background != null && GodotObject.IsInstanceValid(background))
-		{
-			return background;
-		}
-		return null;
-	}
-
-	/// <summary>Frees a node that may never have entered the tree, where <c>QueueFree</c> has nothing to hook.</summary>
-	private static void DiscardNode(Node node)
-	{
-		if (node.IsInsideTree())
-		{
-			node.QueueFree();
-		}
-		else
-		{
-			node.Free();
-		}
+		return nCombatRoom;
 	}
 
 	public override void _Ready()
 	{
-		Perf.Phase("combat.room-ready");
 		Ui = GetNode<NCombatUi>("%CombatUi");
 		Ui.Deactivate();
 		SceneContainer = GetNode<Control>("%CombatSceneContainer");
@@ -586,19 +364,16 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		BgContainer = GetNode<Control>("%BgContainer");
 		CreatedMsec = Time.GetTicksMsec();
 		Log.Info($"Creating NCombatRoom with mode={Mode} encounter={_visuals.Encounter.Id.Entry}.");
-		Perf.Phase("combat.allies");
 		CreateAllyNodes();
 		if (Mode != CombatRoomMode.FinishedCombat)
 		{
-			Perf.Phase("combat.enemies");
 			CreateEnemyNodes();
 		}
 		if (Mode != CombatRoomMode.ActiveCombat)
 		{
 			foreach (NCreature creatureNode in _creatureNodes)
 			{
-				creatureNode.Hitbox.FocusMode = FocusModeEnum.None;
-				SetCreatureIsInteractable(creatureNode.Entity, on: false);
+				creatureNode.SetIsInteractable(on: false, changeVisibilityImmediately: true);
 			}
 		}
 		SceneContainer.Scale = Vector2.One * _visuals.Encounter.GetCameraScaling();
@@ -609,8 +384,6 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		_window.Connect(Viewport.SignalName.SizeChanged, Callable.From(AdjustCreatureScaleForAspectRatio));
 		AdjustCreatureScaleForAspectRatio();
 		NGame.Instance.SetScreenShakeTarget(SceneContainer);
-		ClearPreparedCreatureNodes();
-		Perf.Phase("combat.room-ready.done");
 	}
 
 	public static Rng GenerateBackgroundRngForCurrentPoint(IRunState state)
@@ -650,14 +423,12 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	private void OnCombatSetUp(CombatState state)
 	{
-		Perf.Phase("combat.ui-activate");
 		Ui.Activate(((CombatRoom)_visuals).CombatState);
+		_proceedButton.Initialize(state.RunState);
 		if (Background == null)
 		{
-			Perf.Phase("combat.background");
 			SetUpBackground(state.RunState);
 		}
-		Perf.Phase("combat.ui-activate.done");
 	}
 
 	/// <summary>
@@ -671,7 +442,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			Log.Warn("Tried to set up background twice!");
 		}
-		Background = TakePreparedBackground() ?? _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
+		Background = _visuals.Encounter.CreateBackground(_visuals.Act, GenerateBackgroundRngForCurrentPoint(state));
 		BgContainer.AddChildSafely(Background);
 	}
 
@@ -709,7 +480,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	{
 		if (_visuals.Encounter.HasScene)
 		{
-			EncounterSlots = TakePreparedEncounterSlots() ?? _visuals.Encounter.CreateScene();
+			EncounterSlots = _visuals.Encounter.CreateScene();
 		}
 		if (EncounterSlots != null)
 		{
@@ -860,26 +631,16 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 				NCreature player = playerAndPets.player;
 				List<NCreature> pets = playerAndPets.pets;
 				player.Position = new Vector2(0f - targetXPos - player.Visuals.Bounds.Size.X * 0.5f, 200f - num9 * (float)num11);
+				NCreature osty = null;
 				if (LocalContext.IsMe(player.Entity) && player.Entity.Player.Character is Necrobinder)
 				{
-					NCreature osty = null;
-					for (int num14 = 0; num14 < pets.Count; num14++)
-					{
-						NCreature nCreature = pets[num14];
-						if (nCreature.Entity.Monster is Osty)
-						{
-							osty = nCreature;
-							pets.RemoveAt(num14);
-							break;
-						}
-					}
 					PositionLocalPlayerOsty(ref targetXPos, player.Position.Y, player, osty);
 				}
-				float num15 = ((pets.Count > 1) ? (player.Visuals.Bounds.Size.X / (float)(pets.Count - 1)) : 0f);
-				for (int num16 = 0; num16 < pets.Count; num16++)
+				float num14 = ((pets.Count > 1) ? (player.Visuals.Bounds.Size.X / (float)(pets.Count - 1)) : 0f);
+				for (int num15 = 0; num15 < pets.Count; num15++)
 				{
-					NCreature nCreature2 = pets[num16];
-					nCreature2.Position = new Vector2(0f - targetXPos + 20f - (float)num16 * num15 - nCreature2.Visuals.Bounds.Size.X * 0.5f, player.Position.Y + 10f);
+					NCreature nCreature = pets[num15];
+					nCreature.Position = new Vector2(0f - targetXPos + 20f - (float)num15 * num14 - nCreature.Visuals.Bounds.Size.X * 0.5f, player.Position.Y + 10f);
 				}
 				if (num11 > 0)
 				{
@@ -895,13 +656,13 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		foreach (PlayerAndPets item3 in list)
 		{
 			item3.player.GetParent().MoveChildSafely(item3.player, 0);
-			for (int num17 = 0; num17 < item3.pets.Count; num17++)
+			for (int num16 = 0; num16 < item3.pets.Count; num16++)
 			{
-				NCreature nCreature3 = item3.pets[num17];
-				nCreature3.GetParent().MoveChildSafely(nCreature3, num17 + 1);
+				NCreature nCreature2 = item3.pets[num16];
+				nCreature2.GetParent().MoveChildSafely(nCreature2, num16 + 1);
 				if (!LocalContext.IsMe(item3.player.Entity))
 				{
-					nCreature3.Visuals.Bounds.Visible = false;
+					nCreature2.Visuals.Bounds.Visible = false;
 				}
 			}
 		}
@@ -926,6 +687,21 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 			return CreatureNodes.FirstOrDefault((NCreature c) => c.Entity == creature);
 		}
 		return null;
+	}
+
+	/// <summary>
+	/// Finds a creature's node whether it is alive or partway through its death animation.
+	/// <see cref="M:MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.GetCreatureNode(MegaCrit.Sts2.Core.Entities.Creatures.Creature)" /> only searches live creatures, so it returns null for a creature that has already
+	/// been handed to <see cref="M:MegaCrit.Sts2.Core.Nodes.Rooms.NCombatRoom.RemoveCreatureNode(MegaCrit.Sts2.Core.Nodes.Combat.NCreature)" /> even though that node is still around playing its death
+	/// animation. Use this when an effect has to reach a creature that just died.
+	/// </summary>
+	public NCreature? GetCreatureNodeIncludingDying(Creature? creature)
+	{
+		if (creature == null)
+		{
+			return null;
+		}
+		return GetCreatureNode(creature) ?? RemovingCreatureNodes.FirstOrDefault((NCreature c) => c.Entity == creature);
 	}
 
 	public void RemoveCreatureNode(NCreature node)
@@ -954,16 +730,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	public void AddCreature(Creature creature)
 	{
-		Perf.Phase("combat.creature-node");
-		NCreature nCreature;
-		if (_preparedCreatureNodes.Remove(creature, out NCreature? prepared) && GodotObject.IsInstanceValid(prepared))
-		{
-			nCreature = prepared;
-		}
-		else
-		{
-			nCreature = NCreature.Create(creature);
-		}
+		NCreature nCreature = NCreature.Create(creature);
 		_creatureNodes.Add(nCreature);
 		if (creature.IsPlayer || creature.PetOwner != null)
 		{
@@ -988,34 +755,45 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		}
 		NCreature creatureNode = GetCreatureNode(creature.PetOwner.Creature);
 		Player player = creatureNode.Entity.Player;
-		List<NCreature> list = _creatureNodes.Where((NCreature c) => c.Entity.PetOwner == player && (!(c.Entity.Monster is Osty) || !LocalContext.IsMe(player))).ToList();
+		List<NCreature> list = _creatureNodes.Where((NCreature c) => c.Entity.PetOwner == player && ((!(c.Entity.Monster is Osty) && !(c.Entity.Monster is Wuppy)) || !LocalContext.IsMe(player))).ToList();
 		nCreature.GetParent().MoveChildSafely(nCreature, creatureNode.GetIndex() + 1);
-		if (creature.Monster is Osty && LocalContext.IsMe(player))
+		bool flag = LocalContext.IsMe(player);
+		bool flag2 = flag;
+		if (flag2)
 		{
-			nCreature.OstyScaleToSize(creature.MaxHp, 0.0);
-			nCreature.GetParent().MoveChildSafely(nCreature, creatureNode.GetIndex());
-			return;
+			MonsterModel monster = creature.Monster;
+			bool flag3 = ((monster is Osty || monster is Wuppy) ? true : false);
+			flag2 = flag3;
 		}
-		float num = ((list.Count > 1) ? (creatureNode.Visuals.Bounds.Size.X / (float)(list.Count - 1)) : 0f);
-		for (int num2 = 0; num2 < list.Count; num2++)
+		if (flag2)
 		{
-			NCreature nCreature2 = list[num2];
-			nCreature2.Position = new Vector2(creatureNode.Position.X - 20f + (float)num2 * num + nCreature2.Visuals.Bounds.Size.X * 0.5f, creatureNode.Position.Y + 10f);
-			nCreature2.ToggleIsInteractable(on: false);
+			if (creature.Monster is Osty)
+			{
+				nCreature.ScaleAndPositionOsty(creature.MaxHp, 0.0);
+				nCreature.GetParent().MoveChildSafely(nCreature, creatureNode.GetIndex());
+				player.Creature.Pets.FirstOrDefault((Creature e) => e.Monster is Wuppy)?.GetCreatureNode()?.PositionWuppy(isCombatStart: false);
+			}
+			if (creature.Monster is Wuppy)
+			{
+				nCreature.PositionWuppy(CombatManager.Instance.IsInProgress);
+			}
 		}
-		if (creatureNode.Position.Y < 199f)
+		else
 		{
-			nCreature.Visuals.Modulate = new Color(0.5f, 0.5f, 0.5f);
+			float num = ((list.Count > 1) ? (creatureNode.Visuals.Bounds.Size.X / (float)(list.Count - 1)) : 0f);
+			for (int num2 = 0; num2 < list.Count; num2++)
+			{
+				NCreature nCreature2 = list[num2];
+				nCreature2.Position = new Vector2(creatureNode.Position.X - 20f + (float)num2 * num + nCreature2.Visuals.Bounds.Size.X * 0.5f, creatureNode.Position.Y + 10f);
+			}
+			if (creatureNode.Position.Y < 199f)
+			{
+				nCreature.Visuals.Modulate = new Color(0.5f, 0.5f, 0.5f);
+			}
 		}
 	}
 
-	public void SetCreatureIsInteractable(Creature? creature, bool on)
-	{
-		GetCreatureNode(creature)?.ToggleIsInteractable(on);
-		UpdateCreatureNavigation();
-	}
-
-	private void UpdateCreatureNavigation()
+	public void UpdateCreatureNavigation()
 	{
 		List<NCreature> list = (from n in _creatureNodes
 			where n.IsInteractable
@@ -1074,8 +852,10 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		foreach (NCreature creatureNode in _creatureNodes)
 		{
 			Control hitbox = creatureNode.Hitbox;
-			creatureNode.Hitbox.FocusMode = (FocusModeEnum)(whitelist.Contains(hitbox) ? 2 : 0);
-			creatureNode.Hitbox.FocusNeighborBottom = creatureNode.Hitbox.GetPath();
+			bool flag = whitelist.Contains(hitbox);
+			hitbox.FocusMode = (FocusModeEnum)(flag ? 2 : 0);
+			hitbox.FocusNeighborBottom = creatureNode.Hitbox.GetPath();
+			creatureNode.OrbManager?.SetFocusBehaviorRecursive((FocusBehaviorRecursiveEnum)(flag ? 0 : 1));
 		}
 		Ui.Hand.DisableControllerNavigation();
 	}
@@ -1085,12 +865,17 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// </summary>
 	public void EnableControllerNavigation()
 	{
+		if (!IsInsideTree())
+		{
+			return;
+		}
 		foreach (NCreature creatureNode in _creatureNodes)
 		{
 			if (!creatureNode.Entity.IsDead)
 			{
 				creatureNode.Hitbox.FocusMode = FocusModeEnum.All;
 				creatureNode.Hitbox.FocusNeighborBottom = Ui.Hand.CardHolderContainer.GetPath();
+				creatureNode.OrbManager?.SetFocusBehaviorRecursive(FocusBehaviorRecursiveEnum.Inherited);
 			}
 		}
 		UpdateCreatureNavigation();
@@ -1175,10 +960,11 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		}
 		Mode = CombatRoomMode.ActiveCombat;
 		_visuals = combatRoom;
+		CreatedMsec = Time.GetTicksMsec();
 		foreach (NCreature creatureNode in _creatureNodes)
 		{
-			creatureNode.Hitbox.FocusMode = FocusModeEnum.All;
-			SetCreatureIsInteractable(creatureNode.Entity, on: true);
+			creatureNode.SetIsInteractable(on: true, changeVisibilityImmediately: false);
+			creatureNode.AnimateInStateDisplayForCombatStart();
 		}
 		SubscribeToCombatEvents();
 	}

@@ -8,16 +8,19 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
+using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Ancients;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
-using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
+using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -197,6 +200,7 @@ public class NEventRoom : Control, IScreenContext
 		_eventContainer.SetCurrentScene(control);
 		VfxContainer = Layout?.VfxContainer;
 		TaskHelper.RunSafely(SetupLayout());
+		RunManager.Instance.FlavorSynchronizer.MapPingReceived += OnMapPingReceived;
 	}
 
 	public override void _EnterTree()
@@ -210,6 +214,7 @@ public class NEventRoom : Control, IScreenContext
 		NGame.Instance.ClearScreenShakeTarget();
 		_event.StateChanged -= RefreshEventState;
 		_event.EnteringEventCombat -= OnEnteringEventCombat;
+		RunManager.Instance.FlavorSynchronizer.MapPingReceived -= OnMapPingReceived;
 		foreach (EventOption connectedOption in _connectedOptions)
 		{
 			connectedOption.BeforeChosen -= BeforeOptionChosen;
@@ -267,7 +272,7 @@ public class NEventRoom : Control, IScreenContext
 		if (description.Exists())
 		{
 			CharacterModel character = _event.Owner.Character;
-			character.AddDetailsTo(description);
+			character.AddDetailsTo(description, _event.FoolPronounGuess);
 			description.Add("IsMultiplayer", _event.Owner.RunState.Players.Count > 1);
 			_event.DynamicVars.AddTo(description);
 			Layout.SetDescription(description.GetFormattedText());
@@ -343,6 +348,31 @@ public class NEventRoom : Control, IScreenContext
 		SetOptions(_event);
 	}
 
+	/// <summary>
+	/// Called when a player attempts to ping.
+	/// This is called when ANY ping occurs, but should only do something when the proceed button is double-pressed in
+	/// Blitz mode.
+	/// </summary>
+	private void OnMapPingReceived(Player player, MapCoord coord)
+	{
+		if (player.RunState.GameMode == GameMode.Blitz)
+		{
+			NEventOptionButton nEventOptionButton = Layout?.OptionButtons.FirstOrDefault();
+			if (nEventOptionButton != null && nEventOptionButton.Option.IsProceed)
+			{
+				NMapPingVfx nMapPingVfx = NMapPingVfx.Create();
+				nMapPingVfx.Modulate = player.Character.MapDrawingColor;
+				this.AddChildSafely(nMapPingVfx);
+				this.MoveChildSafely(nMapPingVfx, Layout.GetIndex() - 1);
+				nMapPingVfx.Size *= nEventOptionButton.Size.Y * (1f / 64f);
+				nMapPingVfx.PivotOffset = nMapPingVfx.Size * 0.5f;
+				nMapPingVfx.Position = nEventOptionButton.GlobalPosition * GetTransform() + nEventOptionButton.Size * 0.5f - nMapPingVfx.PivotOffset;
+			}
+			NRun.Instance.GlobalUi.MultiplayerPlayerContainer.FlashPlayerReady(player);
+			NDebugAudioManager.Instance.Play("map_ping.mp3", 1f, PitchVariance.Medium);
+		}
+	}
+
 	private void DisableOptionButtons()
 	{
 		Layout?.DisableEventOptions();
@@ -359,8 +389,7 @@ public class NEventRoom : Control, IScreenContext
 
 	public static Task Proceed()
 	{
-		NMapScreen.Instance.SetTravelEnabled(enabled: true);
-		NMapScreen.Instance.Open();
+		RunManager.Instance.Proceed();
 		return Task.CompletedTask;
 	}
 

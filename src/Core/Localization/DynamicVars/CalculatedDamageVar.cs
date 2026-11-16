@@ -61,7 +61,7 @@ public class CalculatedDamageVar : CalculatedVar
 		if (runGlobalHooks)
 		{
 			ICombatState combatState = card.CombatState ?? card.Owner.Creature.CombatState;
-			base.PreviewValue = Hook.ModifyDamage(card.Owner.RunState, combatState, target, IsFromOsty ? card.Owner.Osty : card.Owner.Creature, num, Props, card, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
+			base.PreviewValue = Hook.ModifyDamage(card.Owner.RunState, combatState, target, IsFromOsty ? card.Owner.Osty : card.Owner.Creature, num, Props, card, null, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
 		}
 		else if (!card.IsEnchantmentPreview)
 		{

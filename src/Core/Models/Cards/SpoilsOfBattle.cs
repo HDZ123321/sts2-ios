@@ -12,7 +12,7 @@ public sealed class SpoilsOfBattle : CardModel
 {
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new ForgeVar(5),
+		new ForgeVar(6),
 		new CardsVar(2)
 	});
 

@@ -108,7 +108,7 @@ public class NGaseousScreenVfx : AspectRatioContainer
 	{
 	}
 
-	public static readonly string scenePath = SceneHelper.GetScenePath("vfx/ui/vfx_gaseous_screen");
+	private static readonly string _scenePath = SceneHelper.GetScenePath("vfx/ui/vfx_gaseous_screen");
 
 	[Export(PropertyHint.None, "")]
 	private ColorRect _gfx;
@@ -155,7 +155,7 @@ public class NGaseousScreenVfx : AspectRatioContainer
 		{
 			return null;
 		}
-		return PreloadManager.Cache.GetScene(scenePath).Instantiate<NGaseousScreenVfx>(PackedScene.GenEditState.Disabled);
+		return PreloadManager.Cache.GetScene(_scenePath).Instantiate<NGaseousScreenVfx>(PackedScene.GenEditState.Disabled);
 	}
 
 	public override void _Ready()
@@ -181,7 +181,7 @@ public class NGaseousScreenVfx : AspectRatioContainer
 		_materialCopy.SetShaderParameter(_erosionString, num3);
 	}
 
-	public void Play()
+	private void Play()
 	{
 		TaskHelper.RunSafely(PlaySequence());
 	}

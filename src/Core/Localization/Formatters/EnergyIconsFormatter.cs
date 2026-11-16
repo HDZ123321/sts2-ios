@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Runs;
 using SmartFormat.Core.Extensions;
+using SmartFormat.Core.Formatting;
 
 namespace MegaCrit.Sts2.Core.Localization.Formatters;
 
@@ -71,6 +73,14 @@ public class EnergyIconsFormatter : IFormatter
 				text = energyVar.ColorPrefix;
 			}
 		}
+		if ((string.IsNullOrEmpty(text) || text == "colorless") && formattingInfo is FormattingInfo info)
+		{
+			FormattingInfo rootInfo = GetRootInfo(info);
+			if (rootInfo.CurrentValue is Dictionary<string, object> dictionary && dictionary.TryGetValue("energyPrefix", out var value) && value is string text3)
+			{
+				text = text3;
+			}
+		}
 		if (string.IsNullOrEmpty(text) || text == "colorless")
 		{
 			text = RunManager.Instance.GetLocalCharacterEnergyIconPrefix();
@@ -83,9 +93,18 @@ public class EnergyIconsFormatter : IFormatter
 				text = "colorless";
 			}
 		}
-		string text3 = "[img]res://images/packed/sprite_fonts/" + text + "_energy_icon.png[/img]";
-		string text4 = ((result > 0 && result < 4) ? string.Concat(Enumerable.Repeat(text3, result)) : ((!(formattingInfo.CurrentValue is DynamicVar dynamicVar)) ? $"{result}{text3}" : (dynamicVar.ToHighlightedString(inverse: false) + text3)));
-		formattingInfo.Write(text4);
+		string text4 = "[img]res://images/packed/sprite_fonts/" + text + "_energy_icon.png[/img]";
+		string text5 = ((result > 0 && result < 5) ? string.Concat(Enumerable.Repeat(text4, result)) : ((!(formattingInfo.CurrentValue is DynamicVar dynamicVar)) ? $"{result}{text4}" : (dynamicVar.ToHighlightedString(inverse: false) + text4)));
+		formattingInfo.Write(text5);
 		return true;
+	}
+
+	private FormattingInfo GetRootInfo(FormattingInfo info)
+	{
+		while (info.Parent != null)
+		{
+			info = info.Parent;
+		}
+		return info;
 	}
 }

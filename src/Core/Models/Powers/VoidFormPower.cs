@@ -6,6 +6,8 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Forms;
 
 namespace MegaCrit.Sts2.Core.Models.Powers;
 
@@ -16,9 +18,44 @@ public sealed class VoidFormPower : PowerModel
 		public int cardsPlayedThisTurn;
 	}
 
+	private NVoidFormVfx? _vfx;
+
 	public override PowerType Type => PowerType.Buff;
 
 	public override PowerStackType StackType => PowerStackType.Counter;
+
+	private NVoidFormVfx? Vfx
+	{
+		get
+		{
+			if (_vfx == null)
+			{
+				return _vfx;
+			}
+			if (!_vfx.IsValid())
+			{
+				return null;
+			}
+			return _vfx;
+		}
+		set
+		{
+			AssertMutable();
+			_vfx = value;
+		}
+	}
+
+	public override Task AfterApplied(Creature? applier, CardModel? cardSource)
+	{
+		Vfx = NVoidFormVfx.Create(base.Owner);
+		return Task.CompletedTask;
+	}
+
+	public override Task AfterRemoved(Creature oldOwner)
+	{
+		Vfx?.SetActive(isActive: false);
+		return Task.CompletedTask;
+	}
 
 	protected override object InitInternalData()
 	{
@@ -69,6 +106,10 @@ public sealed class VoidFormPower : PowerModel
 		{
 			GetInternalData<Data>().cardsPlayedThisTurn++;
 		}
+		if (GetInternalData<Data>().cardsPlayedThisTurn >= base.Amount)
+		{
+			Vfx?.SetActive(isActive: false);
+		}
 		return Task.CompletedTask;
 	}
 
@@ -79,6 +120,7 @@ public sealed class VoidFormPower : PowerModel
 			return Task.CompletedTask;
 		}
 		GetInternalData<Data>().cardsPlayedThisTurn = 0;
+		Vfx?.SetActive(isActive: true);
 		return Task.CompletedTask;
 	}
 

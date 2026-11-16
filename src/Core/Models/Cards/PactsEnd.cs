@@ -14,7 +14,7 @@ public sealed class PactsEnd : CardModel
 {
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new DamageVar(17m, ValueProp.Move),
+		new DamageVar(18m, ValueProp.Move),
 		new CardsVar(3)
 	});
 
@@ -31,7 +31,7 @@ public sealed class PactsEnd : CardModel
 	{
 		if (CanDealDamage)
 		{
-			await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).TargetingAllOpponents(base.CombatState)
+			await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).TargetingAllOpponents(base.CombatState)
 				.WithAttackerAnim(Ironclad.GetHeavyAnimIfApplicable(base.Owner.Character), Ironclad.GetHeavyAttackDelayIfApplicable(base.Owner.Character))
 				.WithHitFx("vfx/vfx_heavy_blunt", null, "heavy_attack.mp3")
 				.WithHitVfxSpawnedAtBase()

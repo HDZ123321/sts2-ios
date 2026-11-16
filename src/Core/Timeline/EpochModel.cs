@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Godot;
+using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Entities.Relics;
@@ -23,9 +25,28 @@ namespace MegaCrit.Sts2.Core.Timeline;
 [GenerateSubtypes(DynamicallyAccessedMemberTypes = DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
 public abstract class EpochModel
 {
-	private static IReadOnlyList<string>? _allEpochIds;
+	/// <summary>
+	/// One end-of-run score bar unlock: an epoch and the score it takes to earn it.
+	/// </summary>
+	/// <param name="EpochId">The agnostic epoch this unlock grants.</param>
+	/// <param name="ScoreThreshold">
+	/// Score the player needs to earn it. Must be above 0: the score bar reads 0 as "no unlocks left",
+	/// so an unlock with a threshold of 0 is granted for free.
+	/// </param>
+	public readonly record struct AgnosticUnlock(string EpochId, int ScoreThreshold);
 
-	private bool? _isArtPlaceholder;
+	/// <summary>
+	/// List of all valid epochs currently in the game
+	/// </summary>
+	private static readonly List<Type> _allEpochs;
+
+	private static List<string>? _allEpochIds;
+
+	private static HashSet<string>? _epochIdsHashSet;
+
+	private static List<AgnosticUnlock>? _agnosticUnlocks;
+
+	private static List<string>? _agnosticUnlockOrder;
 
 	private string? _resolvedPortraitPath;
 
@@ -33,91 +54,85 @@ public abstract class EpochModel
 
 	private static readonly Dictionary<Type, string> _typeToIdDictionary;
 
+	public static IReadOnlyList<Type> AllEpochs => _allEpochs;
+
+	public static IReadOnlyList<string> AllEpochIds => _allEpochIds ?? (_allEpochIds = _allEpochs.Select(GetId).ToList());
+
+	public static IReadOnlySet<string> EpochIdsHashSet => _epochIdsHashSet ?? (_epochIdsHashSet = AllEpochIds.ToHashSet());
+
 	/// <summary>
-	/// List of all valid epochs currently in the game
+	/// The character-agnostic unlocks in the order the end-of-run score bar grants them, each with the
+	/// score it takes. The epoch and its threshold are stored together so neither can be added without
+	/// the other: they used to be a list here and a switch in the game over screen, and adding an epoch
+	/// to only one of them made the score bar treat the new unlock as already earned.
+	/// Append only: the v23 to v24 migration reads a prefix of this list to work out which unlocks an
+	/// old save had earned, so reordering it changes what those saves resolve to.
 	/// </summary>
-	private static IEnumerable<string> EpochIds => new global::_003C_003Ez__ReadOnlyArray<string>(new string[57]
-	{
-		GetId<Act2BEpoch>(),
-		GetId<Act3BEpoch>(),
-		GetId<Colorless1Epoch>(),
-		GetId<Colorless2Epoch>(),
-		GetId<Colorless3Epoch>(),
-		GetId<Colorless4Epoch>(),
-		GetId<Colorless5Epoch>(),
-		GetId<CustomAndSeedsEpoch>(),
-		GetId<DailyRunEpoch>(),
-		GetId<DarvEpoch>(),
-		GetId<Defect1Epoch>(),
-		GetId<Defect2Epoch>(),
-		GetId<Defect3Epoch>(),
-		GetId<Defect4Epoch>(),
-		GetId<Defect5Epoch>(),
-		GetId<Defect6Epoch>(),
-		GetId<Defect7Epoch>(),
-		GetId<Event1Epoch>(),
-		GetId<Event2Epoch>(),
-		GetId<Event3Epoch>(),
-		GetId<Ironclad2Epoch>(),
-		GetId<Ironclad3Epoch>(),
-		GetId<Ironclad4Epoch>(),
-		GetId<Ironclad5Epoch>(),
-		GetId<Ironclad6Epoch>(),
-		GetId<Ironclad7Epoch>(),
-		GetId<Necrobinder1Epoch>(),
-		GetId<Necrobinder2Epoch>(),
-		GetId<Necrobinder3Epoch>(),
-		GetId<Necrobinder4Epoch>(),
-		GetId<Necrobinder5Epoch>(),
-		GetId<Necrobinder6Epoch>(),
-		GetId<Necrobinder7Epoch>(),
-		GetId<NeowEpoch>(),
-		GetId<OrobasEpoch>(),
-		GetId<Potion1Epoch>(),
-		GetId<Potion2Epoch>(),
-		GetId<Regent1Epoch>(),
-		GetId<Regent2Epoch>(),
-		GetId<Regent3Epoch>(),
-		GetId<Regent4Epoch>(),
-		GetId<Regent5Epoch>(),
-		GetId<Regent6Epoch>(),
-		GetId<Regent7Epoch>(),
-		GetId<Relic1Epoch>(),
-		GetId<Relic2Epoch>(),
-		GetId<Relic3Epoch>(),
-		GetId<Relic4Epoch>(),
-		GetId<Relic5Epoch>(),
-		GetId<Silent1Epoch>(),
-		GetId<Silent2Epoch>(),
-		GetId<Silent3Epoch>(),
-		GetId<Silent4Epoch>(),
-		GetId<Silent5Epoch>(),
-		GetId<Silent6Epoch>(),
-		GetId<Silent7Epoch>(),
-		GetId<UnderdocksEpoch>()
-	});
-
-	public static IReadOnlyList<string> AllEpochIds => _allEpochIds ?? (_allEpochIds = EpochIds.ToList());
-
-	public string Year => new LocString("eras", StringHelper.Slugify(Era.ToString()) + ".year").GetFormattedText();
-
-	public string EraName => new LocString("eras", StringHelper.Slugify(Era.ToString()) + ".name").GetFormattedText();
-
-	public abstract string Id { get; }
-
-	public ModelId ModelId => new ModelId("epoch", Id);
-
-	public bool IsArtPlaceholder
+	/// <remarks>
+	/// Lazily built rather than a field initializer: static field initializers run before the static
+	/// constructor that populates the ID dictionaries <see cref="M:MegaCrit.Sts2.Core.Timeline.EpochModel.GetId``1" /> reads.
+	/// </remarks>
+	public static IReadOnlyList<AgnosticUnlock> AgnosticUnlocks
 	{
 		get
 		{
-			if (!_isArtPlaceholder.HasValue)
+			List<AgnosticUnlock> list = _agnosticUnlocks;
+			if (list == null)
 			{
-				_isArtPlaceholder = !HasRealPortrait;
+				int num = 18;
+				list = new List<AgnosticUnlock>(num);
+				CollectionsMarshal.SetCount(list, num);
+				Span<AgnosticUnlock> span = CollectionsMarshal.AsSpan(list);
+				int num2 = 0;
+				span[num2] = new AgnosticUnlock(GetId<Colorless1Epoch>(), 200);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Relic1Epoch>(), 500);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Potion1Epoch>(), 750);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<UnderdocksEpoch>(), 1000);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Colorless2Epoch>(), 1250);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Relic2Epoch>(), 1500);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Potion2Epoch>(), 1600);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Act2BEpoch>(), 1700);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Colorless3Epoch>(), 1800);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Relic3Epoch>(), 1900);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Act3BEpoch>(), 2000);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Colorless4Epoch>(), 2100);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Relic4Epoch>(), 2200);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Event1Epoch>(), 2300);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Colorless5Epoch>(), 2400);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Relic5Epoch>(), 2500);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Event2Epoch>(), 2500);
+				num2++;
+				span[num2] = new AgnosticUnlock(GetId<Event3Epoch>(), 2500);
+				_agnosticUnlocks = list;
 			}
-			return _isArtPlaceholder.Value;
+			return list;
 		}
 	}
+
+	/// <summary>
+	/// Just the epoch IDs from <see cref="P:MegaCrit.Sts2.Core.Timeline.EpochModel.AgnosticUnlocks" />, in the same order.
+	/// <see cref="M:MegaCrit.Sts2.Core.Saves.ProgressState.GrantNextUnlock" /> hands out the first one the player is missing, and
+	/// <see cref="P:MegaCrit.Sts2.Core.Saves.ProgressState.TotalUnlocks" /> counts how many of them they have.
+	/// </summary>
+	public static IReadOnlyList<string> AgnosticUnlockOrder => _agnosticUnlockOrder ?? (_agnosticUnlockOrder = AgnosticUnlocks.Select((AgnosticUnlock u) => u.EpochId).ToList());
+
+	public abstract string Id { get; }
 
 	/// <summary>
 	/// Not used as of this time except for the header of the hovertip when peeking at the unlock requirement.
@@ -162,11 +177,11 @@ public abstract class EpochModel
 
 	public Texture2D Portrait => ResourceLoader.Load<Texture2D>(PackedPortraitPath, null, ResourceLoader.CacheMode.Reuse);
 
-	public string PackedPortraitPath => ImageHelper.GetImagePath("atlases/epoch_atlas.sprites/" + Id.ToLowerInvariant() + ".tres");
+	private string PackedPortraitPath => ImageHelper.GetImagePath("atlases/epoch_atlas.sprites/" + Id.ToLowerInvariant() + ".tres");
 
-	public Texture2D RealPortrait => ResourceLoader.Load<Texture2D>(ResolvedPortraitPath, null, ResourceLoader.CacheMode.Reuse);
+	public Texture2D RealPortrait => PreloadManager.Cache.GetTexture2D(ResolvedPortraitPath);
 
-	private bool HasRealPortrait => ResourceLoader.Exists(RealPortraitPath);
+	public bool HasRealPortrait => ResourceLoader.Exists(RealPortraitPath);
 
 	private string RealPortraitPath => ImageHelper.GetImagePath("timeline/epoch_portraits/" + Id.ToLowerInvariant() + ".png");
 
@@ -217,6 +232,143 @@ public abstract class EpochModel
 
 	static EpochModel()
 	{
+		int num = 66;
+		List<Type> list = new List<Type>(num);
+		CollectionsMarshal.SetCount(list, num);
+		Span<Type> span = CollectionsMarshal.AsSpan(list);
+		int num2 = 0;
+		span[num2] = typeof(Act2BEpoch);
+		num2++;
+		span[num2] = typeof(Act3BEpoch);
+		num2++;
+		span[num2] = typeof(BlitzEpoch);
+		num2++;
+		span[num2] = typeof(Colorless1Epoch);
+		num2++;
+		span[num2] = typeof(Colorless2Epoch);
+		num2++;
+		span[num2] = typeof(Colorless3Epoch);
+		num2++;
+		span[num2] = typeof(Colorless4Epoch);
+		num2++;
+		span[num2] = typeof(Colorless5Epoch);
+		num2++;
+		span[num2] = typeof(CustomAndSeedsEpoch);
+		num2++;
+		span[num2] = typeof(DailyRunEpoch);
+		num2++;
+		span[num2] = typeof(DarvEpoch);
+		num2++;
+		span[num2] = typeof(Defect1Epoch);
+		num2++;
+		span[num2] = typeof(Defect2Epoch);
+		num2++;
+		span[num2] = typeof(Defect3Epoch);
+		num2++;
+		span[num2] = typeof(Defect4Epoch);
+		num2++;
+		span[num2] = typeof(Defect5Epoch);
+		num2++;
+		span[num2] = typeof(Defect6Epoch);
+		num2++;
+		span[num2] = typeof(Defect7Epoch);
+		num2++;
+		span[num2] = typeof(Event1Epoch);
+		num2++;
+		span[num2] = typeof(Event2Epoch);
+		num2++;
+		span[num2] = typeof(Event3Epoch);
+		num2++;
+		span[num2] = typeof(DreadEpoch);
+		num2++;
+		span[num2] = typeof(Fool1Epoch);
+		num2++;
+		span[num2] = typeof(Fool2Epoch);
+		num2++;
+		span[num2] = typeof(Fool3Epoch);
+		num2++;
+		span[num2] = typeof(Fool4Epoch);
+		num2++;
+		span[num2] = typeof(Fool5Epoch);
+		num2++;
+		span[num2] = typeof(Fool6Epoch);
+		num2++;
+		span[num2] = typeof(Fool7Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad2Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad3Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad4Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad5Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad6Epoch);
+		num2++;
+		span[num2] = typeof(Ironclad7Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder1Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder2Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder3Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder4Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder5Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder6Epoch);
+		num2++;
+		span[num2] = typeof(Necrobinder7Epoch);
+		num2++;
+		span[num2] = typeof(NeowEpoch);
+		num2++;
+		span[num2] = typeof(OrobasEpoch);
+		num2++;
+		span[num2] = typeof(Potion1Epoch);
+		num2++;
+		span[num2] = typeof(Potion2Epoch);
+		num2++;
+		span[num2] = typeof(Regent1Epoch);
+		num2++;
+		span[num2] = typeof(Regent2Epoch);
+		num2++;
+		span[num2] = typeof(Regent3Epoch);
+		num2++;
+		span[num2] = typeof(Regent4Epoch);
+		num2++;
+		span[num2] = typeof(Regent5Epoch);
+		num2++;
+		span[num2] = typeof(Regent6Epoch);
+		num2++;
+		span[num2] = typeof(Regent7Epoch);
+		num2++;
+		span[num2] = typeof(Relic1Epoch);
+		num2++;
+		span[num2] = typeof(Relic2Epoch);
+		num2++;
+		span[num2] = typeof(Relic3Epoch);
+		num2++;
+		span[num2] = typeof(Relic4Epoch);
+		num2++;
+		span[num2] = typeof(Relic5Epoch);
+		num2++;
+		span[num2] = typeof(Silent1Epoch);
+		num2++;
+		span[num2] = typeof(Silent2Epoch);
+		num2++;
+		span[num2] = typeof(Silent3Epoch);
+		num2++;
+		span[num2] = typeof(Silent4Epoch);
+		num2++;
+		span[num2] = typeof(Silent5Epoch);
+		num2++;
+		span[num2] = typeof(Silent6Epoch);
+		num2++;
+		span[num2] = typeof(Silent7Epoch);
+		num2++;
+		span[num2] = typeof(UnderdocksEpoch);
+		_allEpochs = list;
 		_epochTypeDictionary = new Dictionary<string, Type>();
 		_typeToIdDictionary = new Dictionary<Type, string>();
 		for (int i = 0; i < EpochModelSubtypes.Count; i++)
@@ -260,7 +412,7 @@ public abstract class EpochModel
 
 	public static bool IsValid(string id)
 	{
-		return AllEpochIds.Any((string epoch) => epoch.Equals(id));
+		return EpochIdsHashSet.Contains(id);
 	}
 
 	public static EpochModel Get(string id)

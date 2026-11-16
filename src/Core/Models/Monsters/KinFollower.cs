@@ -33,13 +33,13 @@ public sealed class KinFollower : MonsterModel
 
 	private const string _quickSlashSfx = "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_quick_slash";
 
-	private const string _boomerangSfx = "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_boomerang_slashh";
+	private const string _boomerangSfx = "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_boomerang_slash";
 
 	private const string _buffSfx = "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_buff";
 
 	private const int _boomerangRepeat = 2;
 
-	private bool _startsWithDance;
+	private int _index;
 
 	public override IEnumerable<string> AssetPaths
 	{
@@ -70,16 +70,16 @@ public sealed class KinFollower : MonsterModel
 
 	private int DanceStrength => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2);
 
-	public bool StartsWithDance
+	public int Index
 	{
 		get
 		{
-			return _startsWithDance;
+			return _index;
 		}
 		set
 		{
 			AssertMutable();
-			_startsWithDance = value;
+			_index = value;
 		}
 	}
 
@@ -113,8 +113,13 @@ public sealed class KinFollower : MonsterModel
 		list.Add(moveState);
 		list.Add(moveState2);
 		list.Add(moveState3);
-		MoveState initialState = (StartsWithDance ? moveState3 : moveState);
-		return new MonsterMoveStateMachine(list, initialState);
+		return new MonsterMoveStateMachine(list, Index switch
+		{
+			0 => moveState3, 
+			1 => moveState, 
+			2 => moveState2, 
+			_ => throw new IndexOutOfRangeException(), 
+		});
 	}
 
 	private async Task QuickSlashMove(IReadOnlyList<Creature> targets)
@@ -136,25 +141,26 @@ public sealed class KinFollower : MonsterModel
 	{
 		if (TestMode.IsOff)
 		{
-			Vector2? vector = null;
+			NCreature nCreature = null;
 			foreach (Creature target in targets)
 			{
 				NCreature creatureNode = target.GetCreatureNode();
-				if (!vector.HasValue || vector.Value.X > creatureNode.GlobalPosition.X)
+				if (creatureNode != null && (nCreature == null || nCreature.GlobalPosition.X > creatureNode.GlobalPosition.X))
 				{
-					vector = creatureNode.GlobalPosition;
+					nCreature = creatureNode;
 				}
 			}
 			NCreature creatureNode2 = base.Creature.GetCreatureNode();
-			Node2D specialNode = creatureNode2.GetSpecialNode<Node2D>("Visuals/AttackDistanceControl");
-			if (specialNode != null && vector.HasValue)
+			Node2D node2D = creatureNode2?.GetSpecialNode<Node2D>("Visuals/AttackDistanceControl");
+			if (creatureNode2 != null && node2D != null && nCreature != null)
 			{
-				specialNode.Position = Vector2.Left * (creatureNode2.GlobalPosition.X - vector.Value.X) / creatureNode2.Body.Scale;
+				float num = 400f * creatureNode2.Visuals.Scale.X;
+				node2D.GlobalPosition = new Vector2(nCreature.GlobalPosition.X + num, node2D.GlobalPosition.Y);
 			}
 		}
 		await DamageCmd.Attack(BoomerangDamage).WithHitCount(2).FromMonster(this)
 			.WithAttackerAnim("BoomerangTrigger", 0.2f)
-			.WithAttackerFx(null, "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_boomerang_slashh")
+			.WithAttackerFx(null, "event:/sfx/enemy/enemy_attacks/the_kin_minion/the_kin_minion_boomerang_slash")
 			.WithHitFx("vfx/vfx_attack_slash")
 			.OnlyPlayAnimOnce()
 			.Execute(null);

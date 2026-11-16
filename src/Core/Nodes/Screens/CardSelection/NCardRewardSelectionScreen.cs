@@ -250,6 +250,7 @@ public class NCardRewardSelectionScreen : Control, IOverlayScreen, IScreenContex
 		_banner = GetNode<NCommonBanner>("UI/Banner");
 		_rewardAlternativesContainer = GetNode<Control>("UI/RewardAlternatives");
 		_inspectPrompt = GetNode<Control>("%InspectPrompt");
+		_rewardAlternativesContainer.ApplyRtlLayout();
 		_banner.label.SetTextAutoSize(new LocString("gameplay_ui", "CHOOSE_CARD_HEADER").GetRawText());
 		_banner.AnimateIn();
 		RefreshOptions(_options, _extraOptions);
@@ -302,7 +303,7 @@ public class NCardRewardSelectionScreen : Control, IOverlayScreen, IScreenContex
 		{
 			int capturedIndex = num;
 			CardRewardAlternative cardRewardAlternative = _extraOptions[num];
-			NCardRewardAlternativeButton nCardRewardAlternativeButton = NCardRewardAlternativeButton.Create(cardRewardAlternative.Title.GetFormattedText(), cardRewardAlternative.Hotkey);
+			NCardRewardAlternativeButton nCardRewardAlternativeButton = NCardRewardAlternativeButton.Create(cardRewardAlternative.Title.GetFormattedText(), cardRewardAlternative.Hotkeys);
 			_rewardAlternativesContainer.AddChildSafely(nCardRewardAlternativeButton);
 			nCardRewardAlternativeButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(delegate
 			{
@@ -317,7 +318,10 @@ public class NCardRewardSelectionScreen : Control, IOverlayScreen, IScreenContex
 			child.FocusNeighborLeft = ((num2 > 0) ? _cardRow.GetChild(num2 - 1).GetPath() : _cardRow.GetChild(_cardRow.GetChildCount() - 1).GetPath());
 			child.FocusNeighborRight = ((num2 < _cardRow.GetChildCount() - 1) ? _cardRow.GetChild(num2 + 1).GetPath() : _cardRow.GetChild(0).GetPath());
 		}
-		ActiveScreenContext.Instance.FocusOnDefaultControl();
+		Callable.From(delegate
+		{
+			ActiveScreenContext.Instance.FocusOnDefaultControl();
+		}).CallDeferred();
 	}
 
 	public override void _ExitTree()
@@ -329,7 +333,7 @@ public class NCardRewardSelectionScreen : Control, IOverlayScreen, IScreenContex
 			Task<int?> task = completionSource.Task;
 			if (task != null && !task.IsCompleted)
 			{
-				_completionSource.SetResult(null);
+				_completionSource.SetException(new TaskCanceledException());
 			}
 		}
 		foreach (NGridCardHolder item in _cardRow.GetChildren().OfType<NGridCardHolder>())
@@ -444,8 +448,8 @@ public class NCardRewardSelectionScreen : Control, IOverlayScreen, IScreenContex
 
 	private void UpdateControllerIcons()
 	{
-		_inspectPrompt.Visible = NControllerManager.Instance.IsUsingController;
-		_inspectPrompt.GetNode<TextureRect>("ControllerIcon").Texture = NInputManager.Instance.GetHotkeyIcon(MegaInput.accept);
+		_inspectPrompt.Visible = NControllerManager.Instance.IsUsingDirectionalNavigation;
+		_inspectPrompt.GetNode<NHotkeyIcon>("%HotkeyIcon").UpdateInput(MegaInput.confirm);
 		_inspectPrompt.GetNode<MegaLabel>("Label").SetTextAutoSize(new LocString("gameplay_ui", "TO_INSPECT_PROMPT").GetFormattedText());
 	}
 

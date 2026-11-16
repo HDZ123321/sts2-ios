@@ -8,10 +8,12 @@ using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -376,6 +378,11 @@ public abstract class RelicModel : AbstractModel
 	protected virtual IEnumerable<IHoverTip> ExtraHoverTips => Array.Empty<IHoverTip>();
 
 	/// <summary>
+	/// HoverTip for the Fugitive's Arrows. Include in ExtraHoverTips when this relic mentions Arrows.
+	/// </summary>
+	protected IHoverTip ArrowHoverTip => HoverTipFactory.ForArrow(base.IsMutable ? _owner : null);
+
+	/// <summary>
 	/// Returns all extra hovertips, excluding the HoverTip for the relic itself.
 	/// Useful for event options which replicate the relic description exactly in the option description.
 	/// </summary>
@@ -431,7 +438,24 @@ public abstract class RelicModel : AbstractModel
 	/// Whether or not this relic is allowed to be rolled based on the current game state.
 	/// This will usually just return true, but some relics require special conditions.
 	/// </summary>
-	public virtual bool IsAllowed(IRunState runState)
+	public bool IsAllowed(IRunState runState)
+	{
+		if (runState.GameMode == GameMode.Blitz && RelicLists.notAllowedInBlitz.Contains(base.Id))
+		{
+			return false;
+		}
+		if (IsLateInAct3(runState) && RelicLists.notAllowedLateInAct3.Contains(base.Id))
+		{
+			return false;
+		}
+		return IsAllowedInternal(runState);
+	}
+
+	/// <summary>
+	/// Override to special-case whether the relic is allowed for the current run state.
+	/// This will usually just return true, but some relics require special conditions.
+	/// </summary>
+	protected virtual bool IsAllowedInternal(IRunState runState)
 	{
 		return true;
 	}
@@ -446,13 +470,20 @@ public abstract class RelicModel : AbstractModel
 	}
 
 	/// <summary>
-	/// Helper for relics that should stop spawning at the Act 3 treasure chest or later.
+	/// Helper for relics that should stop spawning later in act 3.
 	/// These relics provide diminishing value late in a run.
+	/// Note that "late in act 3" means "at or after the treasure chest" in a standard run, or "at or after the elite"
+	/// in a Blitz run.
 	/// </summary>
-	protected static bool IsBeforeAct3TreasureChest(IRunState runState)
+	protected static bool IsLateInAct3(IRunState runState)
 	{
 		int num = ((runState.Players.Count > 1) ? 38 : 41);
-		return runState.TotalFloor < num;
+		if (runState.GameMode == GameMode.Blitz)
+		{
+			int num2 = BlitzActMap.pointTypes.Length + 2;
+			num = num2 * 2 + ListExtensions.IndexOf(BlitzActMap.pointTypes, MapPointType.Elite) + 2;
+		}
+		return runState.TotalFloor >= num;
 	}
 
 	public void Flash()

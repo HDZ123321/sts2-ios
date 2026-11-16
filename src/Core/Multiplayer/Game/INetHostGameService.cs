@@ -10,9 +10,12 @@ namespace MegaCrit.Sts2.Core.Multiplayer.Game;
 /// </summary>
 public interface INetHostGameService : INetGameService
 {
-	IReadOnlyList<NetClientData> ConnectedPeers { get; }
-
 	NetHost? NetHost { get; }
+
+	/// <summary>
+	/// Clients that have completed the handshake, in the order they completed it.
+	/// </summary>
+	IReadOnlyList<NetClientData> ConnectedPeers { get; }
 
 	/// <summary>
 	/// Event called when a new client connects to the host.
@@ -25,12 +28,21 @@ public interface INetHostGameService : INetGameService
 	event Action<ulong, NetErrorInfo>? ClientDisconnected;
 
 	/// <summary>
+	/// Event called when a client successfully made a socket connection but we disconnected them during the handshake.
+	/// Usually due to version mismatch.
+	/// </summary>
+	event Action<ulong, NetErrorInfo>? ClientConnectionFailed;
+
+	/// <summary>
 	/// Disconnects a client from the host.
 	/// </summary>
 	/// <param name="peerId">The client to disconnect.</param>
 	/// <param name="reason">Why the client is being disconnected.</param>
 	/// <param name="now">If true, the client will be forcibly disconnected. The reason may not make it to the client.</param>
-	void DisconnectClient(ulong peerId, NetError reason, bool now = false);
+	/// <param name="debugReason">Text sent to the client alongside the reason. The client displays it, so it is
+	/// readable even when the client is on a version whose error codes we do not share. Steam truncates it past 127
+	/// bytes and ENet drops it entirely.</param>
+	void DisconnectClient(ulong peerId, NetError reason, bool now = false, string? debugReason = null);
 
 	/// <summary>
 	/// Marks a client as ready to receive broadcasted messages.
@@ -38,4 +50,8 @@ public interface INetHostGameService : INetGameService
 	/// for them. Call this when initial setup is done.
 	/// </summary>
 	void SetPeerReadyForBroadcasting(ulong peerId);
+
+	/// <returns>Peer's version info. Null if the peer is not connected, or if they have not yet completed the handshake.
+	/// </returns>
+	PeerVersionInfo? GetVersionInfoForPeer(ulong peerId);
 }

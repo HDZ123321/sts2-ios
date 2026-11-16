@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Nodes.Debug;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.HoverTips;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
@@ -50,6 +51,11 @@ public class NInspectCardScreen : Control, IScreenContext
 		/// Cached name for the 'Close' method.
 		/// </summary>
 		public static readonly StringName Close = "Close";
+
+		/// <summary>
+		/// Cached name for the '_Input' method.
+		/// </summary>
+		public new static readonly StringName _Input = "_Input";
 
 		/// <summary>
 		/// Cached name for the 'OnRightButtonReleased' method.
@@ -206,7 +212,7 @@ public class NInspectCardScreen : Control, IScreenContext
 
 	private bool IsShowingUpgradedCard => _upgradeTickbox.IsTicked;
 
-	public Control? DefaultFocusedControl => null;
+	public Control DefaultFocusedControl => this;
 
 	public static NInspectCardScreen? Create()
 	{
@@ -277,13 +283,12 @@ public class NInspectCardScreen : Control, IScreenContext
 			.SetDelay(0.1);
 		ActiveScreenContext.Instance.Update();
 		NHotkeyManager.Instance.AddBlockingScreen(this);
+		SetProcessInput(enable: true);
 		_rightButton.Enable();
 		_leftButton.Enable();
 		_upgradeTickbox.Enable();
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.cancel, Close);
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.pauseAndBack, Close);
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.left, OnLeftButtonReleased);
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.right, OnRightButtonReleased);
+		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.cancel, Close, 0L);
+		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.pauseAndBack, Close, 0L);
 	}
 
 	public void Close()
@@ -297,7 +302,7 @@ public class NInspectCardScreen : Control, IScreenContext
 			_leftButton.Disable();
 			_upgradeTickbox.Disable();
 			NHoverTipSet.Clear();
-			SetProcessUnhandledInput(enable: false);
+			SetProcessInput(enable: false);
 			_openTween?.Kill();
 			_openTween = CreateTween().SetParallel();
 			_openTween.TweenProperty(_backstop, "modulate:a", 0f, 0.25);
@@ -311,9 +316,24 @@ public class NInspectCardScreen : Control, IScreenContext
 			}));
 			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.cancel, Close);
 			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.pauseAndBack, Close);
-			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.left, OnLeftButtonReleased);
-			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.right, OnRightButtonReleased);
 			NHotkeyManager.Instance.RemoveBlockingScreen(this);
+		}
+	}
+
+	public override void _Input(InputEvent inputEvent)
+	{
+		if (!NDevConsole.IsConsoleVisible && ActiveScreenContext.Instance.IsCurrent(this))
+		{
+			if (inputEvent.IsActionPressed(MegaInput.right))
+			{
+				OnRightButtonReleased();
+				GetViewport()?.SetInputAsHandled();
+			}
+			if (inputEvent.IsActionPressed(MegaInput.left))
+			{
+				OnLeftButtonReleased();
+				GetViewport()?.SetInputAsHandled();
+			}
 		}
 	}
 
@@ -372,6 +392,7 @@ public class NInspectCardScreen : Control, IScreenContext
 			_card.Model = cardModel2;
 			_card.UpdateVisuals(PileType.None, CardPreviewMode.Normal);
 		}
+		_card.SetPortraitTexture(cardModel2.BigPortrait);
 		NHoverTipSet.Clear();
 		NHoverTipSet.CreateAndShow(this, cardModel2.HoverTips)?.SetAlignment(_hoverTipRect, HoverTip.GetHoverTipAlignment(this));
 	}
@@ -409,10 +430,14 @@ public class NInspectCardScreen : Control, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(10);
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.Close, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Input, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "inputEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnRightButtonReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnLeftButtonReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ToggleShowUpgrade, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
@@ -449,6 +474,12 @@ public class NInspectCardScreen : Control, IScreenContext
 		if (method == MethodName.Close && args.Count == 0)
 		{
 			Close();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName._Input && args.Count == 1)
+		{
+			_Input(VariantUtils.ConvertTo<InputEvent>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -516,6 +547,10 @@ public class NInspectCardScreen : Control, IScreenContext
 			return true;
 		}
 		if (method == MethodName.Close)
+		{
+			return true;
+		}
+		if (method == MethodName._Input)
 		{
 			return true;
 		}

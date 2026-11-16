@@ -30,9 +30,9 @@ public class NTopBarGold : NClickableControl
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'UpdateGold' method.
@@ -110,22 +110,24 @@ public class NTopBarGold : NClickableControl
 		ConnectSignals();
 	}
 
-	public override void _ExitTree()
-	{
-		base._ExitTree();
-		_animCts?.Cancel();
-		if (_player != null)
-		{
-			_player.GoldChanged -= UpdateGold;
-		}
-	}
-
 	public void Initialize(Player player)
 	{
 		_player = player;
 		_currentGold = _player.Gold;
 		_goldLabel.SetTextAutoSize($"{_currentGold}");
 		_player.GoldChanged += UpdateGold;
+	}
+
+	public override void _Notification(int what)
+	{
+		if ((long)what == 1)
+		{
+			_animCts?.Cancel();
+			if (_player != null)
+			{
+				_player.GoldChanged -= UpdateGold;
+			}
+		}
 	}
 
 	private void UpdateGold()
@@ -152,10 +154,21 @@ public class NTopBarGold : NClickableControl
 		_alreadyRunning = true;
 		try
 		{
-			Tween tween = CreateTween().SetParallel();
-			tween.TweenProperty(_goldPopupLabel, "modulate:a", 1f, 0.15000000596046448);
-			tween.TweenProperty(_goldPopupLabel, "position:y", _goldPopupLabel.Position.Y + 30f, 0.25);
-			await tween.AwaitFinished(ct);
+			float restingY = _goldPopupLabel.Position.Y;
+			Tween tweenIn = CreateTween().SetParallel();
+			tweenIn.TweenProperty(_goldPopupLabel, "modulate:a", 1f, 0.15000000596046448);
+			tweenIn.TweenProperty(_goldPopupLabel, "position:y", restingY + 30f, 0.25);
+			if (await tweenIn.AwaitFinished(this, ct) != TweenOutcome.Finished)
+			{
+				tweenIn.Kill();
+				if (this.IsValid() && GodotObject.IsInstanceValid(_goldPopupLabel))
+				{
+					_goldPopupLabel.Modulate = Colors.Transparent;
+					_goldPopupLabel.Position = new Vector2(_goldPopupLabel.Position.X, restingY);
+					_goldLabel.SetTextAutoSize($"{_player.Gold}");
+				}
+				return;
+			}
 			await Task.Delay(150, ct);
 			while (_additionalGold != 0)
 			{
@@ -175,9 +188,9 @@ public class NTopBarGold : NClickableControl
 				await Task.Delay((int)Mathf.Lerp(10f, 20f, Mathf.Max(0, 10 - Mathf.Abs(_additionalGold))), ct);
 			}
 			await Task.Delay(250, ct);
-			Tween tween2 = CreateTween().SetParallel();
-			tween2.TweenProperty(_goldPopupLabel, "modulate:a", 0f, 0.10000000149011612);
-			tween2.TweenProperty(_goldPopupLabel, "position:y", _goldPopupLabel.Position.Y - 30f, 0.25).FromCurrent();
+			Tween tween = CreateTween().SetParallel();
+			tween.TweenProperty(_goldPopupLabel, "modulate:a", 0f, 0.10000000149011612);
+			tween.TweenProperty(_goldPopupLabel, "position:y", _goldPopupLabel.Position.Y - 30f, 0.25).FromCurrent();
 			_goldLabel.SetTextAutoSize($"{_player.Gold}");
 		}
 		catch (OperationCanceledException)
@@ -210,7 +223,10 @@ public class NTopBarGold : NClickableControl
 	{
 		List<MethodInfo> list = new List<MethodInfo>(5);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.UpdateGold, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnUnfocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -227,9 +243,9 @@ public class NTopBarGold : NClickableControl
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -262,7 +278,7 @@ public class NTopBarGold : NClickableControl
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

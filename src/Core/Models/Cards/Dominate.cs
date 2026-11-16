@@ -29,7 +29,7 @@ public sealed class Dominate : CardModel
 	});
 
 	public Dominate()
-		: base(1, CardType.Skill, CardRarity.Uncommon, TargetType.AnyEnemy)
+		: base(1, CardType.Skill, CardRarity.Rare, TargetType.AnyEnemy)
 	{
 	}
 

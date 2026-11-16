@@ -12,6 +12,7 @@ using MegaCrit.Sts2.Core.DevConsole;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Modding;
+using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
 using MegaCrit.Sts2.addons.mega_text;
@@ -291,6 +292,20 @@ public class NDevConsole : Panel
 
 	public static NDevConsole Instance => _instance ?? throw new InvalidOperationException("Dev console used before being created.");
 
+	/// <summary>
+	/// True if the dev console exists and is currently shown. Safe to call before the console is
+	/// created (e.g. hotkeys pressed very early in initialization, or in TestMode where the console
+	/// is never instantiated), unlike <see cref="P:MegaCrit.Sts2.Core.Nodes.Debug.NDevConsole.Instance" /> which throws when absent.
+	/// </summary>
+	public static bool IsConsoleVisible => _instance?.Visible ?? false;
+
+	/// <summary>
+	/// The console if one was ever created, or null. Use this over <see cref="P:MegaCrit.Sts2.Core.Nodes.Debug.NDevConsole.Instance" /> from code
+	/// that can also run without a console node, such as a scenario run, where the throw would be a
+	/// failure of the caller rather than of the console.
+	/// </summary>
+	public static NDevConsole? InstanceOrNull => _instance;
+
 	public static CanvasLayer? Create()
 	{
 		if (TestMode.IsOn)
@@ -349,7 +364,8 @@ public class NDevConsole : Panel
 		UpdatePromptStyle();
 		_inputBuffer.TextChanged += OnInputTextChanged;
 		PrintUsage();
-		bool shouldAllowDebugCommands = OS.HasFeature("editor") || TestMode.IsOn || ModManager.IsRunningModded() || SaveManager.Instance.SettingsSave.FullConsole;
+		PlatformBranch platformBranch = PlatformUtil.GetPlatformBranch();
+		bool shouldAllowDebugCommands = OS.HasFeature("editor") || TestMode.IsOn || ModManager.IsRunningModded() || platformBranch == PlatformBranch.None || platformBranch == PlatformBranch.PrivateBeta || platformBranch == PlatformBranch.DevTest || SaveManager.Instance.SettingsSave.FullConsole;
 		_devConsole = new MegaCrit.Sts2.Core.DevConsole.DevConsole(shouldAllowDebugCommands);
 	}
 
@@ -661,20 +677,10 @@ public class NDevConsole : Panel
 			return;
 		}
 		CompletionResult completionResults = _devConsole.GetCompletionResults(text);
-		if (completionResults.Candidates.Count == 1 && !string.IsNullOrEmpty(completionResults.CommonPrefix))
+		string text2 = MegaCrit.Sts2.Core.DevConsole.DevConsole.CalculateGhostText(text, completionResults);
+		if (text2 != null)
 		{
-			string commonPrefix = completionResults.CommonPrefix;
-			if (!commonPrefix.StartsWith(text, StringComparison.OrdinalIgnoreCase))
-			{
-				GD.PushError($"BUG: CommonPrefix '{commonPrefix}' doesn't start with input '{text}'");
-				HideGhostText();
-			}
-			else
-			{
-				string text2 = commonPrefix.Substring(text.Length);
-				string text3 = new string(' ', text.Length);
-				ShowGhostText(text3 + text2);
-			}
+			ShowGhostText(text2);
 		}
 		else
 		{
@@ -968,7 +974,7 @@ public class NDevConsole : Panel
 		_inputContainer.Position = new Vector2(0f, num - 40f);
 		_outputBuffer.SetSize(new Vector2(size.X, num));
 		_tabBuffer.SetSize(new Vector2(size.X, num));
-		SetSize(new Vector2(size.X, size.Y / 2f));
+		SetSize(new Vector2(size.X, size.Y * 0.5f));
 		_isFullscreen = false;
 	}
 

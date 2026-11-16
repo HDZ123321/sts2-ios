@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Assets;
@@ -7,6 +8,8 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Models.Modifiers;
+using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.Saves.Runs;
@@ -44,6 +47,12 @@ public abstract class ModifierModel : AbstractModel
 	/// Returns null for modifiers that add no additional text.
 	/// </summary>
 	protected LocString? AdditionalRestSiteHealText => LocString.GetIfExists("modifiers", base.Id.Entry + ".additionalRestSiteHealText");
+
+	/// <summary>
+	/// Get the additional text that this modifier should add to the "mend" option at the rest site.
+	/// Returns null for modifiers that add no additional text.
+	/// </summary>
+	protected LocString? AdditionalRestSiteMendText => LocString.GetIfExists("modifiers", base.Id.Entry + ".additionalRestSiteMendText");
 
 	public Texture2D Icon
 	{
@@ -154,5 +163,52 @@ public abstract class ModifierModel : AbstractModel
 		ModifierModel modifierModel = SaveUtil.ModifierOrDeprecated(serializable.Id).ToMutable();
 		serializable.Props?.Fill(modifierModel);
 		return modifierModel;
+	}
+
+	/// <summary>
+	/// Pick a set of 2 good modifiers and 1 bad modifier.
+	/// </summary>
+	/// <param name="rng">RNG to use for picking modifiers.</param>
+	/// <param name="excludedCharacters">
+	/// Characters to exclude from the <see cref="P:MegaCrit.Sts2.Core.Models.Modifiers.CharacterCards.CharacterModel" /> possibilities.
+	/// For example, pass [Defect] if <see cref="P:MegaCrit.Sts2.Core.Models.Modifiers.CharacterCards.CharacterModel" /> should not be set to
+	/// <see cref="T:MegaCrit.Sts2.Core.Models.Characters.Defect" />.
+	/// Used to prevent setting a modifier that gives a player access to cards they already have access to.
+	/// </param>
+	public static IReadOnlyCollection<ModifierModel> Pick2Good1Bad(Rng rng, IEnumerable<CharacterModel> excludedCharacters)
+	{
+		List<ModifierModel> list = new List<ModifierModel>();
+		List<ModifierModel> list2 = ModelDb.GoodModifiers.ToList();
+		List<CharacterModel> list3 = ModelDb.AllCharacters.Except(excludedCharacters).ToList();
+		if (list3.Count <= 0)
+		{
+			list2.RemoveAll((ModifierModel m) => m is CharacterCards);
+		}
+		for (int num = 0; num < 2; num++)
+		{
+			ModifierModel canonicalModifier = rng.NextItem(list2);
+			if (canonicalModifier == null)
+			{
+				throw new InvalidOperationException("There were not enough good modifiers to fill the daily!");
+			}
+			ModifierModel modifierModel = canonicalModifier.ToMutable();
+			if (modifierModel is CharacterCards characterCards)
+			{
+				characterCards.CharacterModel = rng.NextItem(list3).Id;
+			}
+			list.Add(modifierModel);
+			list2.Remove(canonicalModifier);
+			IReadOnlySet<ModifierModel> readOnlySet = ModelDb.MutuallyExclusiveModifiers.FirstOrDefault((IReadOnlySet<ModifierModel> s) => s.Contains(canonicalModifier));
+			if (readOnlySet == null)
+			{
+				continue;
+			}
+			foreach (ModifierModel item in readOnlySet)
+			{
+				list2.Remove(item);
+			}
+		}
+		list.Add(rng.NextItem(ModelDb.BadModifiers).ToMutable());
+		return list;
 	}
 }

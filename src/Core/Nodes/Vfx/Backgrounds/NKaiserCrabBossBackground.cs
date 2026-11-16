@@ -69,6 +69,11 @@ public class NKaiserCrabBossBackground : Node2D
 	public new class PropertyName : Node2D.PropertyName
 	{
 		/// <summary>
+		/// Cached name for the 'Visuals' field.
+		/// </summary>
+		public static readonly StringName Visuals = "Visuals";
+
+		/// <summary>
 		/// Cached name for the '_leftArm' field.
 		/// </summary>
 		public static readonly StringName _leftArm = "_leftArm";
@@ -99,6 +104,8 @@ public class NKaiserCrabBossBackground : Node2D
 
 	private const int _reactionTrack = 3;
 
+	public Node2D Visuals;
+
 	private MegaSprite _animController;
 
 	private Node2D _leftArm;
@@ -116,8 +123,8 @@ public class NKaiserCrabBossBackground : Node2D
 
 	public override void _Ready()
 	{
-		Node2D node = GetNode<Node2D>("%Visuals");
-		_animController = new MegaSprite(node);
+		Visuals = GetNode<Node2D>("%Visuals");
+		_animController = new MegaSprite(Visuals);
 		_leftArm = GetNode<Node2D>("%ArmBoneL");
 		_rightArm = GetNode<Node2D>("%ArmBoneR");
 		this.RunWhenSpineReady(_animController, delegate(MegaAnimationState state)
@@ -333,6 +340,11 @@ public class NKaiserCrabBossBackground : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool SetGodotClassPropertyValue(in godot_string_name name, in godot_variant value)
 	{
+		if (name == PropertyName.Visuals)
+		{
+			Visuals = VariantUtils.ConvertTo<Node2D>(in value);
+			return true;
+		}
 		if (name == PropertyName._leftArm)
 		{
 			_leftArm = VariantUtils.ConvertTo<Node2D>(in value);
@@ -355,6 +367,11 @@ public class NKaiserCrabBossBackground : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
+		if (name == PropertyName.Visuals)
+		{
+			value = VariantUtils.CreateFrom(in Visuals);
+			return true;
+		}
 		if (name == PropertyName._leftArm)
 		{
 			value = VariantUtils.CreateFrom(in _leftArm);
@@ -382,6 +399,7 @@ public class NKaiserCrabBossBackground : Node2D
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.Visuals, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._leftArm, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._rightArm, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Int, PropertyName._rightArmState, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -393,6 +411,7 @@ public class NKaiserCrabBossBackground : Node2D
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)
 	{
 		base.SaveGodotObjectData(info);
+		info.AddProperty(PropertyName.Visuals, Variant.From(in Visuals));
 		info.AddProperty(PropertyName._leftArm, Variant.From(in _leftArm));
 		info.AddProperty(PropertyName._rightArm, Variant.From(in _rightArm));
 		info.AddProperty(PropertyName._rightArmState, Variant.From(in _rightArmState));
@@ -403,17 +422,21 @@ public class NKaiserCrabBossBackground : Node2D
 	protected override void RestoreGodotObjectData(GodotSerializationInfo info)
 	{
 		base.RestoreGodotObjectData(info);
-		if (info.TryGetProperty(PropertyName._leftArm, out var value))
+		if (info.TryGetProperty(PropertyName.Visuals, out var value))
 		{
-			_leftArm = value.As<Node2D>();
+			Visuals = value.As<Node2D>();
 		}
-		if (info.TryGetProperty(PropertyName._rightArm, out var value2))
+		if (info.TryGetProperty(PropertyName._leftArm, out var value2))
 		{
-			_rightArm = value2.As<Node2D>();
+			_leftArm = value2.As<Node2D>();
 		}
-		if (info.TryGetProperty(PropertyName._rightArmState, out var value3))
+		if (info.TryGetProperty(PropertyName._rightArm, out var value3))
 		{
-			_rightArmState = value3.As<RightArmState>();
+			_rightArm = value3.As<Node2D>();
+		}
+		if (info.TryGetProperty(PropertyName._rightArmState, out var value4))
+		{
+			_rightArmState = value4.As<RightArmState>();
 		}
 	}
 }

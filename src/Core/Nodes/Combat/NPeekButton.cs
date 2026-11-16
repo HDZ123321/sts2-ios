@@ -313,7 +313,7 @@ public class NPeekButton : NButton
 		base.OnPress();
 		_hoverTween?.Kill();
 		_hoverTween = CreateTween();
-		_hoverTween.TweenProperty(_visuals, "scale", Vector2.One * 0.95f, 0.05);
+		_hoverTween.TweenProperty(_visuals, "scale", Vector2.One * 0.95f, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 	}
 
 	protected override void OnFocus()
@@ -329,7 +329,7 @@ public class NPeekButton : NButton
 		base.OnUnfocus();
 		_hoverTween?.Kill();
 		_hoverTween = CreateTween();
-		_hoverTween.TweenProperty(_visuals, "scale", Vector2.One, 0.15);
+		_hoverTween.TweenProperty(_visuals, "scale", Vector2.One, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
 	}
 
 	private void OnCombatRoomReady()

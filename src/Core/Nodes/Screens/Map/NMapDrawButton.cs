@@ -150,7 +150,7 @@ public class NMapDrawButton : NButton
 	private void OnControllerUpdated()
 	{
 		LocString description = new LocString("map", "DRAWING_BUTTON.description");
-		LocString title = ((!NControllerManager.Instance.IsUsingController) ? new LocString("map", "DRAWING_BUTTON.title_mkb") : new LocString("map", "DRAWING_BUTTON.title_controller"));
+		LocString title = ((!NControllerManager.Instance.IsUsingDirectionalNavigation) ? new LocString("map", "DRAWING_BUTTON.title_mkb") : new LocString("map", "DRAWING_BUTTON.title_controller"));
 		_hoverTip = new HoverTip(title, description);
 	}
 

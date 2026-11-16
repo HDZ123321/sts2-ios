@@ -18,13 +18,6 @@ namespace MegaCrit.Sts2.Core.Models.Powers;
 /// </summary>
 public abstract class TemporaryDexterityPower : PowerModel, ITemporaryPower
 {
-	/// <summary>
-	/// If this is true, the next application of this power will not be applied.
-	/// This is used when debuffs are copied by Misery. The negative <see cref="T:MegaCrit.Sts2.Core.Models.Powers.DexterityPower" /> gets copied along with this
-	/// power, and upon copying, it should not apply negative <see cref="T:MegaCrit.Sts2.Core.Models.Powers.DexterityPower" /> down again.
-	/// </summary>
-	private bool _shouldIgnoreNextInstance;
-
 	public override PowerType Type
 	{
 		get
@@ -111,7 +104,7 @@ public abstract class TemporaryDexterityPower : PowerModel, ITemporaryPower
 			IEnumerable<IHoverTip> collection;
 			if (!(originModel is CardModel card))
 			{
-				if (!(originModel is PotionModel model))
+				if (!(originModel is PotionModel))
 				{
 					if (!(originModel is RelicModel relic))
 					{
@@ -121,7 +114,7 @@ public abstract class TemporaryDexterityPower : PowerModel, ITemporaryPower
 				}
 				else
 				{
-					collection = new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.FromPotion(model));
+					collection = Array.Empty<IHoverTip>();
 				}
 			}
 			else
@@ -134,35 +127,16 @@ public abstract class TemporaryDexterityPower : PowerModel, ITemporaryPower
 		}
 	}
 
-	public void IgnoreNextInstance()
-	{
-		_shouldIgnoreNextInstance = true;
-	}
-
 	public override async Task BeforeApplied(Creature target, decimal amount, Creature? applier, CardModel? cardSource)
 	{
-		if (_shouldIgnoreNextInstance)
-		{
-			_shouldIgnoreNextInstance = false;
-		}
-		else
-		{
-			await PowerCmd.Apply<DexterityPower>(new ThrowingPlayerChoiceContext(), target, (decimal)Sign * amount, applier, cardSource, silent: true);
-		}
+		await PowerCmd.Apply<DexterityPower>(new ThrowingPlayerChoiceContext(), target, (decimal)Sign * amount, applier, cardSource, silent: true);
 	}
 
 	public override async Task AfterPowerAmountChanged(PlayerChoiceContext choiceContext, PowerModel power, decimal amount, Creature? applier, CardModel? cardSource)
 	{
 		if (!(amount == (decimal)base.Amount) && power == this)
 		{
-			if (_shouldIgnoreNextInstance)
-			{
-				_shouldIgnoreNextInstance = false;
-			}
-			else
-			{
-				await PowerCmd.Apply<DexterityPower>(choiceContext, base.Owner, (decimal)Sign * amount, applier, cardSource, silent: true);
-			}
+			await PowerCmd.Apply<DexterityPower>(choiceContext, base.Owner, (decimal)Sign * amount, applier, cardSource, silent: true);
 		}
 	}
 

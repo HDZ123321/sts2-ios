@@ -30,6 +30,7 @@ using MegaCrit.Sts2.Core.Nodes.Orbs;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -123,19 +124,24 @@ public class NCreature : Control
 		public static readonly StringName GetCurrentAnimationTimeRemaining = "GetCurrentAnimationTimeRemaining";
 
 		/// <summary>
-		/// Cached name for the 'ToggleIsInteractable' method.
+		/// Cached name for the 'UpdateInteractability' method.
 		/// </summary>
-		public static readonly StringName ToggleIsInteractable = "ToggleIsInteractable";
+		public static readonly StringName UpdateInteractability = "UpdateInteractability";
 
 		/// <summary>
-		/// Cached name for the 'AnimDisableUi' method.
+		/// Cached name for the 'SetIsInteractable' method.
 		/// </summary>
-		public static readonly StringName AnimDisableUi = "AnimDisableUi";
+		public static readonly StringName SetIsInteractable = "SetIsInteractable";
 
 		/// <summary>
-		/// Cached name for the 'AnimEnableUi' method.
+		/// Cached name for the 'SetIsInteractableInternal' method.
 		/// </summary>
-		public static readonly StringName AnimEnableUi = "AnimEnableUi";
+		public static readonly StringName SetIsInteractableInternal = "SetIsInteractableInternal";
+
+		/// <summary>
+		/// Cached name for the 'DisableInteractionForDeath' method.
+		/// </summary>
+		public static readonly StringName DisableInteractionForDeath = "DisableInteractionForDeath";
 
 		/// <summary>
 		/// Cached name for the 'StartDeathAnim' method.
@@ -158,6 +164,16 @@ public class NCreature : Control
 		public static readonly StringName ImmediatelySetIdle = "ImmediatelySetIdle";
 
 		/// <summary>
+		/// Cached name for the 'AnimateOutStateDisplay' method.
+		/// </summary>
+		public static readonly StringName AnimateOutStateDisplay = "AnimateOutStateDisplay";
+
+		/// <summary>
+		/// Cached name for the 'AnimateInStateDisplayForCombatStart' method.
+		/// </summary>
+		public static readonly StringName AnimateInStateDisplayForCombatStart = "AnimateInStateDisplayForCombatStart";
+
+		/// <summary>
 		/// Cached name for the 'AnimHideIntent' method.
 		/// </summary>
 		public static readonly StringName AnimHideIntent = "AnimHideIntent";
@@ -178,9 +194,19 @@ public class NCreature : Control
 		public static readonly StringName SetDefaultScaleTo = "SetDefaultScaleTo";
 
 		/// <summary>
-		/// Cached name for the 'OstyScaleToSize' method.
+		/// Cached name for the 'ScaleAndPositionOsty' method.
 		/// </summary>
-		public static readonly StringName OstyScaleToSize = "OstyScaleToSize";
+		public static readonly StringName ScaleAndPositionOsty = "ScaleAndPositionOsty";
+
+		/// <summary>
+		/// Cached name for the 'PositionWuppy' method.
+		/// </summary>
+		public static readonly StringName PositionWuppy = "PositionWuppy";
+
+		/// <summary>
+		/// Cached name for the 'WuppyTweenHelper' method.
+		/// </summary>
+		public static readonly StringName WuppyTweenHelper = "WuppyTweenHelper";
 
 		/// <summary>
 		/// Cached name for the 'AnimShake' method.
@@ -304,6 +330,11 @@ public class NCreature : Control
 		public static readonly StringName HasSpineAnimation = "HasSpineAnimation";
 
 		/// <summary>
+		/// Cached name for the 'HasSpineArrowSlots' property.
+		/// </summary>
+		public static readonly StringName HasSpineArrowSlots = "HasSpineArrowSlots";
+
+		/// <summary>
 		/// Cached name for the 'IsFocused' property.
 		/// </summary>
 		public static readonly StringName IsFocused = "IsFocused";
@@ -337,6 +368,16 @@ public class NCreature : Control
 		/// Cached name for the '_isInBestiary' field.
 		/// </summary>
 		public static readonly StringName _isInBestiary = "_isInBestiary";
+
+		/// <summary>
+		/// Cached name for the '_interactionAllowed' field.
+		/// </summary>
+		public static readonly StringName _interactionAllowed = "_interactionAllowed";
+
+		/// <summary>
+		/// Cached name for the '_interactionAllowedBecauseAlive' field.
+		/// </summary>
+		public static readonly StringName _interactionAllowedBecauseAlive = "_interactionAllowedBecauseAlive";
 
 		/// <summary>
 		/// Cached name for the '_tempScale' field.
@@ -380,9 +421,15 @@ public class NCreature : Control
 
 	private bool _isInBestiary;
 
+	private bool _interactionAllowed = true;
+
+	private bool _interactionAllowedBecauseAlive = true;
+
 	private float _tempScale = 1f;
 
 	private Tween? _scaleTween;
+
+	private OwnedTween? _wuppyTween;
 
 	private bool _isInMultiselect;
 
@@ -431,6 +478,20 @@ public class NCreature : Control
 	public bool HasSpineAnimation => Visuals.HasSpineAnimation;
 
 	public SpineAnimationAccess SpineAnimation => Visuals.SpineAnimation;
+
+	public bool HasSpineArrowSlots
+	{
+		get
+		{
+			if (!HasSpineAnimation || Visuals.IsUsingPhobiaModeBody)
+			{
+				return false;
+			}
+			MegaSkeleton skeleton = Visuals.SpineAnimation.GetSkeleton();
+			MegaSlot megaSlot = skeleton.FindSlot("ARROW_HIT_FRONT");
+			return megaSlot != null;
+		}
+	}
 
 	public bool IsFocused { get; private set; }
 
@@ -496,13 +557,20 @@ public class NCreature : Control
 		else
 		{
 			bool flag3 = NCombatRoom.Instance != null && Time.GetTicksMsec() - NCombatRoom.Instance.CreatedMsec < 1000;
-			_stateDisplay.AnimateIn(flag3 ? HealthBarAnimMode.SpawnedAtCombatStart : HealthBarAnimMode.SpawnedDuringCombat);
+			if (flag3 && Entity.CurrentHp <= 0)
+			{
+				_stateDisplay.HideImmediately();
+			}
+			else
+			{
+				_stateDisplay.AnimateIn(flag3 ? HealthBarAnimMode.SpawnedAtCombatStart : HealthBarAnimMode.SpawnedDuringCombat);
+			}
 		}
 		if (HasSpineAnimation)
 		{
 			if (Entity.Player != null)
 			{
-				_spineAnimator = Entity.Player.Character.GenerateAnimator(Visuals.SpineBody);
+				_spineAnimator = Entity.Player.Character.GenerateAnimator(Visuals.SpineBody, Entity);
 			}
 			else
 			{
@@ -513,17 +581,18 @@ public class NCreature : Control
 			if (Entity.IsDead)
 			{
 				SetAnimationTrigger("Dead");
-				MegaTrackEntry currentTrack = SpineAnimation.GetCurrentTrack();
-				currentTrack?.SetTrackTime(currentTrack.GetAnimationEnd());
+				using MegaTrackEntry megaTrackEntry = SpineAnimation.GetCurrentTrack();
+				megaTrackEntry?.SetTrackTime(megaTrackEntry.GetAnimationEnd());
 			}
 		}
-		SetOrbManagerPosition();
-		if (Entity.Monster != null)
+		if (Entity.IsDead)
 		{
-			ToggleIsInteractable(Entity.Monster.IsHealthBarVisible);
+			DisableInteractionForDeath();
 		}
+		SetOrbManagerPosition();
 		UpdateBounds(Visuals);
 		UpdatePhobiaMode();
+		UpdateInteractability(changeVisibilityImmediately: true);
 	}
 
 	public override void _EnterTree()
@@ -697,7 +766,7 @@ public class NCreature : Control
 			NTargetManager.Instance.OnNodeHovered(this);
 			return;
 		}
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			ShowSingleSelectReticle();
 		}
@@ -875,49 +944,78 @@ public class NCreature : Control
 
 	public float GetCurrentAnimationTimeRemaining()
 	{
-		MegaTrackEntry currentTrack = SpineAnimation.GetCurrentTrack();
-		if (currentTrack == null)
+		using MegaTrackEntry megaTrackEntry = SpineAnimation.GetCurrentTrack();
+		if (megaTrackEntry == null)
 		{
 			return 0f;
 		}
-		return currentTrack.GetTrackComplete() - currentTrack.GetTrackTime();
+		return megaTrackEntry.GetTrackComplete() - megaTrackEntry.GetTrackTime();
 	}
 
-	public void ToggleIsInteractable(bool on)
+	private void UpdateInteractability(bool changeVisibilityImmediately)
+	{
+		if (Entity.Monster != null && !Entity.Monster.IsInteractable)
+		{
+			SetIsInteractableInternal(on: false, changeVisibilityImmediately);
+		}
+		else if (Entity.IsPet && !LocalContext.IsMe(Entity.PetOwner))
+		{
+			SetIsInteractableInternal(on: false, changeVisibilityImmediately);
+		}
+		else if (!_interactionAllowed || !_interactionAllowedBecauseAlive)
+		{
+			SetIsInteractableInternal(on: false, changeVisibilityImmediately);
+		}
+		else
+		{
+			SetIsInteractableInternal(on: true, changeVisibilityImmediately);
+		}
+	}
+
+	/// <summary>
+	/// Enable or disable interactability.
+	/// Example: Decimillipede Segments that were killed, but that are going to reattach.
+	/// </summary>
+	/// <remarks>
+	/// If something else is causing the creature to become uninteractable (e.g. it's a pet and we're in targeting),
+	/// this will not override that state.
+	/// </remarks>
+	public void SetIsInteractable(bool on, bool changeVisibilityImmediately)
+	{
+		_interactionAllowed = on;
+		UpdateInteractability(changeVisibilityImmediately);
+	}
+
+	/// <summary>
+	/// Actually sets the state on the node, making it interactable or not.
+	/// </summary>
+	/// <remarks><paramref name="changeVisibilityImmediately" /> should be set to false when the HP bar would be animated
+	/// in another way, e.g. when the creature is dying.</remarks>
+	private void SetIsInteractableInternal(bool on, bool changeVisibilityImmediately)
 	{
 		IsInteractable = on;
-		_stateDisplay.Visible = !NCombatUi.IsDebugHidingHpBar && on;
-		Hitbox.MouseFilter = (MouseFilterEnum)(on ? 0 : 2);
-	}
-
-	public Tween AnimDisableUi()
-	{
-		Tween tween = CreateTween();
-		if (!IsNodeReady())
+		if (changeVisibilityImmediately)
 		{
-			tween.TweenInterval(0.0);
-			return tween;
+			_stateDisplay.Visible = !NCombatUi.IsDebugHidingHpBar && on;
 		}
-		tween.TweenProperty(_stateDisplay, "modulate:a", 0f, 0.5).SetDelay(0.5).SetEase(Tween.EaseType.Out)
-			.SetTrans(Tween.TransitionType.Expo);
-		return tween;
+		Hitbox.MouseFilter = (MouseFilterEnum)(on ? 0 : 2);
+		Hitbox.FocusMode = (FocusModeEnum)(on ? 2 : 0);
+		NCombatRoom.Instance?.UpdateCreatureNavigation();
 	}
 
-	public Tween AnimEnableUi()
+	public void DisableInteractionForDeath()
 	{
-		Tween tween = CreateTween();
-		tween.TweenProperty(_stateDisplay, "modulate:a", 1f, 0.5).SetDelay(0.5).SetEase(Tween.EaseType.Out)
-			.SetTrans(Tween.TransitionType.Expo);
-		return tween;
-	}
-
-	public float StartDeathAnim(bool shouldRemove)
-	{
+		_interactionAllowedBecauseAlive = false;
 		if (Hitbox.HasFocus())
 		{
 			ActiveScreenContext.Instance.FocusOnDefaultControl();
 		}
-		Hitbox.FocusMode = FocusModeEnum.None;
+		UpdateInteractability(changeVisibilityImmediately: false);
+	}
+
+	public float StartDeathAnim(bool shouldRemove)
+	{
+		DisableInteractionForDeath();
 		foreach (NIntent item in IntentContainer.GetChildren().OfType<NIntent>())
 		{
 			item.SetFrozen(isFrozen: true);
@@ -938,6 +1036,7 @@ public class NCreature : Control
 			if (Entity.Player != null)
 			{
 				SfxCmd.PlayDeath(Entity.Player);
+				Visuals.RemoveFormVfx();
 			}
 			SetAnimationTrigger("Dead");
 			a = GetCurrentAnimationLength();
@@ -965,9 +1064,10 @@ public class NCreature : Control
 		}
 		if (!_isRemotePlayerOrPet)
 		{
-			AnimEnableUi();
+			_stateDisplay.AnimateInSimple();
 		}
-		Hitbox.MouseFilter = MouseFilterEnum.Stop;
+		_interactionAllowedBecauseAlive = true;
+		UpdateInteractability(changeVisibilityImmediately: true);
 	}
 
 	private void AnimTempRevive()
@@ -981,18 +1081,34 @@ public class NCreature : Control
 	private void ImmediatelySetIdle()
 	{
 		_spineAnimator?.SetTrigger("Idle");
-		MegaTrackEntry currentTrack = SpineAnimation.GetCurrentTrack();
-		if (currentTrack != null)
+		using MegaTrackEntry megaTrackEntry = SpineAnimation.GetCurrentTrack();
+		if (megaTrackEntry != null)
 		{
-			currentTrack.SetMixDuration(0f);
-			currentTrack.SetTrackTime(currentTrack.GetAnimationEnd());
+			megaTrackEntry.SetMixDuration(0f);
+			megaTrackEntry.SetTrackTime(megaTrackEntry.GetAnimationEnd());
+		}
+	}
+
+	public Tween? AnimateOutStateDisplay()
+	{
+		return _stateDisplay.AnimateOutSimple();
+	}
+
+	/// <summary>
+	/// This is called manually when an event with combat layout transitions to real combat.
+	/// Otherwise, you shouldn't need to manually call it, as the state display already does this transition in _Ready.
+	/// </summary>
+	public void AnimateInStateDisplayForCombatStart()
+	{
+		if (!_isRemotePlayerOrPet)
+		{
+			_stateDisplay.AnimateIn(HealthBarAnimMode.SpawnedAtCombatStart);
 		}
 	}
 
 	private async Task AnimDie(bool shouldRemove, CancellationToken cancelToken)
 	{
-		Tween disableUiTween = AnimDisableUi();
-		Hitbox.MouseFilter = MouseFilterEnum.Ignore;
+		Tween disableUiTween = _stateDisplay.AnimateOutSimple();
 		if (!RunManager.Instance.IsSingleplayerOrFakeMultiplayer)
 		{
 			OrbManager?.ClearOrbs();
@@ -1035,7 +1151,7 @@ public class NCreature : Control
 			}
 			if (SaveManager.Instance.PrefsSave.FastMode != FastModeType.Instant)
 			{
-				if (disableUiTween.IsValid() && disableUiTween.IsRunning() && !(await disableUiTween.AwaitFinished(this)))
+				if (disableUiTween != null && disableUiTween.IsValid() && disableUiTween.IsRunning() && await disableUiTween.AwaitFinished(this) != TweenOutcome.Finished)
 				{
 					return;
 				}
@@ -1052,7 +1168,7 @@ public class NCreature : Control
 		}
 		else if (Entity.Monster is Osty)
 		{
-			OstyScaleToSize(0f, 0.75);
+			ScaleAndPositionOsty(0f, 0.75);
 		}
 	}
 
@@ -1093,12 +1209,21 @@ public class NCreature : Control
 		}
 	}
 
-	public void OstyScaleToSize(float ostyHealth, double duration)
+	public void ScaleAndPositionOsty(float ostyHealth, double duration)
 	{
 		float num = Mathf.Lerp(Osty.ScaleRange.X, Osty.ScaleRange.Y, Mathf.Clamp(ostyHealth / 150f, 0f, 1f));
 		NCreature nCreature = NCombatRoom.Instance?.GetCreatureNode(Entity.PetOwner.Creature);
 		_scaleTween = CreateTween();
-		_scaleTween.TweenProperty(Visuals, "scale", Vector2.One * num * Visuals.DefaultScale, duration).SetEase(Tween.EaseType.InOut).SetTrans(Tween.TransitionType.Sine);
+		Vector2 vector = Vector2.One * num * Visuals.DefaultScale;
+		if (NCombatRoom.Instance != null && !NCombatRoom.Instance.SceneContainer.IsAncestorOf(Visuals))
+		{
+			ICombatState combatState = Entity.CombatState;
+			if (combatState != null && combatState.Encounter != null)
+			{
+				vector *= Entity.CombatState.Encounter.GetCameraScaling();
+			}
+		}
+		_scaleTween.TweenProperty(Visuals, "scale", vector, duration).SetEase(Tween.EaseType.InOut).SetTrans(Tween.TransitionType.Sine);
 		if (LocalContext.IsMe(Entity.PetOwner))
 		{
 			_scaleTween.Parallel().TweenProperty(this, "position", nCreature.Position + GetOstyOffsetFromPlayer(Entity), duration);
@@ -1107,6 +1232,56 @@ public class NCreature : Control
 		{
 			UpdateBounds(Visuals);
 		}));
+	}
+
+	public void PositionWuppy(bool isCombatStart)
+	{
+		NCreature owner = Entity.PetOwner?.Creature.GetCreatureNode();
+		if (owner == null || !LocalContext.IsMe(owner.Entity))
+		{
+			return;
+		}
+		Vector2 offset = new Vector2(50f, -50f);
+		if (Entity.PetOwner.IsOstyAlive)
+		{
+			offset = new Vector2(-25f, -250f);
+		}
+		Node2D heightControl = GetSpecialNode<Node2D>("%HeightControl");
+		if (isCombatStart)
+		{
+			WuppyTweenHelper(owner, heightControl, offset);
+			if (Entity.CurrentHp > 0)
+			{
+				_stateDisplay.AnimateIn(HealthBarAnimMode.SpawnedAtCombatStart);
+			}
+			return;
+		}
+		Vector2 initialOffset = new Vector2(base.Position.X - owner.Position.X - owner.Hitbox.Size.X, Visuals.Bounds.Position.Y + Visuals.Bounds.Size.Y * 0.5f - Wuppy.boundsOffset.Y);
+		if (initialOffset.IsEqualApprox(offset))
+		{
+			return;
+		}
+		if (_wuppyTween == null)
+		{
+			_wuppyTween = new OwnedTween(this);
+		}
+		TaskHelper.RunSafely(_wuppyTween.Play(delegate(Tween tween)
+		{
+			tween.TweenMethod(Callable.From(delegate(Vector2 x)
+			{
+				WuppyTweenHelper(owner, heightControl, x);
+			}), initialOffset, offset, 0.5).SetEase(Tween.EaseType.InOut).SetTrans(Tween.TransitionType.Quad);
+		}));
+	}
+
+	private void WuppyTweenHelper(NCreature owner, Node2D heightControl, Vector2 offset)
+	{
+		base.Position = owner.Position + Vector2.Right * (owner.Hitbox.Size.X + offset.X);
+		heightControl.Position = Wuppy.heightControlOffset + Vector2.Down * offset.Y / heightControl.GetParent<Node2D>().Scale.Y;
+		Visuals.Bounds.Position = Wuppy.boundsOffset + Vector2.Down * offset.Y - Visuals.Bounds.Size * 0.5f;
+		Visuals.VfxSpawnPosition.Position = Visuals.Bounds.Position + Visuals.Bounds.Size * 0.5f;
+		UpdateBounds(Visuals);
+		_stateDisplay.Reposition(Hitbox.Position + new Vector2(Hitbox.Size.X * 0.5f, Hitbox.Size.Y));
 	}
 
 	public static Vector2 GetOstyOffsetFromPlayer(Creature osty)
@@ -1250,7 +1425,7 @@ public class NCreature : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(41);
+		List<MethodInfo> list = new List<MethodInfo>(46);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -1275,12 +1450,21 @@ public class NCreature : Control
 		}, null));
 		list.Add(new MethodInfo(MethodName.GetCurrentAnimationLength, new PropertyInfo(Variant.Type.Float, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.GetCurrentAnimationTimeRemaining, new PropertyInfo(Variant.Type.Float, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.ToggleIsInteractable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		list.Add(new MethodInfo(MethodName.UpdateInteractability, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
-			new PropertyInfo(Variant.Type.Bool, "on", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+			new PropertyInfo(Variant.Type.Bool, "changeVisibilityImmediately", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.AnimDisableUi, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Tween"), exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.AnimEnableUi, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Tween"), exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.SetIsInteractable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Bool, "on", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
+			new PropertyInfo(Variant.Type.Bool, "changeVisibilityImmediately", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.SetIsInteractableInternal, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Bool, "on", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
+			new PropertyInfo(Variant.Type.Bool, "changeVisibilityImmediately", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.DisableInteractionForDeath, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.StartDeathAnim, new PropertyInfo(Variant.Type.Float, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Bool, "shouldRemove", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -1288,6 +1472,8 @@ public class NCreature : Control
 		list.Add(new MethodInfo(MethodName.StartReviveAnim, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.AnimTempRevive, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ImmediatelySetIdle, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.AnimateOutStateDisplay, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Tween"), exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.AnimateInStateDisplayForCombatStart, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.AnimHideIntent, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Float, "delay", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -1307,10 +1493,20 @@ public class NCreature : Control
 			new PropertyInfo(Variant.Type.Float, "size", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.Float, "duration", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.OstyScaleToSize, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		list.Add(new MethodInfo(MethodName.ScaleAndPositionOsty, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Float, "ostyHealth", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.Float, "duration", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.PositionWuppy, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Bool, "isCombatStart", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.WuppyTweenHelper, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "owner", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false),
+			new PropertyInfo(Variant.Type.Object, "heightControl", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node2D"), exported: false),
+			new PropertyInfo(Variant.Type.Vector2, "offset", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.AnimShake, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.DoScaleTween, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
@@ -1435,20 +1631,28 @@ public class NCreature : Control
 			ret = VariantUtils.CreateFrom<float>(GetCurrentAnimationTimeRemaining());
 			return true;
 		}
-		if (method == MethodName.ToggleIsInteractable && args.Count == 1)
+		if (method == MethodName.UpdateInteractability && args.Count == 1)
 		{
-			ToggleIsInteractable(VariantUtils.ConvertTo<bool>(in args[0]));
+			UpdateInteractability(VariantUtils.ConvertTo<bool>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.AnimDisableUi && args.Count == 0)
+		if (method == MethodName.SetIsInteractable && args.Count == 2)
 		{
-			ret = VariantUtils.CreateFrom<Tween>(AnimDisableUi());
+			SetIsInteractable(VariantUtils.ConvertTo<bool>(in args[0]), VariantUtils.ConvertTo<bool>(in args[1]));
+			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.AnimEnableUi && args.Count == 0)
+		if (method == MethodName.SetIsInteractableInternal && args.Count == 2)
 		{
-			ret = VariantUtils.CreateFrom<Tween>(AnimEnableUi());
+			SetIsInteractableInternal(VariantUtils.ConvertTo<bool>(in args[0]), VariantUtils.ConvertTo<bool>(in args[1]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.DisableInteractionForDeath && args.Count == 0)
+		{
+			DisableInteractionForDeath();
+			ret = default(godot_variant);
 			return true;
 		}
 		if (method == MethodName.StartDeathAnim && args.Count == 1)
@@ -1471,6 +1675,17 @@ public class NCreature : Control
 		if (method == MethodName.ImmediatelySetIdle && args.Count == 0)
 		{
 			ImmediatelySetIdle();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.AnimateOutStateDisplay && args.Count == 0)
+		{
+			ret = VariantUtils.CreateFrom<Tween>(AnimateOutStateDisplay());
+			return true;
+		}
+		if (method == MethodName.AnimateInStateDisplayForCombatStart && args.Count == 0)
+		{
+			AnimateInStateDisplayForCombatStart();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -1498,9 +1713,21 @@ public class NCreature : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.OstyScaleToSize && args.Count == 2)
+		if (method == MethodName.ScaleAndPositionOsty && args.Count == 2)
 		{
-			OstyScaleToSize(VariantUtils.ConvertTo<float>(in args[0]), VariantUtils.ConvertTo<double>(in args[1]));
+			ScaleAndPositionOsty(VariantUtils.ConvertTo<float>(in args[0]), VariantUtils.ConvertTo<double>(in args[1]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.PositionWuppy && args.Count == 1)
+		{
+			PositionWuppy(VariantUtils.ConvertTo<bool>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.WuppyTweenHelper && args.Count == 3)
+		{
+			WuppyTweenHelper(VariantUtils.ConvertTo<NCreature>(in args[0]), VariantUtils.ConvertTo<Node2D>(in args[1]), VariantUtils.ConvertTo<Vector2>(in args[2]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -1653,15 +1880,19 @@ public class NCreature : Control
 		{
 			return true;
 		}
-		if (method == MethodName.ToggleIsInteractable)
+		if (method == MethodName.UpdateInteractability)
 		{
 			return true;
 		}
-		if (method == MethodName.AnimDisableUi)
+		if (method == MethodName.SetIsInteractable)
 		{
 			return true;
 		}
-		if (method == MethodName.AnimEnableUi)
+		if (method == MethodName.SetIsInteractableInternal)
+		{
+			return true;
+		}
+		if (method == MethodName.DisableInteractionForDeath)
 		{
 			return true;
 		}
@@ -1681,6 +1912,14 @@ public class NCreature : Control
 		{
 			return true;
 		}
+		if (method == MethodName.AnimateOutStateDisplay)
+		{
+			return true;
+		}
+		if (method == MethodName.AnimateInStateDisplayForCombatStart)
+		{
+			return true;
+		}
 		if (method == MethodName.AnimHideIntent)
 		{
 			return true;
@@ -1697,7 +1936,15 @@ public class NCreature : Control
 		{
 			return true;
 		}
-		if (method == MethodName.OstyScaleToSize)
+		if (method == MethodName.ScaleAndPositionOsty)
+		{
+			return true;
+		}
+		if (method == MethodName.PositionWuppy)
+		{
+			return true;
+		}
+		if (method == MethodName.WuppyTweenHelper)
 		{
 			return true;
 		}
@@ -1820,6 +2067,16 @@ public class NCreature : Control
 			_isInBestiary = VariantUtils.ConvertTo<bool>(in value);
 			return true;
 		}
+		if (name == PropertyName._interactionAllowed)
+		{
+			_interactionAllowed = VariantUtils.ConvertTo<bool>(in value);
+			return true;
+		}
+		if (name == PropertyName._interactionAllowedBecauseAlive)
+		{
+			_interactionAllowedBecauseAlive = VariantUtils.ConvertTo<bool>(in value);
+			return true;
+		}
 		if (name == PropertyName._tempScale)
 		{
 			_tempScale = VariantUtils.ConvertTo<float>(in value);
@@ -1907,6 +2164,12 @@ public class NCreature : Control
 			value = VariantUtils.CreateFrom(in from2);
 			return true;
 		}
+		if (name == PropertyName.HasSpineArrowSlots)
+		{
+			from2 = HasSpineArrowSlots;
+			value = VariantUtils.CreateFrom(in from2);
+			return true;
+		}
 		if (name == PropertyName.IsFocused)
 		{
 			from2 = IsFocused;
@@ -1941,6 +2204,16 @@ public class NCreature : Control
 		if (name == PropertyName._isInBestiary)
 		{
 			value = VariantUtils.CreateFrom(in _isInBestiary);
+			return true;
+		}
+		if (name == PropertyName._interactionAllowed)
+		{
+			value = VariantUtils.CreateFrom(in _interactionAllowed);
+			return true;
+		}
+		if (name == PropertyName._interactionAllowedBecauseAlive)
+		{
+			value = VariantUtils.CreateFrom(in _interactionAllowedBecauseAlive);
 			return true;
 		}
 		if (name == PropertyName._tempScale)
@@ -1980,6 +2253,8 @@ public class NCreature : Control
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._shakeTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._isRemotePlayerOrPet, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._isInBestiary, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._interactionAllowed, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._interactionAllowedBecauseAlive, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._tempScale, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._scaleTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.Hitbox, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1994,6 +2269,7 @@ public class NCreature : Control
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.IntentContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.IsPlayingDeathAnimation, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.HasSpineAnimation, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.HasSpineArrowSlots, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.IsFocused, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.PlayerIntentHandler, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
@@ -2016,6 +2292,8 @@ public class NCreature : Control
 		info.AddProperty(PropertyName._shakeTween, Variant.From(in _shakeTween));
 		info.AddProperty(PropertyName._isRemotePlayerOrPet, Variant.From(in _isRemotePlayerOrPet));
 		info.AddProperty(PropertyName._isInBestiary, Variant.From(in _isInBestiary));
+		info.AddProperty(PropertyName._interactionAllowed, Variant.From(in _interactionAllowed));
+		info.AddProperty(PropertyName._interactionAllowedBecauseAlive, Variant.From(in _interactionAllowedBecauseAlive));
 		info.AddProperty(PropertyName._tempScale, Variant.From(in _tempScale));
 		info.AddProperty(PropertyName._scaleTween, Variant.From(in _scaleTween));
 		info.AddProperty(PropertyName._isInMultiselect, Variant.From(in _isInMultiselect));
@@ -2075,21 +2353,29 @@ public class NCreature : Control
 		{
 			_isInBestiary = value12.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._tempScale, out var value13))
+		if (info.TryGetProperty(PropertyName._interactionAllowed, out var value13))
 		{
-			_tempScale = value13.As<float>();
+			_interactionAllowed = value13.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._scaleTween, out var value14))
+		if (info.TryGetProperty(PropertyName._interactionAllowedBecauseAlive, out var value14))
 		{
-			_scaleTween = value14.As<Tween>();
+			_interactionAllowedBecauseAlive = value14.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._isInMultiselect, out var value15))
+		if (info.TryGetProperty(PropertyName._tempScale, out var value15))
 		{
-			_isInMultiselect = value15.As<bool>();
+			_tempScale = value15.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._selectionReticle, out var value16))
+		if (info.TryGetProperty(PropertyName._scaleTween, out var value16))
 		{
-			_selectionReticle = value16.As<NSelectionReticle>();
+			_scaleTween = value16.As<Tween>();
+		}
+		if (info.TryGetProperty(PropertyName._isInMultiselect, out var value17))
+		{
+			_isInMultiselect = value17.As<bool>();
+		}
+		if (info.TryGetProperty(PropertyName._selectionReticle, out var value18))
+		{
+			_selectionReticle = value18.As<NSelectionReticle>();
 		}
 	}
 }

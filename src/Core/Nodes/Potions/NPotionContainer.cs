@@ -48,6 +48,11 @@ public class NPotionContainer : Control
 		public new static readonly StringName _ExitTree = "_ExitTree";
 
 		/// <summary>
+		/// Cached name for the '_Notification' method.
+		/// </summary>
+		public new static readonly StringName _Notification = "_Notification";
+
+		/// <summary>
 		/// Cached name for the 'ConnectPlayerEvents' method.
 		/// </summary>
 		public static readonly StringName ConnectPlayerEvents = "ConnectPlayerEvents";
@@ -61,11 +66,6 @@ public class NPotionContainer : Control
 		/// Cached name for the 'GrowPotionHolders' method.
 		/// </summary>
 		public static readonly StringName GrowPotionHolders = "GrowPotionHolders";
-
-		/// <summary>
-		/// Cached name for the 'UpdateNavigation' method.
-		/// </summary>
-		public static readonly StringName UpdateNavigation = "UpdateNavigation";
 
 		/// <summary>
 		/// Cached name for the 'PotionFtueCheck' method.
@@ -98,16 +98,6 @@ public class NPotionContainer : Control
 	/// </summary>
 	public new class PropertyName : Control.PropertyName
 	{
-		/// <summary>
-		/// Cached name for the 'FirstPotionControl' property.
-		/// </summary>
-		public static readonly StringName FirstPotionControl = "FirstPotionControl";
-
-		/// <summary>
-		/// Cached name for the 'LastPotionControl' property.
-		/// </summary>
-		public static readonly StringName LastPotionControl = "LastPotionControl";
-
 		/// <summary>
 		/// Cached name for the '_potionHolders' field.
 		/// </summary>
@@ -164,18 +154,10 @@ public class NPotionContainer : Control
 
 	private NPotionHolder? _focusedHolder;
 
-	public Control? FirstPotionControl => _holders.FirstOrDefault();
-
-	public Control? LastPotionControl => _holders.LastOrDefault();
+	public IReadOnlyList<NPotionHolder> Holders => _holders;
 
 	public override void _Ready()
 	{
-		Callable.From(UpdateNavigation).CallDeferred();
-	}
-
-	public override void _EnterTree()
-	{
-		_cts = new CancellationTokenSource();
 		_potionHolders = GetNode<Control>("MarginContainer/PotionHolders");
 		_potionErrorBg = GetNode<Control>("PotionErrorBg");
 		_potionShortcutButton = GetNode<NButton>("PotionShortcutButton");
@@ -185,13 +167,24 @@ public class NPotionContainer : Control
 		ConnectPlayerEvents();
 	}
 
+	public override void _EnterTree()
+	{
+		_cts = new CancellationTokenSource();
+	}
+
 	public override void _ExitTree()
 	{
 		_cts.Cancel();
-		DisconnectPlayerEvents();
-		_player = null;
-		_potionShortcutButton.Disconnect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnPotionShortcutPressed));
-		CombatManager.Instance.CombatSetUp -= OnCombatSetUp;
+	}
+
+	public override void _Notification(int what)
+	{
+		if ((long)what == 1)
+		{
+			DisconnectPlayerEvents();
+			_player = null;
+			CombatManager.Instance.CombatSetUp -= OnCombatSetUp;
+		}
 	}
 
 	public void Initialize(IRunState runState)
@@ -215,8 +208,6 @@ public class NPotionContainer : Control
 			_player.UsedPotionRemoved += OnUsedPotionRemoved;
 			_player.PotionDiscarded += Discard;
 			_player.MaxPotionCountChanged += GrowPotionHolders;
-			_player.RelicObtained += OnRelicsUpdated;
-			_player.RelicRemoved += OnRelicsUpdated;
 		}
 	}
 
@@ -229,8 +220,6 @@ public class NPotionContainer : Control
 			_player.UsedPotionRemoved -= OnUsedPotionRemoved;
 			_player.PotionDiscarded -= Discard;
 			_player.MaxPotionCountChanged -= GrowPotionHolders;
-			_player.RelicObtained -= OnRelicsUpdated;
-			_player.RelicRemoved -= OnRelicsUpdated;
 		}
 	}
 
@@ -257,27 +246,6 @@ public class NPotionContainer : Control
 			{
 				OnPotionHolderUnfocused(node);
 			}));
-		}
-		UpdateNavigation();
-	}
-
-	private void OnRelicsUpdated(RelicModel _)
-	{
-		Callable.From(UpdateNavigation).CallDeferred();
-	}
-
-	private void UpdateNavigation()
-	{
-		Control control = NRun.Instance.GlobalUi.RelicInventory.RelicNodes.FirstOrDefault();
-		if (control != null)
-		{
-			for (int i = 0; i < _holders.Count; i++)
-			{
-				_holders[i].FocusNeighborLeft = ((i > 0) ? _holders[i - 1].GetPath() : NRun.Instance.GlobalUi.TopBar.Gold.GetPath());
-				_holders[i].FocusNeighborRight = ((i < _holders.Count - 1) ? _holders[i + 1].GetPath() : NRun.Instance.GlobalUi.TopBar.RoomIcon.GetPath());
-				_holders[i].FocusNeighborBottom = control.GetPath();
-				_holders[i].FocusNeighborTop = _holders[i].GetPath();
-			}
 		}
 	}
 
@@ -427,13 +395,16 @@ public class NPotionContainer : Control
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.ConnectPlayerEvents, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.DisconnectPlayerEvents, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.GrowPotionHolders, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "newMaxPotionSlots", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.UpdateNavigation, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.PotionFtueCheck, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.PlayAddFailedAnim, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnPotionHolderFocused, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
@@ -473,6 +444,12 @@ public class NPotionContainer : Control
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName._Notification && args.Count == 1)
+		{
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.ConnectPlayerEvents && args.Count == 0)
 		{
 			ConnectPlayerEvents();
@@ -488,12 +465,6 @@ public class NPotionContainer : Control
 		if (method == MethodName.GrowPotionHolders && args.Count == 1)
 		{
 			GrowPotionHolders(VariantUtils.ConvertTo<int>(in args[0]));
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName.UpdateNavigation && args.Count == 0)
-		{
-			UpdateNavigation();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -546,6 +517,10 @@ public class NPotionContainer : Control
 		{
 			return true;
 		}
+		if (method == MethodName._Notification)
+		{
+			return true;
+		}
 		if (method == MethodName.ConnectPlayerEvents)
 		{
 			return true;
@@ -555,10 +530,6 @@ public class NPotionContainer : Control
 			return true;
 		}
 		if (method == MethodName.GrowPotionHolders)
-		{
-			return true;
-		}
-		if (method == MethodName.UpdateNavigation)
 		{
 			return true;
 		}
@@ -626,19 +597,6 @@ public class NPotionContainer : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
-		Control from;
-		if (name == PropertyName.FirstPotionControl)
-		{
-			from = FirstPotionControl;
-			value = VariantUtils.CreateFrom(in from);
-			return true;
-		}
-		if (name == PropertyName.LastPotionControl)
-		{
-			from = LastPotionControl;
-			value = VariantUtils.CreateFrom(in from);
-			return true;
-		}
 		if (name == PropertyName._potionHolders)
 		{
 			value = VariantUtils.CreateFrom(in _potionHolders);
@@ -687,8 +645,6 @@ public class NPotionContainer : Control
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._potionsFullTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Vector2, PropertyName._potionHolderInitPos, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._focusedHolder, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.FirstPotionControl, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.LastPotionControl, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 

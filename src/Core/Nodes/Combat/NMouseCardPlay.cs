@@ -7,14 +7,12 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Audio.Debug;
-using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards.Holders;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.HoverTips;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
@@ -45,11 +43,6 @@ public class NMouseCardPlay : NCardPlay
 		/// Cached name for the 'Start' method.
 		/// </summary>
 		public new static readonly StringName Start = "Start";
-
-		/// <summary>
-		/// Cached name for the '_EnterTree' method.
-		/// </summary>
-		public new static readonly StringName _EnterTree = "_EnterTree";
 
 		/// <summary>
 		/// Cached name for the '_ExitTree' method.
@@ -175,7 +168,7 @@ public class NMouseCardPlay : NCardPlay
 	{
 		get
 		{
-			float num = BottomOfPlayableArea - _viewport.GetVisibleRect().Size.Y * (1f - _playZoneScreenProportion);
+			float num = _viewport.GetVisibleRect().Size.Y * 0.75f;
 			if (_skipStartCardDrag)
 			{
 				return num + 100f;
@@ -188,26 +181,7 @@ public class NMouseCardPlay : NCardPlay
 		}
 	}
 
-	private float CancelZoneThreshold => BottomOfPlayableArea - _viewport.GetVisibleRect().Size.Y * (1f - _cancelZoneScreenProportion);
-
-	/// <summary>
-	/// The y coordinate the play and cancel zones are measured from. Using the bottom of the safe area
-	/// instead of the raw viewport keeps the cancel zone above the home indicator, which otherwise sits
-	/// exactly where the game expects a deliberate downward drag. On desktop the safe area is the whole
-	/// viewport, so this is the same value the old proportional maths produced.
-	/// </summary>
-	private float BottomOfPlayableArea
-	{
-		get
-		{
-			NGame game = NGame.Instance;
-			if (game != null)
-			{
-				return game.SafeAreaRect.End.Y;
-			}
-			return _viewport.GetVisibleRect().End.Y;
-		}
-	}
+	private float CancelZoneThreshold => _viewport.GetVisibleRect().Size.Y * 0.95f;
 
 	public static NMouseCardPlay Create(NHandCardHolder holder, StringName cancelShortcut, bool wasStartedWithShortcut)
 	{
@@ -243,7 +217,7 @@ public class NMouseCardPlay : NCardPlay
 				break;
 			}
 		}
-		if (inputEvent.IsActionPressed(_cancelShortcut) || inputEvent.IsActionPressed(MegaInput.releaseCard))
+		if (inputEvent.IsActionPressed(_cancelShortcut))
 		{
 			CancelPlayCard();
 			GetViewport()?.SetInputAsHandled();
@@ -260,22 +234,9 @@ public class NMouseCardPlay : NCardPlay
 		TaskHelper.RunSafely(StartAsync());
 	}
 
-	public override void _EnterTree()
-	{
-		if (NControllerManager.Instance != null)
-		{
-			NControllerManager.Instance.Connect(NControllerManager.SignalName.MouseDetected, Callable.From(base.CancelPlayCard));
-			NControllerManager.Instance.Connect(NControllerManager.SignalName.ControllerDetected, Callable.From(base.CancelPlayCard));
-		}
-	}
-
 	public override void _ExitTree()
 	{
-		if (NControllerManager.Instance != null)
-		{
-			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.MouseDetected, Callable.From(base.CancelPlayCard));
-			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.ControllerDetected, Callable.From(base.CancelPlayCard));
-		}
+		base._ExitTree();
 		_cancellationTokenSource.Cancel();
 		DisconnectTargetingSignals();
 	}
@@ -486,7 +447,7 @@ public class NMouseCardPlay : NCardPlay
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(8);
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "holder", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false),
@@ -498,7 +459,6 @@ public class NMouseCardPlay : NCardPlay
 			new PropertyInfo(Variant.Type.Object, "inputEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.Start, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.DisconnectTargetingSignals, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnCancelPlayCard, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -525,12 +485,6 @@ public class NMouseCardPlay : NCardPlay
 		if (method == MethodName.Start && args.Count == 0)
 		{
 			Start();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName._EnterTree && args.Count == 0)
-		{
-			_EnterTree();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -590,10 +544,6 @@ public class NMouseCardPlay : NCardPlay
 			return true;
 		}
 		if (method == MethodName.Start)
-		{
-			return true;
-		}
-		if (method == MethodName._EnterTree)
 		{
 			return true;
 		}

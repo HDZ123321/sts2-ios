@@ -33,7 +33,7 @@ public sealed class PerfectedStrike : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
-		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.CalculatedDamage).FromCard(this).Targeting(cardPlay.Target)
+		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.CalculatedDamage).FromCard(this, cardPlay).Targeting(cardPlay.Target)
 			.WithHitFx(null, null, "heavy_attack.mp3")
 			.WithHitVfxNode((Creature t) => NBigSlashVfx.Create(t))
 			.WithHitVfxNode((Creature t) => NBigSlashImpactVfx.Create(t));

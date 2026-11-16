@@ -75,6 +75,10 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 	[JsonSerializeCondition(SerializationCondition.SaveIfNotCollectionEmptyOrNull)]
 	public List<ModelChoiceHistoryEntry> PotionChoices { get; set; } = new List<ModelChoiceHistoryEntry>();
 
+	[JsonPropertyName("blitz_merchant_choices")]
+	[JsonSerializeCondition(SerializationCondition.SaveIfNotCollectionEmptyOrNull)]
+	public List<BlitzMerchantHistoryEntry> BlitzMerchantChoices { get; set; } = new List<BlitzMerchantHistoryEntry>();
+
 	[JsonPropertyName("potion_discarded")]
 	[JsonSerializeCondition(SerializationCondition.SaveIfNotCollectionEmptyOrNull)]
 	public List<ModelId> PotionDiscarded { get; set; } = new List<ModelId>();
@@ -130,6 +134,9 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 	[JsonPropertyName("completed_quests")]
 	[JsonSerializeCondition(SerializationCondition.SaveIfNotCollectionEmptyOrNull)]
 	public List<ModelId> CompletedQuests { get; set; } = new List<ModelId>();
+
+	[JsonPropertyName("is_affected_by_fur_coat")]
+	public bool IsAffectedByFurCoat { get; set; }
 
 	/// <summary>
 	/// True if a thief took gold or cards from this player this combat and did not give them back.
@@ -194,6 +201,7 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 		{
 			potionChoice.Serialize<PotionModel>(writer);
 		}
+		writer.WriteList(BlitzMerchantChoices);
 		writer.WriteModelEntriesInList(PotionDiscarded);
 		writer.WriteModelEntriesInList(PotionUsed);
 		writer.WriteList(CardsRemoved);
@@ -212,6 +220,7 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 		writer.WriteModelEntriesInList(BoughtPotions);
 		writer.WriteModelEntriesInList(BoughtColorless);
 		writer.WriteModelEntriesInList(CompletedQuests);
+		writer.WriteBool(IsAffectedByFurCoat);
 	}
 
 	public void Deserialize(PacketReader reader)
@@ -253,6 +262,7 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 			item3.Deserialize<PotionModel>(reader);
 			PotionChoices.Add(item3);
 		}
+		BlitzMerchantChoices = reader.ReadList<BlitzMerchantHistoryEntry>();
 		PotionDiscarded = reader.ReadModelIdListAssumingType<PotionModel>();
 		PotionUsed = reader.ReadModelIdListAssumingType<PotionModel>();
 		CardsRemoved = reader.ReadList<SerializableCard>();
@@ -271,6 +281,7 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 		BoughtPotions = reader.ReadModelIdListAssumingType<PotionModel>();
 		BoughtColorless = reader.ReadModelIdListAssumingType<CardModel>();
 		CompletedQuests = reader.ReadModelIdListAssumingType<CardModel>();
+		IsAffectedByFurCoat = reader.ReadBool();
 	}
 
 	public PlayerMapPointHistoryEntry Anonymized()
@@ -295,6 +306,7 @@ public class PlayerMapPointHistoryEntry : IPacketSerializable
 			CardChoices = CardChoices,
 			RelicChoices = RelicChoices,
 			PotionChoices = PotionChoices,
+			BlitzMerchantChoices = BlitzMerchantChoices,
 			PotionDiscarded = PotionDiscarded,
 			PotionUsed = PotionUsed,
 			CardsRemoved = CardsRemoved,

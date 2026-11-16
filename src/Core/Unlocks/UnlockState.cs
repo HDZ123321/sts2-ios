@@ -75,6 +75,10 @@ public class UnlockState
 			{
 				list.Remove(ModelDb.Character<Defect>());
 			}
+			if (!IsEpochRevealed<Fool1Epoch>())
+			{
+				list.Remove(ModelDb.Character<Fool>());
+			}
 			return list;
 		}
 	}
@@ -135,7 +139,7 @@ public class UnlockState
 	/// </summary>
 	public UnlockState(IEnumerable<string> unlockedEpochIds, IEnumerable<ModelId> encountersSeen, int numberOfRuns)
 	{
-		_unlockedEpochIds = unlockedEpochIds.ToHashSet();
+		_unlockedEpochIds = unlockedEpochIds.Where(IsValidEpoch).ToHashSet();
 		_encountersSeen = encountersSeen.ToHashSet();
 		NumberOfRuns = numberOfRuns;
 	}
@@ -148,7 +152,7 @@ public class UnlockState
 	{
 		_unlockedEpochIds = (from e in progress.Epochs
 			where e.State == EpochState.Revealed
-			select e.Id).ToHashSet();
+			select e.Id).Where(IsValidEpoch).ToHashSet();
 		_encountersSeen = progress.EncounterStats.Keys.Where((ModelId id) => ModelDb.GetByIdOrNull<AbstractModel>(id) is EncounterModel).ToHashSet();
 		NumberOfRuns = progress.NumberOfRuns;
 	}
@@ -163,10 +167,23 @@ public class UnlockState
 	{
 		UnlockState[] source = unlockStatesEnumerable.ToArray();
 		_unlockedEpochIds = source.Select((UnlockState s) => s._unlockedEpochIds).SelectMany((HashSet<string> m) => m).Distinct()
+			.Where(IsValidEpoch)
 			.ToHashSet();
 		_encountersSeen = source.Select((UnlockState s) => s._encountersSeen).SelectMany((HashSet<ModelId> b) => b).Distinct()
 			.ToHashSet();
 		NumberOfRuns = source.Max((UnlockState s) => s.NumberOfRuns);
+	}
+
+	/// <summary>
+	/// Used to filter invalid epochs out from the unlock state.
+	/// If invalid epochs are placed into _unlockedEpochs, when we try to serialize this object in multiplayer, we'll
+	/// get an error because they do not exist in the integer map.
+	/// Mostly useful for mods that may remove epochs, but also useful if we ever decide to deprecate epochs.
+	/// I know we could pass EpochModel.IsValid directly, but the comment is useful context.
+	/// </summary>
+	public static bool IsValidEpoch(string epochId)
+	{
+		return EpochModel.IsValid(epochId);
 	}
 
 	/// <summary>

@@ -14,6 +14,8 @@ public sealed class Adroit : EnchantmentModel
 
 	public override bool ShowAmount => true;
 
+	public override bool GainsBlock => true;
+
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new BlockVar(0m, ValueProp.Move));
 
 	public override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay? cardPlay)

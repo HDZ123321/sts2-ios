@@ -368,11 +368,11 @@ public class NTargetManager : Node2D
 			cancel = false;
 			GetViewport().SetInputAsHandled();
 		}
-		else if (inputEvent.IsActionPressed(MegaInput.cancel) || inputEvent.IsActionPressed(MegaInput.topPanel))
+		else if (inputEvent.IsActionPressed(MegaInput.cancel) || inputEvent.IsActionPressed(MegaInput.topPanel) || inputEvent.IsActionPressed(MegaInput.pauseAndBack))
 		{
 			flag = true;
 			cancel = true;
-			if (inputEvent.IsActionPressed(MegaInput.cancel))
+			if (inputEvent.IsActionPressed(MegaInput.cancel) || inputEvent.IsActionPressed(MegaInput.pauseAndBack))
 			{
 				GetViewport().SetInputAsHandled();
 			}
@@ -568,7 +568,7 @@ public class NTargetManager : Node2D
 			}
 			else
 			{
-				_targetingArrow.UpdateDrawingTo(nMultiplayerPlayerState.GlobalPosition + Vector2.Right * nMultiplayerPlayerState.Hitbox.Size.X + Vector2.Down * nMultiplayerPlayerState.Hitbox.Size.Y / 2f);
+				_targetingArrow.UpdateDrawingTo(nMultiplayerPlayerState.GlobalPosition + Vector2.Right * nMultiplayerPlayerState.Hitbox.Size.X + Vector2.Down * nMultiplayerPlayerState.Hitbox.Size.Y * 0.5f);
 			}
 		}
 		EmitSignal(SignalName.NodeHovered, node);

@@ -15,16 +15,18 @@ public class NetTypeCache<[DynamicallyAccessedMembers(DynamicallyAccessedMemberT
 
 	private readonly List<Type> _idToType;
 
+	public int Count => _idToType.Count;
+
 	public NetTypeCache(List<Type> types)
 	{
-		types.Sort((Type t1, Type t2) => string.CompareOrdinal(t1.Name, t2.Name));
-		_idToType = types;
-		for (int num = 0; num < types.Count; num++)
+		IEnumerable<ContentSorter<string>.Item> source = ContentSorter<string>.Sort(types, (Type t) => t.Name);
+		_idToType = source.Select((ContentSorter<string>.Item i) => i.type).ToList();
+		for (int num = 0; num < _idToType.Count; num++)
 		{
-			Type type = types[num];
+			Type type = _idToType[num];
 			if (!Enumerable.Contains<Type>(type.GetInterfaces(), typeof(TBase)))
 			{
-				throw new InvalidOperationException($"Type {types[num]} does not implement interface {typeof(TBase)}!");
+				throw new InvalidOperationException($"Type {_idToType[num]} does not implement interface {typeof(TBase)}!");
 			}
 			_typeToId[type] = num;
 		}

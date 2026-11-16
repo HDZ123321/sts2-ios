@@ -21,9 +21,9 @@ public class SteamPlatformUtilStrategy : IPlatformUtilStrategy
 
 	private bool _isPlatformOverlayOpen;
 
-	private Callback<GameOverlayActivated_t>? _steamOverlayCallback;
+	private readonly Callback<GameOverlayActivated_t>? _steamOverlayCallback;
 
-	public bool SupportsInviteDialog => SteamUtils.IsOverlayEnabled();
+	public bool SupportsInviteDialog => true;
 
 	public bool IsPlatformOverlayOpen => _isPlatformOverlayOpen;
 
@@ -67,12 +67,12 @@ public class SteamPlatformUtilStrategy : IPlatformUtilStrategy
 		return Task.FromResult((IEnumerable<ulong>)list);
 	}
 
-	public void OpenInviteDialog(INetGameService netService)
+	public bool TryOpenInviteDialog(INetGameService netService)
 	{
 		if (!SteamUtils.IsOverlayEnabled())
 		{
-			Log.Error("Tried to open invite dialog, but the player has disabled the steam overlay");
-			return;
+			Log.Warn("Tried to open invite dialog, but the player has disabled the steam overlay");
+			return false;
 		}
 		CSteamID value;
 		if (netService is INetHostGameService { NetHost: SteamHost { LobbyId: var lobbyId } netHost })
@@ -80,7 +80,7 @@ public class SteamPlatformUtilStrategy : IPlatformUtilStrategy
 			if (!lobbyId.HasValue)
 			{
 				Log.Warn("Tried to open invite dialog but steam host is not yet in a lobby");
-				return;
+				return false;
 			}
 			value = netHost.LobbyId.Value;
 		}
@@ -92,12 +92,13 @@ public class SteamPlatformUtilStrategy : IPlatformUtilStrategy
 			}
 			if (!lobbyId2.HasValue)
 			{
-				Log.Warn("Tried to open invite dialog but steam host is not yet in a lobby");
-				return;
+				Log.Warn("Tried to open invite dialog but steam client is not yet in a lobby");
+				return false;
 			}
 			value = netClient.LobbyId.Value;
 		}
 		SteamFriends.ActivateGameOverlayInviteDialog(value);
+		return true;
 	}
 
 	public void OpenUrl(string url)

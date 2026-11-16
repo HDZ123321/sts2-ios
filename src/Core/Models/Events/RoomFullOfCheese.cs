@@ -39,16 +39,14 @@ public sealed class RoomFullOfCheese : EventModel
 		Player owner = base.Owner;
 		CardCreationOptions options = CardCreationOptions.ForNonCombatWithUniformOdds(new global::_003C_003Ez__ReadOnlySingleElementList<CardPoolModel>(owner.Character.CardPool), (CardModel c) => c.Rarity == CardRarity.Common).WithFlags(CardCreationFlags.NoRarityModification);
 		List<CardCreationResult> cards = CardFactory.CreateForReward(owner, 8, options).ToList();
-		foreach (CardModel item in await CardSelectCmd.FromSimpleGridForRewards(prefs: new CardSelectorPrefs(L10NLookup("ROOM_FULL_OF_CHEESE.pages.GORGE.selectionScreenPrompt"), 2), context: new BlockingPlayerChoiceContext(), cards: cards, player: owner))
-		{
-			CardCmd.PreviewCardPileAdd(await CardPileCmd.Add(item, PileType.Deck));
-		}
+		CardSelectorPrefs prefs = new CardSelectorPrefs(L10NLookup("ROOM_FULL_OF_CHEESE.pages.GORGE.selectionScreenPrompt"), 2);
+		await SelectCardsToAddToDeckFromGrid(cards, prefs);
 		SetEventFinished(L10NLookup("ROOM_FULL_OF_CHEESE.pages.GORGE.description"));
 	}
 
 	private async Task Search()
 	{
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null, null);
 		await RelicCmd.Obtain<ChosenCheese>(base.Owner);
 		SetEventFinished(L10NLookup("ROOM_FULL_OF_CHEESE.pages.SEARCH.description"));
 	}

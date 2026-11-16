@@ -59,6 +59,11 @@ public enum CardCreationFlags
 	/// </summary>
 	IsCardReward = 0x80,
 	/// <summary>
+	/// Indicates that the cards created are specifically for a card reward from a combat.
+	/// Important for relics like <see cref="T:MegaCrit.Sts2.Core.Models.Relics.LastingCandy" /> that should only apply to combat card rewards.
+	/// </summary>
+	IsFromCombat = 0x100,
+	/// <summary>
 	/// Indicates that no upgrades should be applied to the generated card at all.
 	/// </summary>
 	NoUpgrades = 6,

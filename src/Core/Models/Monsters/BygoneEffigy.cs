@@ -83,20 +83,21 @@ public sealed class BygoneEffigy : MonsterModel
 	{
 		if (TestMode.IsOff)
 		{
-			Vector2? vector = null;
+			NCreature nCreature = null;
 			foreach (Creature target in targets)
 			{
 				NCreature creatureNode = target.GetCreatureNode();
-				if (creatureNode != null && (!vector.HasValue || vector.Value.X > creatureNode.GlobalPosition.X))
+				if (creatureNode != null && (nCreature == null || nCreature.GlobalPosition.X > creatureNode.GlobalPosition.X))
 				{
-					vector = creatureNode.GlobalPosition;
+					nCreature = creatureNode;
 				}
 			}
 			NCreature creatureNode2 = base.Creature.GetCreatureNode();
 			Node2D node2D = creatureNode2?.GetSpecialNode<Node2D>("Visuals/SpineBoneNode");
-			if (creatureNode2 != null && node2D != null && vector.HasValue)
+			if (creatureNode2 != null && node2D != null && nCreature != null)
 			{
-				node2D.Position = Vector2.Left * (vector.Value.X - creatureNode2.GlobalPosition.X - 300f);
+				float num = 1500f * creatureNode2.Visuals.Scale.X;
+				node2D.GlobalPosition = new Vector2(nCreature.GlobalPosition.X + num, node2D.GlobalPosition.Y);
 			}
 		}
 		NCombatRoom.Instance?.RadialBlur(VfxPosition.Left);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Game;
@@ -25,13 +26,25 @@ public class RunLobby
 
 	private readonly INetGameService _netService;
 
-	private readonly HashSet<ulong> _connectedPlayerIds = new HashSet<ulong>();
+	/// <summary>
+	/// <see cref="P:MegaCrit.Sts2.Core.Runs.RunState.Players" /> contains all players that have ever been connected to the session, i.e. it may
+	/// contain disconnected players. This set contains only players who are currently connected to the session.
+	/// </summary>
+	public List<RunLobbyPlayer> Players { get; }
 
-	public IReadOnlyCollection<ulong> ConnectedPlayerIds => _connectedPlayerIds;
+	public IEnumerable<ulong> PlayerIds => Players.Select((RunLobbyPlayer p) => p.id);
+
+	/// <summary>
+	/// Set to true if any player in the session was playing with mods.
+	/// This cannot be derived from <see cref="F:MegaCrit.Sts2.Core.Entities.Multiplayer.RunLobbyPlayer.isModded" /> because errors that occur during
+	/// disconnection are emitted after the player has already left, which means they've been removed from
+	/// <see cref="P:MegaCrit.Sts2.Core.Multiplayer.Game.Lobby.RunLobby.Players" />.
+	/// </summary>
+	public bool AnyPlayerHadMods { get; }
 
 	public GameMode GameMode { get; }
 
-	public event Action<ulong>? PlayerRejoined;
+	public event Action<RunLobbyPlayer>? PlayerRejoined;
 
 	public event Action<ulong>? RemotePlayerDisconnected;
 
@@ -44,29 +57,24 @@ public class RunLobby
 	/// <param name="netService">Net service used to send/receive messages.</param>
 	/// <param name="lobbyListener">The lobby listener which receives callbacks from this lobby.</param>
 	/// <param name="playerCollection">Queryable collection of players.</param>
-	/// <param name="connectedPlayerIds">
-	/// The connected player IDs. Note that this may be different than the IDs contained
-	/// in the player collection if we launched a saved game, but not everyone in the save rejoined.
-	/// </param>
-	public RunLobby(GameMode gameMode, INetGameService netService, IRunLobbyListener lobbyListener, IPlayerCollection playerCollection, IEnumerable<ulong> connectedPlayerIds)
+	/// <param name="players">The players in the game.</param>
+	public RunLobby(GameMode gameMode, INetGameService netService, IRunLobbyListener lobbyListener, IPlayerCollection playerCollection, IEnumerable<RunLobbyPlayer> players)
 	{
 		GameMode = gameMode;
 		_netService = netService;
 		_lobbyListener = lobbyListener;
 		_playerCollection = playerCollection;
 		_logger = new Logger("RunLobby", LogType.Network);
+		Players = players.ToList();
+		AnyPlayerHadMods = Players.Any((RunLobbyPlayer p) => p.isModded);
 		_netService.RegisterMessageHandler<ClientLobbyJoinRequestMessage>(HandleClientLobbyJoinRequestMessage);
 		_netService.RegisterMessageHandler<ClientLoadJoinRequestMessage>(HandleClientLoadJoinRequestMessage);
 		_netService.RegisterMessageHandler<ClientRejoinRequestMessage>(HandleClientRejoinRequestMessage);
 		_netService.RegisterMessageHandler<PlayerRejoinedMessage>(HandlePlayerRejoinedMessage);
 		_netService.RegisterMessageHandler<PlayerLeftMessage>(HandlePlayerLeftMessage);
 		_netService.RegisterMessageHandler<RunAbandonedMessage>(HandleRunAbandonedMessage);
-		foreach (ulong connectedPlayerId in connectedPlayerIds)
-		{
-			_connectedPlayerIds.Add(connectedPlayerId);
-		}
 		_netService.Disconnected += OnDisconnected;
-		if (_netService.Type == NetGameType.Host && netService is NetHostGameService netHostGameService)
+		if (_netService.Type == NetGameType.Host && netService is INetHostGameService netHostGameService)
 		{
 			netHostGameService.ClientConnected += OnConnectedToClientAsHost;
 			netHostGameService.ClientDisconnected += OnDisconnectedFromClientAsHost;
@@ -85,7 +93,7 @@ public class RunLobby
 		_netService.UnregisterMessageHandler<PlayerLeftMessage>(HandlePlayerLeftMessage);
 		_netService.UnregisterMessageHandler<RunAbandonedMessage>(HandleRunAbandonedMessage);
 		_netService.Disconnected -= OnDisconnected;
-		if (_netService.Type == NetGameType.Host && _netService is NetHostGameService netHostGameService)
+		if (_netService.Type == NetGameType.Host && _netService is INetHostGameService netHostGameService)
 		{
 			netHostGameService.ClientConnected -= OnConnectedToClientAsHost;
 			netHostGameService.ClientDisconnected -= OnDisconnectedFromClientAsHost;
@@ -108,19 +116,24 @@ public class RunLobby
 		ClientRejoinResponseMessage rejoinMessage = _lobbyListener.GetRejoinMessage();
 		netHostGameService.SendMessage(rejoinMessage, senderId);
 		netHostGameService.SetPeerReadyForBroadcasting(senderId);
+		RunLobbyPlayer runLobbyPlayer = new RunLobbyPlayer
+		{
+			id = senderId,
+			isModded = netHostGameService.GetVersionInfoForPeer(senderId).Value.IsModded()
+		};
+		Players.Add(runLobbyPlayer);
 		PlayerRejoinedMessage message2 = new PlayerRejoinedMessage
 		{
-			playerId = senderId
+			player = runLobbyPlayer
 		};
-		foreach (NetClientData connectedPeer in netHostGameService.ConnectedPeers)
+		foreach (RunLobbyPlayer player in Players)
 		{
-			if (connectedPeer.readyForBroadcasting && connectedPeer.peerId != senderId)
+			if (player.id != _netService.NetId && player.id != runLobbyPlayer.id)
 			{
-				netHostGameService.SendMessage(message2, connectedPeer.peerId);
+				netHostGameService.SendMessage(message2, player.id);
 			}
 		}
-		_connectedPlayerIds.Add(senderId);
-		this.PlayerRejoined?.Invoke(senderId);
+		this.PlayerRejoined?.Invoke(runLobbyPlayer);
 	}
 
 	private void HandleClientLobbyJoinRequestMessage(ClientLobbyJoinRequestMessage _, ulong senderId)
@@ -147,15 +160,15 @@ public class RunLobby
 
 	private void HandlePlayerRejoinedMessage(PlayerRejoinedMessage message, ulong _)
 	{
-		_logger.Debug($"Received PlayerRejoinedMessage for {message.playerId}");
-		_connectedPlayerIds.Add(message.playerId);
-		this.PlayerRejoined?.Invoke(message.playerId);
+		_logger.Debug($"Received PlayerRejoinedMessage for {message.player.id}");
+		Players.Add(message.player);
+		this.PlayerRejoined?.Invoke(message.player);
 	}
 
 	private void HandlePlayerLeftMessage(PlayerLeftMessage message, ulong _)
 	{
 		_logger.Debug($"Received PlayerLeftMessage for {message.playerId}");
-		_connectedPlayerIds.Remove(message.playerId);
+		Players.RemoveAll((RunLobbyPlayer p) => p.id == message.playerId);
 		this.RemotePlayerDisconnected?.Invoke(message.playerId);
 	}
 
@@ -182,9 +195,10 @@ public class RunLobby
 	private void OnConnectedToClientAsHost(ulong playerId)
 	{
 		_logger.Info($"Player {playerId} connected to host.");
-		InitialGameInfoMessage message = InitialGameInfoMessage.Basic();
-		message.sessionState = RunSessionState.Running;
-		message.gameMode = GameMode;
+		InitialGameInfoMessage message = new InitialGameInfoMessage
+		{
+			sessionState = RunSessionState.Running
+		};
 		if (_playerCollection.GetPlayer(playerId) == null)
 		{
 			_logger.Warn($"Client {playerId} connected but they are not in the run!");
@@ -201,15 +215,16 @@ public class RunLobby
 
 	private void OnDisconnectedFromClientAsHost(ulong playerId, NetErrorInfo info)
 	{
-		_logger.Info($"Player {playerId} disconnected from host. Is in connected players: {_connectedPlayerIds.Contains(playerId)}. Reason: {info.GetReason()}");
-		if (_connectedPlayerIds.Contains(playerId))
+		int num = Players.FindIndex((RunLobbyPlayer p) => p.id == playerId);
+		_logger.Info($"Player {playerId} disconnected from host. Is in connected players: {num >= 0}. Reason: {info.GetReason()}");
+		if (num >= 0)
 		{
 			PlayerLeftMessage message = new PlayerLeftMessage
 			{
 				playerId = playerId
 			};
 			_netService.SendMessage(message);
-			_connectedPlayerIds.Remove(playerId);
+			Players.RemoveAt(num);
 			this.RemotePlayerDisconnected?.Invoke(playerId);
 		}
 	}
@@ -217,7 +232,7 @@ public class RunLobby
 	private void OnDisconnected(NetErrorInfo info)
 	{
 		_logger.Info($"Disconnected. Reason: {info.GetReason()}");
-		_connectedPlayerIds.Clear();
+		Players.Clear();
 		_lobbyListener.LocalPlayerDisconnected(info);
 		this.LocalPlayerDisconnected?.Invoke();
 	}

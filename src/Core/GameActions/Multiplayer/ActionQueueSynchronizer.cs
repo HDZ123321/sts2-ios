@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Messages.Game;
@@ -33,6 +34,8 @@ public class ActionQueueSynchronizer
 	/// the player's play phase.
 	/// </summary>
 	private readonly List<GameAction> _requestedActionsWaitingForPlayerTurn = new List<GameAction>();
+
+	private readonly List<GameAction> _nonCombatActionsWaitingForCombatEnd = new List<GameAction>();
 
 	/// <summary>
 	/// Next ID assigned to hook actions. Exposed only so the combat replay writer has access to it.
@@ -84,9 +87,17 @@ public class ActionQueueSynchronizer
 		}
 		ActionSynchronizerCombatState combatState2 = CombatState;
 		CombatState = combatState;
-		if (combatState2 == ActionSynchronizerCombatState.NotInCombat)
+		bool flag = (uint)combatState2 <= 1u;
+		bool flag2 = flag;
+		bool flag3 = flag2;
+		if (flag3)
 		{
-			_logger.Debug($"Combat state was previously {combatState2}. Signaling queues that combat has begun");
+			bool flag4 = (uint)(combatState - 2) <= 2u;
+			flag3 = flag4;
+		}
+		if (flag3)
+		{
+			_logger.Debug($"Combat becomes {combatState} from {combatState2}. Signaling queues that combat has begun");
 			_actionQueueSet.CombatStarted();
 		}
 		switch (combatState)
@@ -100,12 +111,32 @@ public class ActionQueueSynchronizer
 				item.Cancel();
 			}
 			_requestedActionsWaitingForPlayerTurn.Clear();
+			_logger.Debug($"{(_actionQueueSet.WasReset ? "Cancelling" : "Enqueueing")} {_nonCombatActionsWaitingForCombatEnd.Count} NonCombat actions that arrived during combat");
+			foreach (GameAction item2 in _nonCombatActionsWaitingForCombatEnd)
+			{
+				if (_actionQueueSet.WasReset)
+				{
+					item2.Cancel();
+				}
+				else
+				{
+					_actionQueueSet.EnqueueWithoutSynchronizing(item2);
+				}
+			}
+			_nonCombatActionsWaitingForCombatEnd.Clear();
+			break;
+		case ActionSynchronizerCombatState.PreCombatSetup:
+			if (combatState2 == ActionSynchronizerCombatState.NotInCombat)
+			{
+				_logger.Debug($"Combat state becomes {combatState}. Allowing non-combat actions to execute, but not combat actions.");
+				_actionQueueSet.SetUpForCombat();
+			}
 			break;
 		case ActionSynchronizerCombatState.PlayPhase:
 			_logger.Debug($"Combat state becomes {combatState}. Requesting {_requestedActionsWaitingForPlayerTurn.Count} actions and unpausing action queues");
-			foreach (GameAction item2 in _requestedActionsWaitingForPlayerTurn)
+			foreach (GameAction item3 in _requestedActionsWaitingForPlayerTurn)
 			{
-				RequestEnqueue(item2);
+				RequestEnqueue(item3);
 			}
 			_requestedActionsWaitingForPlayerTurn.Clear();
 			_actionQueueSet.UnpauseAllPlayerQueues();
@@ -237,7 +268,26 @@ public class ActionQueueSynchronizer
 			_netService.SendMessage(message);
 		}
 		_logger.Debug($"Enqueueing action {action} from owner {actionOwnerId}");
-		_actionQueueSet.EnqueueWithoutSynchronizing(action);
+		EnqueueOrHoldUntilCombatEnd(action);
+	}
+
+	/// <summary>
+	/// Enqueues the action, unless it is a NonCombat action and combat is in progress. Such an action cannot execute
+	/// until combat ends, so it is held here until then. See <see cref="F:MegaCrit.Sts2.Core.GameActions.Multiplayer.ActionQueueSynchronizer._nonCombatActionsWaitingForCombatEnd" />.
+	/// </summary>
+	private void EnqueueOrHoldUntilCombatEnd(GameAction action)
+	{
+		ActionSynchronizerCombatState combatState = CombatState;
+		bool flag = (uint)(combatState - 2) <= 2u;
+		if (flag && action.ActionType == GameActionType.NonCombat)
+		{
+			_logger.Debug($"NonCombat action {action} arrived during combat. Holding it until combat ends");
+			_nonCombatActionsWaitingForCombatEnd.Add(action);
+		}
+		else
+		{
+			_actionQueueSet.EnqueueWithoutSynchronizing(action);
+		}
 	}
 
 	private void EnqueueHookAction(GenericHookGameAction gameAction)
@@ -255,7 +305,7 @@ public class ActionQueueSynchronizer
 			_netService.SendMessage(message);
 		}
 		_logger.Debug($"Enqueueing HOOK action with id {gameAction.HookId}");
-		_actionQueueSet.EnqueueWithoutSynchronizing(gameAction);
+		EnqueueOrHoldUntilCombatEnd(gameAction);
 	}
 
 	/// <summary>
@@ -367,10 +417,10 @@ public class ActionQueueSynchronizer
 		if (action == null)
 		{
 			action = new GenericHookGameAction(id, ownerId, gameActionType);
-			action.ExecutionStartedTask.ContinueWith(delegate
+			TaskHelper.RunSafely(action.ExecutionStartedTask.ContinueWith(delegate
 			{
 				HookActionStarted(action);
-			});
+			}));
 			_hookActions.Add(action);
 		}
 		else

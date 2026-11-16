@@ -23,7 +23,7 @@ public sealed class WarHammer : RelicModel
 			return Task.CompletedTask;
 		}
 		Flash();
-		IEnumerable<CardModel> enumerable = PileType.Deck.GetPile(base.Owner).Cards.Where((CardModel c) => c.IsUpgradable).ToList().StableShuffle(base.Owner.RunState.Rng.Niche)
+		IEnumerable<CardModel> enumerable = PileType.Deck.GetPile(base.Owner).Cards.Where((CardModel c) => c.IsUpgradable).ToList().StableShuffle(base.Owner.PlayerRng.NonCombatGeneration)
 			.Take(base.DynamicVars.Cards.IntValue);
 		foreach (CardModel item in enumerable)
 		{

@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-using MegaCrit.Sts2.Core.Debug;
+using Godot;
 using MegaCrit.Sts2.Core.Achievements;
 using MegaCrit.Sts2.Core.Combat.History;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
@@ -31,45 +31,22 @@ using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Settings;
+using Sentry;
 
 namespace MegaCrit.Sts2.Core.Combat;
 
 public class CombatManager
 {
-	private sealed record PendingLossState(CombatState State, CombatRoom Room);
-
 	public const int baseHandDrawCount = 5;
 
-	private readonly Lock _playerReadyLock = new Lock();
-
-	private readonly HashSet<Player> _playersReadyToEndTurn = new HashSet<Player>();
-
-	private readonly HashSet<Player> _playersReadyToBeginEnemyTurn = new HashSet<Player>();
-
-	private readonly List<Player> _playersTakingExtraTurn = new List<Player>();
-
 	/// <summary>
-	/// True while <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartTurn(System.Func{System.Threading.Tasks.Task})" /> is setting up the player turn but has not yet moved to the Play phase.
-	/// Guarded by <see cref="F:MegaCrit.Sts2.Core.Combat.CombatManager._playerReadyLock" />.
+	/// The current combat's turn state: every piece of combat-scoped state (token, ready sets, signals, phase flags)
+	/// lives on it, created in <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.SetUpCombat(MegaCrit.Sts2.Core.Combat.CombatState)" /> and dropped wholesale in <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" />. The turn loop
+	/// threads its own turn state through the turn flow; everything else (deliveries, public getters) reads this
+	/// field for the current combat.
 	/// </summary>
-	private bool _inPlayerTurnSetup;
-
-	/// <summary>
-	/// If a card ends the turn while <see cref="F:MegaCrit.Sts2.Core.Combat.CombatManager._inPlayerTurnSetup" /> is true (e.g. Void Form auto-played by
-	/// Whispering Earring during the AutoPrePlay phase), the end-of-turn transition is stored in this field and run
-	/// only once <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartTurn(System.Func{System.Threading.Tasks.Task})" /> has caused us to move to the Play phase, so it never runs concurrently with
-	/// the end of StartTurn (this would be a race condition, and could leave the turn-transition sequence stuck
-	/// mid-way, never advancing to the next turn).
-	/// A normal end-turn happens after the Play phase has started, so it is never deferred.
-	/// Guarded by <see cref="F:MegaCrit.Sts2.Core.Combat.CombatManager._playerReadyLock" />.
-	/// </summary>
-	private Func<Task>? _deferredEndTurnTransition;
-
-	private CombatState? _state;
-
-	private CancellationTokenSource? _combatCts;
-
-	private PendingLossState? _pendingLoss;
+	private CombatTurnState? _turnState;
 
 	/// <summary>
 	/// Set to true when the player should not be able to interact with their hand or any potions.
@@ -78,9 +55,40 @@ public class CombatManager
 
 	private readonly Dictionary<Player, int> _cardOrPotionEffectDepth = new Dictionary<Player, int>();
 
-	public static CombatManager Instance { get; } = new CombatManager();
+	/// <summary>
+	/// The most recently launched turn loop task, kept across <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" /> so the next combat's turn loop can
+	/// wait for it to finish dying. This is deliberately manager-scoped: it is the one piece of state whose job
+	/// is to bridge two combats.
+	/// </summary>
+	private Task? _turnLoopTask;
 
-	private CancellationToken CombatCt => _combatCts?.Token ?? default(CancellationToken);
+	/// <summary>
+	/// Installed by <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.DebugOnlyWhenNextTurnLoopWaitsForPrevious" />, completed when a turn loop suspends inside
+	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.WaitForPreviousTurnLoopToFinish(System.Threading.Tasks.Task,MegaCrit.Sts2.Core.Combat.CombatTurnState)" />.
+	/// </summary>
+	private TaskCompletionSource? _turnLoopWaitingForPreviousSource;
+
+	/// <summary>
+	/// Watchdog for the previous turn loop wait in <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.RunTurnLoopAfter(System.Threading.Tasks.Task)" />. Generous: it only elapses when the
+	/// previous turn loop is genuinely stuck on a suspension that teardown could not cancel, in which case we log
+	/// loudly and proceed, degrading to the unsequenced behavior instead of introducing a new hang class.
+	/// </summary>
+	private static readonly TimeSpan _previousTurnLoopTimeout = TimeSpan.FromSeconds(10L);
+
+	/// <summary>
+	/// Whether the previous turn loop watchdog has already reported to Sentry this session. The watchdog can fire on
+	/// every combat start, so it reports once and lets the log carry the rest.
+	/// </summary>
+	private static bool _turnLoopWaitTimeoutReported;
+
+	/// <summary>
+	/// Whether the stale player-turn-end transition in <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.AfterAllPlayersReadyToEndTurn(MegaCrit.Sts2.Core.Combat.CombatTurnState,MegaCrit.Sts2.Core.Combat.EndTurnSignal)" /> has already
+	/// reported to Sentry this session. Reported once for the same reason as
+	/// <see cref="F:MegaCrit.Sts2.Core.Combat.CombatManager._turnLoopWaitTimeoutReported" />.
+	/// </summary>
+	private static bool _staleTurnEndReported;
+
+	public static CombatManager Instance { get; } = new CombatManager();
 
 	/// <summary>
 	/// WARNING: ONLY USE THIS IN TESTS!
@@ -101,7 +109,7 @@ public class CombatManager
 			if (_playerActionsDisabled != value)
 			{
 				_playerActionsDisabled = value;
-				this.PlayerActionsDisabledChanged?.Invoke(_state);
+				this.PlayerActionsDisabledChanged?.Invoke(_turnState.State);
 			}
 		}
 	}
@@ -116,9 +124,14 @@ public class CombatManager
 	{
 		get
 		{
-			using (_playerReadyLock.EnterScope())
+			CombatTurnState turnState = _turnState;
+			if (turnState == null)
 			{
-				return _playersTakingExtraTurn.ToList();
+				return Array.Empty<Player>();
+			}
+			using (turnState.ReadyLock.EnterScope())
+			{
+				return turnState.PlayersTakingExtraTurn.ToList();
 			}
 		}
 	}
@@ -127,17 +140,17 @@ public class CombatManager
 	/// True when the enemy turn has started (TurnStarted has fired for the enemy side).
 	/// Set right before TurnStarted fires for enemy turns, cleared when switching to player turn.
 	/// </summary>
-	public bool IsEnemyTurnStarted { get; private set; }
+	public bool IsEnemyTurnStarted => _turnState?.IsEnemyTurnStarted ?? false;
 
 	/// <summary>
 	/// Set to true in the time between when all players are ready to begin the enemy turn and when the enemy turn begins.
 	/// </summary>
-	public bool EndingPlayerTurnPhaseTwo { get; private set; }
+	public bool EndingPlayerTurnPhaseTwo => _turnState?.EndingPlayerTurnPhaseTwo ?? false;
 
 	/// <summary>
 	/// Set to true in the time during phase one of the end of the player's turn.
 	/// </summary>
-	public bool EndingPlayerTurnPhaseOne { get; private set; }
+	public bool EndingPlayerTurnPhaseOne => _turnState?.EndingPlayerTurnPhaseOne ?? false;
 
 	public CombatStateTracker StateTracker { get; }
 
@@ -151,23 +164,32 @@ public class CombatManager
 	/// * The combat is ending (the last monster has been killed).
 	/// * We're in a non-combat room.
 	/// </summary>
-	public bool IsInProgress { get; private set; }
+	public bool IsInProgress => _turnState?.IsInProgress ?? false;
+
+	/// <summary>
+	/// The current combat's <see cref="T:MegaCrit.Sts2.Core.Combat.CombatId" />, or null outside combat. Capture this at the start of work that
+	/// can outlive its combat (a card or potion effect, a kill) and pass it back to the entry point that acts on
+	/// combat state, so that entry point can tell whether the work still belongs to the combat that is running.
+	/// Reading <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> there instead only answers "is some combat running", which a continuation
+	/// resuming into the next combat passes.
+	/// </summary>
+	public CombatId? CurrentCombatId => _turnState?.Id;
 
 	/// <summary>
 	/// Is a new combat currently being set up?
 	/// True from the start of <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.SetUpCombat(MegaCrit.Sts2.Core.Combat.CombatState)" /> until <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> flips true in
-	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartCombatInternal" />. During this window <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> is still false, so it lets
+	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartCombatInternal(MegaCrit.Sts2.Core.Combat.CombatTurnState)" />. During this window <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> is still false, so it lets
 	/// callers distinguish "combat is starting" (where combat hooks that run during setup, like the initial deck
 	/// shuffle, must still fire) from "combat is over or ending".
 	/// </summary>
-	public bool IsStarting { get; private set; }
+	public bool IsStarting => _turnState?.IsStarting ?? false;
 
 	/// <summary>
 	/// Is combat about to end due to player death?
 	/// True when LoseCombat() has been called but the loss hasn't been processed yet.
 	/// This allows effects to bail out early while still letting the current action complete.
 	/// </summary>
-	public bool IsAboutToLose => _pendingLoss != null;
+	public bool IsAboutToLose => _turnState?.PendingLoss != null;
 
 	/// <summary>
 	/// Is the combat in the process of ending (but still in progress)?
@@ -182,23 +204,12 @@ public class CombatManager
 	{
 		get
 		{
-			if (!IsInProgress)
+			CombatTurnState turnState = _turnState;
+			if (turnState != null)
 			{
-				return false;
+				return IsCombatEnding(turnState);
 			}
-			if (_pendingLoss != null)
-			{
-				return true;
-			}
-			if (_state != null && _state.Enemies.Any((Creature e) => e != null && e.IsAlive && e.IsPrimaryEnemy))
-			{
-				return false;
-			}
-			if (Hook.ShouldStopCombatFromEnding(_state))
-			{
-				return false;
-			}
-			return true;
+			return false;
 		}
 	}
 
@@ -221,10 +232,49 @@ public class CombatManager
 	}
 
 	/// <summary>
+	/// Should an effect be skipped because its combat is no longer accepting them? Combat setup is exempt: a combat
+	/// that is starting has not set <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> yet, so <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsOverOrEnding" /> is true while
+	/// effects that run during setup must still apply. The hook dispatch in <c>Hook.IterateCombatHookListeners</c>
+	/// carries the full rationale.
+	/// </summary>
+	public bool ShouldSkipCombatEffect
+	{
+		get
+		{
+			if (IsOverOrEnding)
+			{
+				return !IsStarting;
+			}
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// WARNING: ONLY USE THIS IN TESTS!
+	/// The task that currently owns the turn loop. Exposed so a test can hold the outgoing turn loop across a
+	/// teardown and read whether it is still alive, instead of inferring that from log output.
+	/// </summary>
+	internal Task? DebugOnlyCurrentTurnLoopTask => _turnLoopTask;
+
+	/// <summary>
+	/// Replaces the wait on the tween that moves an end-of-turn card to its result pile, so that a test can set
+	/// how that tween ends. A test cannot reach the real wait, because
+	/// <c>CardPileCmd.GetTweenForCardsChangingPiles</c> makes no tween in test mode. The wait never runs, so a test
+	/// cannot cancel the turn state while <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.TweenTurnEndCardToResultPile(MegaCrit.Sts2.Core.Combat.CombatTurnState,System.Threading.Tasks.Task{System.Nullable{MegaCrit.Sts2.Core.Entities.Cards.CardPileAddResult}})" /> waits. Returns Finished when the
+	/// tween finished, and when there was nothing to wait for.
+	/// </summary>
+	internal Func<CombatTurnState, Task<TweenOutcome>>? TurnEndCardTweenWaitForTest { get; set; }
+
+	/// <summary>
 	/// Fired after combat is set up.
 	/// Note that this happens a little bit before combat actually begins.
 	/// </summary>
 	public event Action<CombatState>? CombatSetUp;
+
+	/// <summary>
+	/// Fired whenever a new combat begins, after IsInProgress is set to true.
+	/// </summary>
+	public event Action<CombatState>? CombatBegan;
 
 	/// <summary>
 	/// Fired when combat ends.
@@ -282,25 +332,59 @@ public class CombatManager
 	/// <returns></returns>
 	public CombatState? DebugOnlyGetState()
 	{
-		return _state;
+		return _turnState?.State;
 	}
 
 	/// <summary>
-	/// Sets <see cref="P:MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState.Phase" /> to the same value for all players.
+	/// Sets <see cref="P:MegaCrit.Sts2.Core.Entities.Players.PlayerCombatState.Phase" /> to the same value for all players of the given combat.
 	/// </summary>
-	private void SetPhaseForAllPlayers(PlayerTurnPhase phase)
+	private static void SetPhaseForAllPlayers(CombatState state, PlayerTurnPhase phase)
 	{
-		if (_state == null)
-		{
-			return;
-		}
-		foreach (Player player in _state.Players)
+		foreach (Player player in state.Players)
 		{
 			if (player.PlayerCombatState != null)
 			{
 				player.PlayerCombatState.Phase = phase;
 			}
 		}
+	}
+
+	/// <summary>
+	/// The live turn state, if it is in progress and owns <paramref name="combatId" />. Null when there is no combat,
+	/// when that combat is not in progress, or when <paramref name="combatId" /> belongs to an earlier combat, which is
+	/// the case that matters: work captured in combat A that resumes after combat B has started.
+	///
+	/// Deliberately does not also test <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.IsCombatEnding(MegaCrit.Sts2.Core.Combat.CombatTurnState)" />. The callers guarded on
+	/// <see cref="P:MegaCrit.Sts2.Core.Combat.CombatManager.IsInProgress" /> before they took a <see cref="T:MegaCrit.Sts2.Core.Combat.CombatId" />, so adding the ending check here would be
+	/// a behavior change smuggled in as an id change; and the ending window is already covered where it does work,
+	/// since a hand check's only effect is a hook and <c>Hook.IterateCombatHookListeners</c> drops combat hook
+	/// dispatch once combat is ending.
+	/// </summary>
+	private CombatTurnState? LiveTurnStateFor(CombatId? combatId)
+	{
+		CombatTurnState turnState = _turnState;
+		if (turnState == null || !turnState.IsInProgress)
+		{
+			return null;
+		}
+		if (!(combatId == turnState.Id))
+		{
+			return null;
+		}
+		return turnState;
+	}
+
+	/// <summary>
+	/// Is <paramref name="combatId" /> the combat that is running right now? Use this from work that can be suspended
+	/// past the end of its own combat, to drop the work rather than apply it to the next combat.
+	///
+	/// Testing the id alone is not enough. A combat that has ended keeps its <see cref="T:MegaCrit.Sts2.Core.Combat.CombatId" /> until
+	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" /> runs, because <c>EndCombatInternal</c> only clears
+	/// <see cref="P:MegaCrit.Sts2.Core.Combat.CombatTurnState.IsInProgress" />, so in that window the id still matches. This checks both.
+	/// </summary>
+	public bool IsCurrentLiveCombat(CombatId? combatId)
+	{
+		return LiveTurnStateFor(combatId) != null;
 	}
 
 	/// <summary>
@@ -316,12 +400,19 @@ public class CombatManager
 	/// <summary>
 	/// Marks the start of a <see cref="M:MegaCrit.Sts2.Core.Models.CardModel.OnPlay(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" /> or <see cref="M:MegaCrit.Sts2.Core.Models.PotionModel.OnUse(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature)" /> effect body for
 	/// <paramref name="player" />, incrementing their effect-nesting depth. Must be paired with a
-	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.EndCardOrPotionEffect(MegaCrit.Sts2.Core.Entities.Players.Player)" /> in a finally block so the depth stays balanced even if the effect throws or
+	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.EndCardOrPotionEffect(System.Nullable{MegaCrit.Sts2.Core.Combat.CombatId},MegaCrit.Sts2.Core.Entities.Players.Player)" /> in a finally block so the depth stays balanced even if the effect throws or
 	/// the player dies mid-play.
+	///
+	/// Returns the <see cref="T:MegaCrit.Sts2.Core.Combat.CombatId" /> the effect is starting in. Hold it for the rest of the play or use, and pass
+	/// it to the combat entry points called afterwards: an effect can be suspended past the end of its own combat, and
+	/// those entry points need to know which combat the work belongs to rather than which one is running now. It is
+	/// returned from here, rather than read at the point of use, so the capture cannot drift later than the effect's
+	/// actual start.
 	/// </summary>
-	public void BeginCardOrPotionEffect(Player player)
+	public CombatId? BeginCardOrPotionEffect(Player player)
 	{
 		_cardOrPotionEffectDepth[player] = _cardOrPotionEffectDepth.GetValueOrDefault(player) + 1;
+		return CurrentCombatId;
 	}
 
 	/// <summary>
@@ -329,17 +420,46 @@ public class CombatManager
 	/// <paramref name="player" />, decrementing their effect-nesting depth (and removing the entry once it reaches
 	/// zero). Pairs with <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.BeginCardOrPotionEffect(MegaCrit.Sts2.Core.Entities.Players.Player)" />; call it from a finally block.
 	/// </summary>
-	public void EndCardOrPotionEffect(Player player)
+	public async Task EndCardOrPotionEffect(CombatId? combatId, Player player)
 	{
 		int num = _cardOrPotionEffectDepth.GetValueOrDefault(player) - 1;
 		if (num <= 0)
 		{
 			_cardOrPotionEffectDepth.Remove(player);
+			if (player.Creature.IsDead)
+			{
+				await RemoveDeadPlayerCardsFromCombat(combatId, player);
+			}
 		}
 		else
 		{
 			_cardOrPotionEffectDepth[player] = num;
 		}
+	}
+
+	/// <summary>
+	/// Turn-state-relative variant for the turn loop: evaluated against the turn loop's own combat, so a stale turn state
+	/// resuming here cannot end (or fail to end) the current combat by mistake.
+	/// </summary>
+	private bool IsCombatEnding(CombatTurnState turnState)
+	{
+		if (!turnState.IsInProgress)
+		{
+			return false;
+		}
+		if (turnState.PendingLoss != null)
+		{
+			return true;
+		}
+		if (turnState.State.Enemies.Any((Creature e) => e != null && e.IsAlive && e.IsPrimaryEnemy))
+		{
+			return false;
+		}
+		if (Hook.ShouldStopCombatFromEnding(turnState.State))
+		{
+			return false;
+		}
+		return true;
 	}
 
 	private CombatManager()
@@ -350,68 +470,161 @@ public class CombatManager
 
 	public void SetUpCombat(CombatState state)
 	{
-		if (_state != null)
+		if (_turnState != null)
 		{
 			throw new InvalidOperationException("Make sure to reset the combat before setting up a new one.");
 		}
-		IsStarting = true;
-		_state = state;
-		_state.MultiplayerScalingModel?.OnCombatEntered(_state);
-		StateTracker.SetState(state);
-		using (_playerReadyLock.EnterScope())
+		CombatTurnState combatTurnState = (_turnState = new CombatTurnState(state));
+		Log.Debug($"Combat #{combatTurnState.Id} created for encounter {state.Encounter?.Id.Entry}");
+		foreach (RunModel runModel in state.RunModels)
 		{
-			_playersTakingExtraTurn.Clear();
+			runModel.OnCombatEntered(state);
 		}
+		StateTracker.SetState(state);
 		foreach (Player player in state.Players)
 		{
 			player.ResetCombatState();
 		}
-		Perf.Phase("combat.populate");
 		foreach (Player player2 in state.Players)
 		{
 			player2.PopulateCombatState(player2.RunState.Rng.Shuffle, state);
 		}
-		Perf.Phase("combat.register-creatures");
 		NetCombatCardDb.Instance.StartCombat(state.Players);
 		foreach (Creature creature in state.Creatures)
 		{
 			AddCreature(creature);
 		}
-		Perf.Phase("combat.combat-setup-hooks");
 		this.CombatSetUp?.Invoke(state);
 	}
 
 	public void AfterCombatRoomLoaded()
 	{
-		_combatCts?.Cancel();
-		_combatCts = new CancellationTokenSource();
-		TaskHelper.RunSafely(StartCombatInternal());
+		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.PreCombatSetup);
+		Task turnLoopTask = _turnLoopTask;
+		TaskHelper.RunSafely(_turnLoopTask = RunTurnLoopAfter(turnLoopTask));
 	}
 
-	public async Task StartCombatInternal()
+	/// <summary>
+	/// WARNING: ONLY USE THIS IN TESTS!
+	/// Returns a task that completes the next time a combat turn loop suspends inside
+	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.WaitForPreviousTurnLoopToFinish(System.Threading.Tasks.Task,MegaCrit.Sts2.Core.Combat.CombatTurnState)" />, for tests that need to catch a turn loop held at that wait.
+	/// When that happens is not predictable from outside: a restart tears the old combat down synchronously, then
+	/// loads a room before the next turn loop launches, so a test has nothing else to wait on.
+	/// Call this before starting the next combat, so the signal is in place before its turn loop launches. Each call
+	/// installs a fresh signal, so an earlier combat's turn loop cannot complete it.
+	/// A turn loop that skips the wait never suspends, so the task never completes. That is what a missing wait
+	/// looks like, so bound the wait and report the timeout as that failure.
+	/// </summary>
+	internal Task DebugOnlyWhenNextTurnLoopWaitsForPrevious()
 	{
+		return (_turnLoopWaitingForPreviousSource = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+	}
+
+	/// <summary>
+	/// Runs this combat's turn loop (<see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartCombatInternal(MegaCrit.Sts2.Core.Combat.CombatTurnState)" />) once <paramref name="previousTurnLoopTask" />,
+	/// the previous combat's turn loop, has finished dying, and reports how it died in turn. Cancellation death
+	/// is the normal teardown path and logs at debug; anything else while the combat is still running means the
+	/// combat has lost its only turn loop and is stuck until the room is restarted, which must be loudly attributable.
+	/// </summary>
+	private async Task RunTurnLoopAfter(Task? previousTurnLoopTask)
+	{
+		CombatTurnState turnState = _turnState;
+		try
+		{
+			await WaitForPreviousTurnLoopToFinish(previousTurnLoopTask, turnState);
+			if (turnState != null)
+			{
+				Log.Debug($"Combat #{turnState.Id} turn loop started");
+				await StartCombatInternal(turnState);
+			}
+		}
+		catch (OperationCanceledException) when (turnState == null || !turnState.IsLive)
+		{
+			Log.Debug($"Combat #{turnState?.Id} turn loop died of cancellation (combat torn down)");
+			throw;
+		}
+		catch (Exception ex2)
+		{
+			Exception e = ex2;
+			if (turnState != null && turnState.IsLive && _turnState == turnState)
+			{
+				Log.Error($"Combat #{turnState.Id} turn loop died while its combat is in progress; the combat is stuck until the room is restarted: {e}");
+				SentryService.CaptureException(new StuckCombatException("Combat turn loop died while its combat was in progress", e), delegate(Scope scope)
+				{
+					scope.SetFingerprint("StuckCombat", e.GetType().Name);
+					scope.SetExtra("combatId", turnState.Id.Value);
+				});
+			}
+			throw;
+		}
+	}
+
+	/// <summary>
+	/// Sequences this combat's start against the previous combat's turn loop as it finishes. The previous turn loop was
+	/// cancelled when its combat was torn down and usually died synchronously inside that cancel, but a turn loop
+	/// resumed by an external completion (a frame poll, a late-completing action, a test hook) can outlive teardown
+	/// briefly; starting the next combat under it would let a stale turn loop continuation interleave with the new
+	/// combat's setup.
+	/// </summary>
+	private async Task WaitForPreviousTurnLoopToFinish(Task? previousTurnLoopTask, CombatTurnState? turnState)
+	{
+		if (previousTurnLoopTask == null || previousTurnLoopTask.IsCompleted)
+		{
+			return;
+		}
+		Log.Debug($"Combat #{turnState?.Id} turn loop waiting for the previous combat's turn loop to die");
+		_turnLoopWaitingForPreviousSource?.TrySetResult();
+		try
+		{
+			await previousTurnLoopTask.WaitAsync(_previousTurnLoopTimeout);
+		}
+		catch (TimeoutException)
+		{
+			string text = $"The previous combat's turn loop is still running {_previousTurnLoopTimeout.TotalSeconds:0}s after its combat was torn down; starting combat #{turnState?.Id} without waiting for it.";
+			Log.Error(text);
+			if (!_turnLoopWaitTimeoutReported)
+			{
+				_turnLoopWaitTimeoutReported = true;
+				SentryService.CaptureMessage("Combat turn loop wait timed out; started a combat without waiting for the previous turn loop", SentryLevel.Error, delegate(Scope scope)
+				{
+					scope.SetExtra("combatId", turnState?.Id.Value ?? (-1));
+				});
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	/// <summary>
+	/// The turn loop body. Turn-state-threaded like the rest of the turn loop call graph: the turn state is the one
+	/// captured when the turn loop was created, never re-read from <see cref="F:MegaCrit.Sts2.Core.Combat.CombatManager._turnState" />. A turn loop that was
+	/// queued behind a slow predecessor (see <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.WaitForPreviousTurnLoopToFinish(System.Threading.Tasks.Task,MegaCrit.Sts2.Core.Combat.CombatTurnState)" />) can start after its
+	/// combat was already torn down and replaced; reading the live field here would point that stale turn loop at the
+	/// current combat and drive it alongside its real turn loop.
+	/// </summary>
+	private async Task StartCombatInternal(CombatTurnState turnState)
+	{
+		turnState.Ct.ThrowIfCancellationRequested();
+		RunManager.Instance.ActionExecutor.Unpause();
 		await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
-		if (_state.Encounter.HasBgm)
-		{
-			Perf.Phase("combat.bgm");
-			NRunMusicController.Instance?.PlayCustomMusic(_state.Encounter.CustomBgm);
-		}
-		Perf.Phase("combat.after-creature-added");
-		foreach (Creature creature in _state.Creatures)
-		{
-			// The creature's entrance is awaited one at a time, so this frame lands after the room
-			// is already on screen - it is the part of "combat started" that shows up as a hitch a
-			// beat later than the room swap.
-			Perf.Phase("combat.creature-added");
-			await AfterCreatureAdded(creature);
-			CombatCt.ThrowIfCancellationRequested();
-		}
+		turnState.Ct.ThrowIfCancellationRequested();
 		RunManager.Instance.ActionExecutor.Pause();
+		if (turnState.State.Encounter.HasBgm)
+		{
+			NRunMusicController.Instance?.PlayCustomMusic(turnState.State.Encounter.CustomBgm);
+		}
+		foreach (Creature creature in turnState.State.Creatures)
+		{
+			await AfterCreatureAdded(creature, turnState.State);
+			turnState.Ct.ThrowIfCancellationRequested();
+		}
 		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.NotPlayPhase);
-		IsInProgress = true;
-		IsStarting = false;
-		await Hook.BeforeCombatStart(_state.RunState, _state);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.IsInProgress = true;
+		turnState.IsStarting = false;
+		await Hook.BeforeCombatStart(turnState.State.RunState, turnState.State);
+		turnState.Ct.ThrowIfCancellationRequested();
+		this.CombatBegan?.Invoke(turnState.State);
 		NRunMusicController.Instance?.UpdateTrack();
 		NCombatRulesFtue ftue = null;
 		if (SaveManager.Instance.SeenFtue("combat_rules_ftue"))
@@ -424,61 +637,121 @@ public class CombatManager
 			NModalContainer.Instance?.Add(ftue, showBackstop: false);
 		}
 		await Cmd.CustomScaledWait(0.5f, 1f);
-		CombatCt.ThrowIfCancellationRequested();
-		await StartTurn();
+		turnState.Ct.ThrowIfCancellationRequested();
+		await StartTurn(turnState);
 		ftue?.Start();
-	}
-
-	private async Task StartTurn(Func<Task>? actionDuringEnemyTurn = null)
-	{
-		if (!IsInProgress)
+		Func<Task> actionDuringEnemyTurn = await AwaitTurnEndAndSwitchSides(turnState);
+		while (turnState.IsLive)
 		{
-			return;
-		}
-		CombatCt.ThrowIfCancellationRequested();
-		SetPhaseForAllPlayers(PlayerTurnPhase.None);
-		bool isExtraPlayerTurn;
-		List<Creature> creaturesStartingTurn;
-		List<Player> playersStartingTurn;
-		using (_playerReadyLock.EnterScope())
-		{
-			isExtraPlayerTurn = _playersTakingExtraTurn.Count > 0;
-			CombatState? state = _state;
-			if (state != null && state.CurrentSide == CombatSide.Player && isExtraPlayerTurn)
+			if (turnState.State.CurrentSide == CombatSide.Player)
 			{
-				creaturesStartingTurn = _playersTakingExtraTurn.Select((Player p) => p.Creature).ToList();
-				playersStartingTurn = _playersTakingExtraTurn.ToList();
+				await StartTurn(turnState);
+				actionDuringEnemyTurn = await AwaitTurnEndAndSwitchSides(turnState);
 			}
 			else
 			{
-				creaturesStartingTurn = _state?.CreaturesOnCurrentSide.ToList() ?? new List<Creature>();
-				CombatState? state2 = _state;
-				playersStartingTurn = ((state2 == null || state2.CurrentSide != CombatSide.Player) ? new List<Player>() : (_state?.Players.ToList() ?? new List<Player>()));
+				await StartTurn(turnState, actionDuringEnemyTurn);
+				actionDuringEnemyTurn = null;
+			}
+		}
+	}
+
+	/// <summary>
+	/// The player-turn half of the turn loop, called by the turn loop with the player turn set up (or combat
+	/// over/torn down, which the guards absorb): suspends awaiting the all-players-ready-to-end-turn signal, runs
+	/// end-turn phase one, suspends awaiting the all-players-ready-to-begin-enemy-turn signal, then runs phase two,
+	/// which switches sides. Returns the optional test hook carried by the local ready action, for the turn loop to
+	/// run during the enemy turn.
+	/// </summary>
+	private async Task<Func<Task>?> AwaitTurnEndAndSwitchSides(CombatTurnState turnState)
+	{
+		if (!turnState.IsInProgress)
+		{
+			return null;
+		}
+		if (turnState.State.CurrentSide != CombatSide.Player)
+		{
+			return null;
+		}
+		TaskCompletionSource<EndTurnSignal> endTurnSignalSource;
+		TaskCompletionSource<Func<Task>?> beginEnemyTurnSignalSource;
+		using (turnState.ReadyLock.EnterScope())
+		{
+			endTurnSignalSource = turnState.EndTurnSignalSource;
+			beginEnemyTurnSignalSource = turnState.BeginEnemyTurnSignalSource;
+		}
+		if (endTurnSignalSource == null || beginEnemyTurnSignalSource == null)
+		{
+			return null;
+		}
+		EndTurnSignal signal = await endTurnSignalSource.Task;
+		if (!turnState.IsInProgress)
+		{
+			return null;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		await AfterAllPlayersReadyToEndTurn(turnState, signal);
+		if (!turnState.IsInProgress)
+		{
+			return null;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		Func<Task> actionDuringEnemyTurn = await beginEnemyTurnSignalSource.Task;
+		if (!turnState.IsInProgress)
+		{
+			return null;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		await AfterAllPlayersReadyToBeginEnemyTurn(turnState);
+		return actionDuringEnemyTurn;
+	}
+
+	private async Task StartTurn(CombatTurnState turnState, Func<Task>? actionDuringEnemyTurn = null)
+	{
+		if (!turnState.IsInProgress)
+		{
+			return;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		SetPhaseForAllPlayers(turnState.State, PlayerTurnPhase.None);
+		bool isExtraPlayerTurn;
+		List<Creature> creaturesStartingTurn;
+		List<Player> playersStartingTurn;
+		using (turnState.ReadyLock.EnterScope())
+		{
+			isExtraPlayerTurn = turnState.PlayersTakingExtraTurn.Count > 0;
+			if (turnState.State.CurrentSide == CombatSide.Player && isExtraPlayerTurn)
+			{
+				creaturesStartingTurn = turnState.PlayersTakingExtraTurn.Select((Player p) => p.Creature).ToList();
+				playersStartingTurn = turnState.PlayersTakingExtraTurn.ToList();
+			}
+			else
+			{
+				creaturesStartingTurn = turnState.State.CreaturesOnCurrentSide.ToList();
+				playersStartingTurn = ((turnState.State.CurrentSide == CombatSide.Player) ? turnState.State.Players.ToList() : new List<Player>());
 			}
 		}
 		foreach (Creature item2 in creaturesStartingTurn)
 		{
-			if (_state != null)
+			if (turnState.Ct.IsCancellationRequested)
 			{
-				item2.BeforeTurnStart(_state.CurrentSide);
+				return;
 			}
+			item2.BeforeTurnStart(turnState.State.CurrentSide);
 		}
-		if (_state != null)
+		await Hook.BeforeSideTurnStart(turnState.State, turnState.State.CurrentSide, creaturesStartingTurn);
+		turnState.Ct.ThrowIfCancellationRequested();
+		if (turnState.State.CurrentSide == CombatSide.Player)
 		{
-			await Hook.BeforeSideTurnStart(_state, _state.CurrentSide, creaturesStartingTurn);
-			CombatCt.ThrowIfCancellationRequested();
-		}
-		CombatState? state3 = _state;
-		if (state3 != null && state3.CurrentSide == CombatSide.Player)
-		{
-			SetPhaseForAllPlayers(PlayerTurnPhase.Start);
+			SetPhaseForAllPlayers(turnState.State, PlayerTurnPhase.Start);
 			PlayerActionsDisabled = false;
-			using (_playerReadyLock.EnterScope())
+			using (turnState.ReadyLock.EnterScope())
 			{
-				_playersReadyToEndTurn.Clear();
-				_playersReadyToBeginEnemyTurn.Clear();
-				_inPlayerTurnSetup = true;
-				_deferredEndTurnTransition = null;
+				turnState.PlayersReadyToEndTurn.Clear();
+				turnState.PlayersThatCannotUnEndTurn.Clear();
+				turnState.PlayersReadyToBeginEnemyTurn.Clear();
+				turnState.EndTurnSignalSource = new TaskCompletionSource<EndTurnSignal>();
+				turnState.BeginEnemyTurnSignalSource = new TaskCompletionSource<Func<Task>>();
 			}
 			int num = LocalContext.GetMe(playersStartingTurn)?.PlayerCombatState?.TurnNumber ?? (-1);
 			if (num > 1)
@@ -487,9 +760,9 @@ public class CombatManager
 			}
 			if (!isExtraPlayerTurn)
 			{
-				foreach (Creature enemy in _state.Enemies)
+				foreach (Creature enemy in turnState.State.Enemies)
 				{
-					enemy.PrepareForNextTurn(_state.PlayerCreatures);
+					enemy.PrepareForNextTurn(turnState.State.PlayerCreatures);
 				}
 			}
 		}
@@ -498,22 +771,24 @@ public class CombatManager
 			NCombatRoom.Instance?.AddChildSafely(NEnemyTurnBanner.Create());
 		}
 		await Cmd.CustomScaledWait(0.5f, 0.8f);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		foreach (Creature item3 in creaturesStartingTurn)
 		{
-			if (_state != null)
+			if (turnState.Ct.IsCancellationRequested)
 			{
-				await item3.AfterTurnStart(_state.CurrentSide);
-				CombatCt.ThrowIfCancellationRequested();
+				return;
 			}
+			await item3.AfterTurnStart(turnState.State.CurrentSide);
+			turnState.Ct.ThrowIfCancellationRequested();
 		}
 		foreach (Creature item4 in creaturesStartingTurn)
 		{
-			if (_state != null)
+			if (turnState.Ct.IsCancellationRequested)
 			{
-				await Hook.AfterBlockCleared(_state, item4);
-				CombatCt.ThrowIfCancellationRequested();
+				return;
 			}
+			await Hook.AfterBlockCleared(turnState.State, item4);
+			turnState.Ct.ThrowIfCancellationRequested();
 		}
 		List<(HookPlayerChoiceContext, Task)> setupPlayerTurnContext = new List<(HookPlayerChoiceContext, Task)>();
 		foreach (Player item5 in playersStartingTurn)
@@ -521,19 +796,15 @@ public class CombatManager
 			if (LocalContext.NetId.HasValue)
 			{
 				HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item5, LocalContext.NetId.Value, GameActionType.CombatPlayPhaseOnly);
-				Task task = SetupPlayerTurn(item5, playerChoiceContext);
+				Task task = SetupPlayerTurn(turnState, item5, playerChoiceContext);
 				await playerChoiceContext.WaitForPauseOrCompletionWithoutAssigningTask(task);
-				CombatCt.ThrowIfCancellationRequested();
+				turnState.Ct.ThrowIfCancellationRequested();
 				setupPlayerTurnContext.Add((playerChoiceContext, task));
 			}
 		}
-		if (_state != null)
-		{
-			await Hook.AfterSideTurnStart(_state, _state.CurrentSide, creaturesStartingTurn);
-			CombatCt.ThrowIfCancellationRequested();
-		}
-		CombatState? state4 = _state;
-		if (state4 != null && state4.CurrentSide == CombatSide.Player)
+		await Hook.AfterSideTurnStart(turnState.State, turnState.State.CurrentSide, creaturesStartingTurn);
+		turnState.Ct.ThrowIfCancellationRequested();
+		if (turnState.State.CurrentSide == CombatSide.Player)
 		{
 			foreach (Player item6 in playersStartingTurn)
 			{
@@ -542,23 +813,22 @@ public class CombatManager
 					HookPlayerChoiceContext hookPlayerChoiceContext = new HookPlayerChoiceContext(item6, LocalContext.NetId.Value, GameActionType.CombatPlayPhaseOnly);
 					Task task2 = item6.PlayerCombatState.OrbQueue.AfterTurnStart(hookPlayerChoiceContext);
 					await hookPlayerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task2);
-					CombatCt.ThrowIfCancellationRequested();
+					turnState.Ct.ThrowIfCancellationRequested();
 				}
 			}
 			RunManager.Instance.ChecksumTracker.GenerateChecksum("After player turn start", null);
-			if (_state == null)
+			if (turnState.Ct.IsCancellationRequested)
 			{
 				return;
 			}
-			foreach (Player player2 in _state.Players)
+			foreach (Player player2 in turnState.State.Players)
 			{
 				if (player2.Creature.IsDead || !playersStartingTurn.Contains(player2))
 				{
 					Log.Info($"Setting player {player2.NetId} to ready at start of turn. IsDead: {player2.Creature.IsDead}. IsStartingTurn: {playersStartingTurn.Contains(player2)}");
 					SetReadyToEndTurn(player2, canBackOut: false);
-					if (AllPlayersReadyToEndTurn())
+					if (AllPlayersReadyToEndTurn(turnState))
 					{
-						ReleaseDeferredEndTurnTransitionIfNeeded();
 						return;
 					}
 				}
@@ -568,48 +838,39 @@ public class CombatManager
 				(HookPlayerChoiceContext, Task) item = item7.Second;
 				var (player, _) = item7;
 				var (hookPlayerChoiceContext2, setupPlayerTurnTask) = item;
-				if (_state == null)
+				if (turnState.Ct.IsCancellationRequested)
 				{
-					ReleaseDeferredEndTurnTransitionIfNeeded();
 					return;
 				}
 				if (!player.Creature.IsDead)
 				{
-					Task task3 = RunAutoPrePlayPhase(hookPlayerChoiceContext2, setupPlayerTurnTask, player);
+					Task task3 = RunAutoPrePlayPhase(turnState, hookPlayerChoiceContext2, setupPlayerTurnTask, player);
 					await hookPlayerChoiceContext2.AssignTaskAndWaitForPauseOrCompletion(task3);
-					CombatCt.ThrowIfCancellationRequested();
+					turnState.Ct.ThrowIfCancellationRequested();
 				}
 			}
-			await CheckWinCondition();
-			CombatCt.ThrowIfCancellationRequested();
-			if (IsInProgress)
+			await CheckWinCondition(turnState);
+			turnState.Ct.ThrowIfCancellationRequested();
+			if (turnState.IsInProgress)
 			{
 				RunManager.Instance.ActionExecutor.Unpause();
 				RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.PlayPhase);
-				IsEnemyTurnStarted = false;
-				using (_playerReadyLock.EnterScope())
-				{
-					_inPlayerTurnSetup = false;
-				}
-				this.TurnStarted?.Invoke(_state);
+				turnState.IsEnemyTurnStarted = false;
+				this.TurnStarted?.Invoke(turnState.State);
 			}
-			ReleaseDeferredEndTurnTransitionIfNeeded();
 		}
 		else
 		{
-			IsEnemyTurnStarted = true;
-			if (_state != null)
-			{
-				this.TurnStarted?.Invoke(_state);
-			}
+			turnState.IsEnemyTurnStarted = true;
+			this.TurnStarted?.Invoke(turnState.State);
 			RunManager.Instance.ChecksumTracker.GenerateChecksum("After enemy turn start", null);
-			await WaitForUnpause();
-			CombatCt.ThrowIfCancellationRequested();
-			await CheckWinCondition();
-			CombatCt.ThrowIfCancellationRequested();
-			if (IsInProgress)
+			await WaitForUnpause(turnState);
+			turnState.Ct.ThrowIfCancellationRequested();
+			await CheckWinCondition(turnState);
+			turnState.Ct.ThrowIfCancellationRequested();
+			if (turnState.IsInProgress)
 			{
-				await ExecuteEnemyTurn(actionDuringEnemyTurn);
+				await ExecuteEnemyTurn(turnState, actionDuringEnemyTurn);
 			}
 		}
 	}
@@ -620,11 +881,12 @@ public class CombatManager
 	/// The setup await ensures a player whose setup is paused (making a <see cref="T:MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext" />)
 	/// stays in <see cref="F:MegaCrit.Sts2.Core.Combat.PlayerTurnPhase.Start" /> until their setup actually completes.
 	/// </summary>
-	private async Task RunAutoPrePlayPhase(HookPlayerChoiceContext playerChoiceContext, Task setupPlayerTurnTask, Player player)
+	private async Task RunAutoPrePlayPhase(CombatTurnState turnState, HookPlayerChoiceContext playerChoiceContext, Task setupPlayerTurnTask, Player player)
 	{
 		await setupPlayerTurnTask;
 		player.PlayerCombatState.Phase = PlayerTurnPhase.AutoPrePlay;
-		await Hook.AfterAutoPrePlayPhaseEntered(playerChoiceContext, _state, player);
+		await CheckForEmptyHand(turnState, playerChoiceContext, player);
+		await Hook.AfterAutoPrePlayPhaseEntered(playerChoiceContext, turnState.State, player);
 		player.PlayerCombatState.Phase = PlayerTurnPhase.Play;
 	}
 
@@ -634,20 +896,21 @@ public class CombatManager
 	/// sequence is paused for this player. However, other players' turn start sequences may continue, and they may
 	/// play cards while this is occuring.
 	/// </summary>
+	/// <param name="turnState">The turn state of the combat this turn belongs to.</param>
 	/// <param name="player">The player whose turn to setup.</param>
 	/// <param name="playerChoiceContext">The player choice context to pass to hooks that take it.</param>
-	private async Task SetupPlayerTurn(Player player, HookPlayerChoiceContext playerChoiceContext)
+	private async Task SetupPlayerTurn(CombatTurnState turnState, Player player, HookPlayerChoiceContext playerChoiceContext)
 	{
 		if (player.Creature.IsDead)
 		{
 			return;
 		}
-		if (_state == null || player.PlayerCombatState == null)
+		if (player.PlayerCombatState == null)
 		{
-			Log.Warn($"Combat state is null. Assuming that the run has been cleaned up. (CombatState: {_state} PlayerCombatState: {player.PlayerCombatState})");
+			Log.Warn($"Player combat state is null. Assuming that the run has been cleaned up. (Player: {player.NetId})");
 			return;
 		}
-		CombatState state = _state;
+		CombatState state = turnState.State;
 		if (Hook.ShouldPlayerResetEnergy(state, player))
 		{
 			SfxCmd.Play("event:/sfx/ui/gain_energy");
@@ -658,12 +921,12 @@ public class CombatManager
 			player.PlayerCombatState.AddMaxEnergyToCurrent();
 		}
 		await Hook.AfterEnergyReset(state, player);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		await Hook.BeforeHandDraw(state, player, playerChoiceContext);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		decimal handDraw = Hook.ModifyHandDraw(state, player, 5m, out IEnumerable<AbstractModel> modifiers);
 		await Hook.AfterModifyingHandDraw(state, modifiers);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		if (player.PlayerCombatState.TurnNumber == 1)
 		{
 			CardPile pile = PileType.Draw.GetPile(player);
@@ -680,13 +943,9 @@ public class CombatManager
 			handDraw = Math.Max(handDraw, list2.Count);
 			handDraw = Math.Min(handDraw, CardPile.MaxCardsInHand);
 		}
-		// Drawing the opening hand builds one card node per card, so it is worth knowing whether
-		// that is what the first-turn hitch is.
-		Perf.Phase("combat.hand-draw");
 		await CardPileCmd.Draw(playerChoiceContext, handDraw, player, fromHandDraw: true);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		await Hook.AfterPlayerTurnStart(state, playerChoiceContext, player);
-		Perf.ReportPhases("combat turn setup");
 	}
 
 	/// <summary>
@@ -697,68 +956,88 @@ public class CombatManager
 	/// <param name="actionDuringEnemyTurn">Optional action to execute during the enemy turn. This is useful for tests.</param>
 	public void SetReadyToEndTurn(Player player, bool canBackOut, Func<Task>? actionDuringEnemyTurn = null)
 	{
-		using (_playerReadyLock.EnterScope())
-		{
-			if (_playersReadyToEndTurn.Contains(player))
-			{
-				return;
-			}
-			_playersReadyToEndTurn.Add(player);
-		}
-		this.PlayerEndedTurn?.Invoke(player, canBackOut);
-		if (!AllPlayersReadyToEndTurn())
+		CombatTurnState turnState = _turnState;
+		if (turnState == null)
 		{
 			return;
 		}
-		Log.Debug("All players ready to end turn");
-		GameAction runningAction = RunManager.Instance.ActionExecutor.CurrentlyRunningAction;
-		Func<Task> func = ((runningAction == null || !ActionQueueSet.IsGameActionPlayerDriven(runningAction)) ? ((Func<Task>)(() => AfterAllPlayersReadyToEndTurn(actionDuringEnemyTurn))) : ((Func<Task>)(() => WaitForActionThenEndTurn(runningAction, actionDuringEnemyTurn))));
-		bool inPlayerTurnSetup;
-		using (_playerReadyLock.EnterScope())
+		using (turnState.ReadyLock.EnterScope())
 		{
-			inPlayerTurnSetup = _inPlayerTurnSetup;
-			if (inPlayerTurnSetup)
+			if (turnState.PlayersReadyToEndTurn.Contains(player))
 			{
-				_deferredEndTurnTransition = func;
+				return;
+			}
+			turnState.PlayersReadyToEndTurn.Add(player);
+			if (!canBackOut)
+			{
+				turnState.PlayersThatCannotUnEndTurn.Add(player);
 			}
 		}
-		if (!inPlayerTurnSetup)
+		this.PlayerEndedTurn?.Invoke(player, canBackOut);
+		if (AllPlayersReadyToEndTurn(turnState))
 		{
-			TaskHelper.RunSafely(func());
+			Log.Debug("All players ready to end turn");
+			int scheduledTurnNumber = player.PlayerCombatState?.TurnNumber ?? (-1);
+			TaskCompletionSource<EndTurnSignal> endTurnSignalSource;
+			using (turnState.ReadyLock.EnterScope())
+			{
+				endTurnSignalSource = turnState.EndTurnSignalSource;
+			}
+			endTurnSignalSource?.TrySetResult(new EndTurnSignal(scheduledTurnNumber, player, actionDuringEnemyTurn));
 		}
 	}
 
 	/// <summary>
-	/// Runs any end-of-turn transition that was deferred while the player turn was being set up (see
-	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.SetReadyToEndTurn(MegaCrit.Sts2.Core.Entities.Players.Player,System.Boolean,System.Func{System.Threading.Tasks.Task})" />). Must be called on every exit path of the player-turn setup in
-	/// <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.StartTurn(System.Func{System.Threading.Tasks.Task})" /> so a deferred transition is never dropped.
+	/// If the player is ready to end turn, and can un-end their turn, then they do so.
+	/// Some ways that the player may not be able to un-end their turn:
+	///  - Void Form was played, which disallows un-ending turn
+	///  - The player is not part of the current turn (Pael's Eye)
+	///  - The player is dead
 	/// </summary>
-	private void ReleaseDeferredEndTurnTransitionIfNeeded()
+	/// <param name="player"></param>
+	public void TryUndoReadyToEndTurn(Player player)
 	{
-		Func<Task> deferredEndTurnTransition;
-		using (_playerReadyLock.EnterScope())
+		if (!CanUnEndTurn(player))
 		{
-			_inPlayerTurnSetup = false;
-			deferredEndTurnTransition = _deferredEndTurnTransition;
-			_deferredEndTurnTransition = null;
+			return;
 		}
-		if (deferredEndTurnTransition != null)
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
 		{
-			TaskHelper.RunSafely(deferredEndTurnTransition());
-		}
-	}
-
-	public void UndoReadyToEndTurn(Player player)
-	{
-		using (_playerReadyLock.EnterScope())
-		{
-			_playersReadyToEndTurn.Remove(player);
+			using (turnState.ReadyLock.EnterScope())
+			{
+				turnState.PlayersReadyToEndTurn.Remove(player);
+			}
 		}
 		if (LocalContext.IsMe(player))
 		{
 			PlayerActionsDisabled = false;
 		}
 		this.PlayerUnendedTurn?.Invoke(player);
+	}
+
+	public bool CanUnEndTurn(Player player)
+	{
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
+		{
+			using (turnState.ReadyLock.EnterScope())
+			{
+				if (turnState.PlayersThatCannotUnEndTurn.Contains(player))
+				{
+					return false;
+				}
+				if (turnState.PlayersTakingExtraTurn.Count > 0 && !turnState.PlayersTakingExtraTurn.Contains(player))
+				{
+					return false;
+				}
+			}
+		}
+		if (player.Creature.IsDead)
+		{
+			return false;
+		}
+		return true;
 	}
 
 	/// <summary>
@@ -783,19 +1062,27 @@ public class CombatManager
 	/// <param name="actionDuringEnemyTurn">Optional action to execute during the enemy turn. This is useful for tests.</param>
 	public void SetReadyToBeginEnemyTurn(Player player, Func<Task>? actionDuringEnemyTurn = null)
 	{
-		if (!IsInProgress)
+		CombatTurnState turnState = _turnState;
+		if (turnState == null || !turnState.IsInProgress)
 		{
 			Log.Error("Trying to set player ready to begin enemy turn, but combat is over!");
+			return;
 		}
-		bool flag;
-		using (_playerReadyLock.EnterScope())
+		bool flag2;
+		TaskCompletionSource<Func<Task>> beginEnemyTurnSignalSource;
+		using (turnState.ReadyLock.EnterScope())
 		{
-			_playersReadyToBeginEnemyTurn.Add(player);
-			flag = _playersReadyToBeginEnemyTurn.Count == _state.Players.Count && _state.CurrentSide == CombatSide.Player;
+			if (!turnState.PlayersReadyToBeginEnemyTurn.Add(player))
+			{
+				return;
+			}
+			bool flag = turnState.State.CurrentSide == CombatSide.Player;
+			flag2 = (turnState.PlayersReadyToBeginEnemyTurn.Count == turnState.State.Players.Count && flag) || (flag && RunManager.Instance.NetService.Type == NetGameType.Singleplayer);
+			beginEnemyTurnSignalSource = turnState.BeginEnemyTurnSignalSource;
 		}
-		if (flag || RunManager.Instance.NetService.Type == NetGameType.Singleplayer)
+		if (flag2 && beginEnemyTurnSignalSource != null && !beginEnemyTurnSignalSource.TrySetResult(actionDuringEnemyTurn))
 		{
-			TaskHelper.RunSafely(AfterAllPlayersReadyToBeginEnemyTurn(actionDuringEnemyTurn));
+			Log.Warn($"Ignoring ready-to-begin-enemy-turn for player {player.NetId}: a player-to-enemy transition has already been claimed for this turn.");
 		}
 	}
 
@@ -804,79 +1091,103 @@ public class CombatManager
 	/// </returns>
 	public bool IsPlayerReadyToEndTurn(Player player)
 	{
-		using (_playerReadyLock.EnterScope())
+		CombatTurnState turnState = _turnState;
+		if (turnState == null)
 		{
-			return _playersReadyToEndTurn.Contains(player);
+			return false;
+		}
+		using (turnState.ReadyLock.EnterScope())
+		{
+			return turnState.PlayersReadyToEndTurn.Contains(player);
 		}
 	}
 
 	public bool AllPlayersReadyToEndTurn()
 	{
-		bool flag;
-		using (_playerReadyLock.EnterScope())
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
 		{
-			flag = _playersReadyToEndTurn.Count == _state.Players.Count;
+			return AllPlayersReadyToEndTurn(turnState);
+		}
+		return false;
+	}
+
+	private bool AllPlayersReadyToEndTurn(CombatTurnState turnState)
+	{
+		bool flag;
+		using (turnState.ReadyLock.EnterScope())
+		{
+			flag = turnState.PlayersReadyToEndTurn.Count == turnState.State.Players.Count;
 		}
 		if (!RunManager.Instance.IsSingleplayerOrFakeMultiplayer)
 		{
 			if (flag)
 			{
-				return _state.CurrentSide == CombatSide.Player;
+				return turnState.State.CurrentSide == CombatSide.Player;
 			}
 			return false;
 		}
 		return true;
 	}
 
-	private async Task EndEnemyTurn()
+	private async Task EndEnemyTurn(CombatTurnState turnState)
 	{
-		if (IsInProgress)
+		if (turnState.IsInProgress)
 		{
-			CombatCt.ThrowIfCancellationRequested();
-			if (_state.CurrentSide != CombatSide.Enemy)
+			turnState.Ct.ThrowIfCancellationRequested();
+			if (turnState.State.CurrentSide != CombatSide.Enemy)
 			{
-				throw new InvalidOperationException($"EndEnemyTurn called while the current side is {_state.CurrentSide}!");
+				throw new InvalidOperationException($"EndEnemyTurn called while the current side is {turnState.State.CurrentSide}!");
 			}
-			await WaitForUnpause();
-			CombatCt.ThrowIfCancellationRequested();
-			await EndEnemyTurnInternal();
-			CombatCt.ThrowIfCancellationRequested();
-			await CheckWinCondition();
-			if (!IsEnding)
+			await WaitForUnpause(turnState);
+			turnState.Ct.ThrowIfCancellationRequested();
+			await EndEnemyTurnInternal(turnState);
+			turnState.Ct.ThrowIfCancellationRequested();
+			await CheckWinCondition(turnState);
+			if (!IsCombatEnding(turnState))
 			{
-				SwitchSides();
-				await WaitForUnpause();
-				CombatCt.ThrowIfCancellationRequested();
-				await StartTurn();
+				SwitchSides(turnState);
+				await WaitForUnpause(turnState);
+				turnState.Ct.ThrowIfCancellationRequested();
 			}
 		}
 	}
 
 	public void AddCreature(Creature creature)
 	{
-		if (!_state.ContainsCreature(creature))
+		CombatState state = _turnState.State;
+		if (!state.ContainsCreature(creature))
 		{
 			throw new InvalidOperationException("CombatState must already contain creature.");
 		}
 		creature.Monster?.SetUpForCombat();
 		if (creature.SlotName != null)
 		{
-			_state.SortEnemiesBySlotName();
+			state.SortEnemiesBySlotName();
 		}
 		StateTracker.Subscribe(creature);
-		this.CreaturesChanged?.Invoke(_state);
+		this.CreaturesChanged?.Invoke(state);
 	}
 
 	/// <summary>
 	/// Called after both the Creature has been added to the room _and_ the NCreature is spawned.
 	/// </summary>
 	/// <param name="creature"></param>
-	public async Task AfterCreatureAdded(Creature creature)
+	public Task AfterCreatureAdded(Creature creature)
+	{
+		return AfterCreatureAdded(creature, _turnState.State);
+	}
+
+	/// <summary>
+	/// Turn-state-relative variant for the turn loop's setup loop: reads the turn loop's own combat, so a setup continuation
+	/// resuming after its combat was torn down cannot observe a null state or the next combat's players.
+	/// </summary>
+	private static async Task AfterCreatureAdded(Creature creature, CombatState state)
 	{
 		await creature.AfterAddedToRoom();
-		if (creature.IsEnemy && _state.CurrentSide == CombatSide.Player)
+		if (creature.IsEnemy && state.CurrentSide == CombatSide.Player)
 		{
-			creature.Monster.RollMove(_state.Players.Select((Player p) => p.Creature));
+			creature.Monster.RollMove(state.Players.Select((Player p) => p.Creature));
 		}
 	}
 
@@ -893,62 +1204,137 @@ public class CombatManager
 	///
 	/// So, instead of automatically doing this check every time the hand size changes, we manually check after a card
 	/// is played, and after a potion is used, since these are the two ways a player can manually interact with combat
-	/// state (besides ending turn, which should not trigger an empty hand check). If we ever add more ways, we should
-	/// add this check in those too, and update this comment.
+	/// state (besides ending turn, which should not trigger an empty hand check). We also check once at the start of
+	/// the play-capable phase (see <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.RunAutoPrePlayPhase(MegaCrit.Sts2.Core.Combat.CombatTurnState,MegaCrit.Sts2.Core.GameActions.Multiplayer.HookPlayerChoiceContext,System.Threading.Tasks.Task,MegaCrit.Sts2.Core.Entities.Players.Player)" />), to catch a hand draw that ends empty because
+	/// every card was auto-played as it was drawn. If we ever add more ways, we should add this check in those too,
+	/// and update this comment.
 	/// </summary>
 	/// <param name="choiceContext">Object that keeps context of the action this is called from.</param>
 	/// <param name="player">Player whose hand we want to check.</param>
-	public async Task CheckForEmptyHand(PlayerChoiceContext choiceContext, Player player)
+	/// <param name="combatId">
+	/// The combat the calling effect belongs to, from <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.BeginCardOrPotionEffect(MegaCrit.Sts2.Core.Entities.Players.Player)" />. The check is dropped if
+	/// that combat is no longer the running one: a card played in a combat that ended must not empty-hand-hook into
+	/// the next one.
+	/// </param>
+	public async Task CheckForEmptyHand(CombatId? combatId, PlayerChoiceContext choiceContext, Player player)
 	{
-		if (IsInProgress && !IsExecutingCardOrPotionEffect(player) && !PileType.Hand.GetPile(player).Cards.Any())
+		CombatTurnState combatTurnState = LiveTurnStateFor(combatId);
+		if (combatTurnState != null)
 		{
-			await Hook.AfterHandEmptied(_state, choiceContext, player);
+			await CheckForEmptyHand(combatTurnState, choiceContext, player);
 		}
 	}
 
 	/// <summary>
-	/// Reset the combat manager to prepare for the next combat.
+	/// Turn-state-relative variant for the turn loop, which owns a turn state directly and needs no id round trip.
+	/// </summary>
+	private async Task CheckForEmptyHand(CombatTurnState turnState, PlayerChoiceContext choiceContext, Player player)
+	{
+		if (turnState.IsInProgress && !IsExecutingCardOrPotionEffect(player) && !PileType.Hand.GetPile(player).Cards.Any())
+		{
+			await Hook.AfterHandEmptied(turnState.State, choiceContext, player);
+		}
+	}
+
+	/// <summary>
+	/// Reset the combat manager to prepare for the next combat. All combat-scoped state lives on the turn state, which is
+	/// dropped wholesale here; the only per-field cleanup left is manager-level state that outlives a single combat.
 	/// </summary>
 	/// <param name="graceful">Usually true. Only pass false if we're exiting the game completely.</param>
 	public void Reset(bool graceful)
 	{
-		_combatCts?.Cancel();
-		if (graceful && _state != null)
-		{
-			SetPhaseForAllPlayers(PlayerTurnPhase.None);
-			foreach (Creature item in _state.Creatures.ToList())
-			{
-				item.Reset();
-				RemoveCreature(item);
-				_state.RemoveCreature(item);
-			}
-			_state = null;
-		}
-		_pendingLoss = null;
-		DebugForcedTopCardOnNextShuffle = null;
-		IsInProgress = false;
-		IsStarting = false;
-		IsEnemyTurnStarted = false;
-		History.Clear();
-		_cardOrPotionEffectDepth.Clear();
-		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
+		CombatTurnState turnState = CancelCombat(graceful);
+		DetachCreatures(graceful, turnState);
 	}
 
-	public async Task HandlePlayerDeath(Player player)
+	/// <summary>
+	/// The first half of <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" />: ends the combat and cancels its turn loop. Returns the removed turn state
+	/// for <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.DetachCreatures(System.Boolean,MegaCrit.Sts2.Core.Combat.CombatTurnState)" />.
+	/// </summary>
+	private CombatTurnState? CancelCombat(bool graceful)
 	{
-		if (IsInProgress)
+		CombatTurnState turnState = _turnState;
+		if (graceful && turnState != null)
 		{
-			CardModel[] cards = new CardPile[5]
+			SetPhaseForAllPlayers(turnState.State, PlayerTurnPhase.None);
+		}
+		_turnState = null;
+		DebugForcedTopCardOnNextShuffle = null;
+		History.Clear();
+		_cardOrPotionEffectDepth.Clear();
+		if (turnState != null)
+		{
+			Log.Debug($"Combat #{turnState.Id} dropped and cancelled by Reset");
+			turnState.Cancel();
+		}
+		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
+		return turnState;
+	}
+
+	/// <summary>
+	/// The second half of <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" />. It must run after <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.CancelCombat(System.Boolean)" />: a suspended turn loop
+	/// unwinds inline inside the cancel, and it must unwind while its creatures are still attached.
+	/// </summary>
+	private void DetachCreatures(bool graceful, CombatTurnState? turnState)
+	{
+		if (!graceful || turnState == null)
+		{
+			return;
+		}
+		foreach (Creature item in turnState.State.Creatures.ToList())
+		{
+			item.Reset();
+			RemoveCreature(item, turnState.State);
+			turnState.State.RemoveCreature(item);
+		}
+	}
+
+	/// <summary>
+	/// Per-player death handling for one player dying in a combat the rest of the party is still fighting: their cards
+	/// leave combat and their resources are zeroed. Does nothing once every player is dead, which is the run-loss path.
+	/// </summary>
+	/// <param name="combatId">
+	/// The combat the kill belongs to. Death handling for a combat that has already ended must not run against the
+	/// next one.
+	/// </param>
+	/// <param name="player">The player that died.</param>
+	public async Task HandlePlayerDeath(CombatId? combatId, Player player)
+	{
+		CombatTurnState combatTurnState = LiveTurnStateFor(combatId);
+		if (combatTurnState != null && !combatTurnState.State.Players.All((Player p) => p.Creature.IsDead))
+		{
+			Log.Info($"Player {player.NetId} died, doing death handling");
+			if (!IsExecutingCardOrPotionEffect(player))
 			{
-				player.PlayerCombatState.Hand,
-				player.PlayerCombatState.DrawPile,
-				player.PlayerCombatState.DiscardPile,
-				player.PlayerCombatState.ExhaustPile,
-				player.PlayerCombatState.PlayPile
-			}.SelectMany((CardPile p) => p.Cards).ToArray();
-			await CardPileCmd.RemoveFromCombat(cards);
+				await RemoveDeadPlayerCardsFromCombat(combatId, player);
+			}
 			await PlayerCmd.SetEnergy(0m, player);
 			await PlayerCmd.SetStars(0m, player);
+		}
+	}
+
+	/// <summary>
+	/// Removes a dead player's cards from combat. Runs from <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.HandlePlayerDeath(System.Nullable{MegaCrit.Sts2.Core.Combat.CombatId},MegaCrit.Sts2.Core.Entities.Players.Player)" /> when the player is not
+	/// mid-effect, otherwise deferred to when their outermost card or potion effect ends.
+	/// </summary>
+	/// <param name="combatId">
+	/// The combat the death belongs to. A removal deferred past the end of its combat must not strip the next
+	/// combat's cards.
+	/// </param>
+	/// <param name="player">The dead player whose cards are being removed.</param>
+	public async Task RemoveDeadPlayerCardsFromCombat(CombatId? combatId, Player player)
+	{
+		CombatTurnState combatTurnState = LiveTurnStateFor(combatId);
+		if (combatTurnState != null && player.PlayerCombatState != null && !combatTurnState.State.Players.All((Player p) => p.Creature.IsDead))
+		{
+			List<CardModel> list = new List<CardModel>();
+			list.AddRange(player.PlayerCombatState.Hand.Cards);
+			list.AddRange(player.PlayerCombatState.DrawPile.Cards);
+			list.AddRange(player.PlayerCombatState.DiscardPile.Cards);
+			list.AddRange(player.PlayerCombatState.ExhaustPile.Cards);
+			list.AddRange(player.PlayerCombatState.PlayPile.Cards);
+			CardModel[] cards = list.ToArray();
+			await CardPileCmd.RemoveFromCombat(cards);
 		}
 	}
 
@@ -958,43 +1344,53 @@ public class CombatManager
 	/// </summary>
 	public void LoseCombat()
 	{
-		if (!(_pendingLoss != null))
+		CombatTurnState turnState = _turnState;
+		if (turnState != null && !(turnState.PendingLoss != null))
 		{
-			_pendingLoss = new PendingLossState(_state, (CombatRoom)_state.RunState.CurrentRoom);
+			turnState.PendingLoss = new PendingLossState((CombatRoom)turnState.State.RunState.CurrentRoom);
 		}
 	}
 
 	/// <summary>
 	/// Processes a pending combat loss. Called from CheckWinCondition at safe points.
 	/// </summary>
-	private void ProcessPendingLoss()
+	private void ProcessPendingLoss(CombatTurnState turnState)
 	{
-		if (!(_pendingLoss == null))
+		if (!(turnState.PendingLoss == null))
 		{
-			PendingLossState pendingLoss = _pendingLoss;
-			_pendingLoss = null;
-			IsInProgress = false;
+			PendingLossState pendingLoss = turnState.PendingLoss;
+			turnState.PendingLoss = null;
+			turnState.IsInProgress = false;
 			this.CombatEnded?.Invoke(pendingLoss.Room);
 		}
 	}
 
 	/// <summary>
-	/// DO NOT CALL THIS unless you're in this class or ModelTest.
+	/// Prefer ModelTest.WinCombat.
 	/// </summary>
 	public async Task EndCombatInternal()
 	{
-		CombatState combatState = _state;
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
+		{
+			await EndCombatInternal(turnState);
+		}
+	}
+
+	private async Task EndCombatInternal(CombatTurnState turnState)
+	{
+		CombatState combatState = turnState.State;
 		Player localPlayer = LocalContext.GetMe(combatState);
 		int turnsTaken = localPlayer.PlayerCombatState.TurnNumber;
 		IRunState runState = combatState.RunState;
 		CombatRoom room = (CombatRoom)runState.CurrentRoom;
-		IsInProgress = false;
-		SetPhaseForAllPlayers(PlayerTurnPhase.None);
-		PlayerActionsDisabled = false;
-		using (_playerReadyLock.EnterScope())
+		turnState.IsInProgress = false;
+		using (turnState.ReadyLock.EnterScope())
 		{
-			_playersTakingExtraTurn.Clear();
+			turnState.PlayersTakingExtraTurn.Clear();
 		}
+		SetPhaseForAllPlayers(combatState, PlayerTurnPhase.None);
+		PlayerActionsDisabled = false;
 		foreach (Player player in combatState.Players)
 		{
 			await player.ReviveBeforeCombatEnd();
@@ -1032,15 +1428,18 @@ public class CombatManager
 		{
 			AchievementsHelper.AfterBossDefeated(localPlayer);
 		}
-		combatState.MultiplayerScalingModel?.OnCombatFinished();
-		if (_state != null)
+		foreach (RunModel runModel in combatState.RunModels)
+		{
+			runModel.OnCombatFinished();
+		}
+		if (_turnState != null)
 		{
 			this.CombatWon?.Invoke(room);
 		}
 		RunManager.Instance.ActionExecutor.Unpause();
 		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.NotInCombat);
 		NRunMusicController.Instance?.UpdateTrack();
-		if (_state != null)
+		if (_turnState != null)
 		{
 			this.CombatEnded?.Invoke(room);
 		}
@@ -1048,44 +1447,68 @@ public class CombatManager
 
 	public void RemoveCreature(Creature creature)
 	{
+		RemoveCreature(creature, _turnState.State);
+	}
+
+	/// <summary>
+	/// Takes the combat state as a parameter so that <see cref="M:MegaCrit.Sts2.Core.Combat.CombatManager.Reset(System.Boolean)" /> can detach creatures after _turnState is set
+	/// to null.
+	/// </summary>
+	private void RemoveCreature(Creature creature, CombatState state)
+	{
 		if (creature.IsMonster)
 		{
 			creature.Monster.BeforeRemovedFromRoom();
 			creature.Monster.ResetStateMachine();
 		}
 		StateTracker.Unsubscribe(creature);
-		this.CreaturesChanged?.Invoke(_state);
+		this.CreaturesChanged?.Invoke(state);
 	}
 
 	public async Task<bool> CheckWinCondition()
 	{
-		if (_pendingLoss != null)
+		CombatTurnState turnState = _turnState;
+		if (turnState == null)
 		{
-			ProcessPendingLoss();
+			return false;
+		}
+		return await CheckWinCondition(turnState);
+	}
+
+	/// <summary>
+	/// Turn-state-relative variant for the turn loop: a stale turn state resuming here evaluates and can only end its own
+	/// dead combat (a no-op), never the current one.
+	/// </summary>
+	private async Task<bool> CheckWinCondition(CombatTurnState turnState)
+	{
+		if (turnState.PendingLoss != null)
+		{
+			ProcessPendingLoss(turnState);
 			return true;
 		}
-		if (IsEnding)
+		if (IsCombatEnding(turnState))
 		{
-			await EndCombatInternal();
+			await EndCombatInternal(turnState);
 			return true;
 		}
 		return false;
 	}
 
-	private async Task ExecuteEnemyTurn(Func<Task>? actionDuringEnemyTurn = null)
+	private async Task ExecuteEnemyTurn(CombatTurnState turnState, Func<Task>? actionDuringEnemyTurn = null)
 	{
-		if (!IsInProgress)
+		if (!turnState.IsInProgress)
 		{
 			return;
 		}
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		if (actionDuringEnemyTurn != null)
 		{
 			await actionDuringEnemyTurn();
+			turnState.Ct.ThrowIfCancellationRequested();
 		}
-		foreach (Creature enemy in _state.Enemies.ToList())
+		foreach (Creature enemy in turnState.State.Enemies.ToList())
 		{
-			if (_state.ContainsCreature(enemy))
+			if (turnState.State.ContainsCreature(enemy))
 			{
 				NCreature nCreature = NCombatRoom.Instance?.GetCreatureNode(enemy);
 				if (nCreature != null)
@@ -1093,92 +1516,129 @@ public class CombatManager
 					await nCreature.PerformIntent();
 				}
 				await enemy.TakeTurn();
-				CombatCt.ThrowIfCancellationRequested();
-				await WaitForUnpause();
-				await CheckWinCondition();
-				if (!IsInProgress)
+				turnState.Ct.ThrowIfCancellationRequested();
+				await WaitForUnpause(turnState);
+				await CheckWinCondition(turnState);
+				if (!turnState.IsInProgress)
 				{
 					return;
 				}
 			}
 		}
 		RunManager.Instance.ChecksumTracker.GenerateChecksum("After enemy turn end", null);
-		await EndEnemyTurn();
+		await EndEnemyTurn(turnState);
 	}
 
-	private async Task WaitForActionThenEndTurn(GameAction action, Func<Task>? actionDuringEnemyTurn)
+	private async Task AfterAllPlayersReadyToEndTurn(CombatTurnState turnState, EndTurnSignal signal)
 	{
-		await action.CompletionTask;
-		await AfterAllPlayersReadyToEndTurn(actionDuringEnemyTurn);
-	}
-
-	private async Task AfterAllPlayersReadyToEndTurn(Func<Task>? actionDuringEnemyTurn = null)
-	{
-		if (IsInProgress)
+		if (!turnState.IsInProgress)
 		{
-			CombatCt.ThrowIfCancellationRequested();
-			EndingPlayerTurnPhaseOne = true;
-			RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.EndTurnPhaseOne);
-			await WaitUntilQueueIsEmptyOrWaitingOnNonPlayerDrivenAction();
-			await EndPlayerTurnPhaseOneInternal();
-			if (IsInProgress && RunManager.Instance.NetService.Type != NetGameType.Replay)
+			return;
+		}
+		RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.EndTurnPhaseOne);
+		await WaitUntilQueueIsEmptyOrWaitingOnNonPlayerDrivenAction(turnState);
+		if ((signal.ScheduledPlayer.PlayerCombatState?.TurnNumber ?? (-1)) != signal.ScheduledTurnNumber)
+		{
+			Log.Error($"Combat #{turnState.Id}: stale player-turn-end transition for player {signal.ScheduledPlayer.NetId}: the turn it was scheduled for has ended. Running it anyway; only the turn loop advances turns, so something has resumed a turn the turn loop did not.");
+			if (!_staleTurnEndReported)
 			{
-				RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new ReadyToBeginEnemyTurnAction(LocalContext.GetMe(_state), actionDuringEnemyTurn));
+				_staleTurnEndReported = true;
+				SentryService.CaptureMessage("Ran a stale player-turn-end transition; the turn it was scheduled for had ended", SentryLevel.Error, delegate(Scope scope)
+				{
+					scope.SetExtra("combatId", turnState.Id.Value);
+					scope.SetExtra("scheduledTurnNumber", signal.ScheduledTurnNumber);
+					scope.SetExtra("currentTurnNumber", signal.ScheduledPlayer.PlayerCombatState?.TurnNumber ?? (-1));
+				});
 			}
-			EndingPlayerTurnPhaseOne = false;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		turnState.EndingPlayerTurnPhaseOne = true;
+		try
+		{
+			await EndPlayerTurnPhaseOneInternal(turnState);
+			if (turnState.IsInProgress && RunManager.Instance.NetService.Type != NetGameType.Replay)
+			{
+				RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new ReadyToBeginEnemyTurnAction(LocalContext.GetMe(turnState.State), signal.ActionDuringEnemyTurn));
+			}
+		}
+		finally
+		{
+			turnState.EndingPlayerTurnPhaseOne = false;
 		}
 	}
 
-	private async Task WaitUntilQueueIsEmptyOrWaitingOnNonPlayerDrivenAction()
+	private async Task WaitUntilQueueIsEmptyOrWaitingOnNonPlayerDrivenAction(CombatTurnState turnState)
 	{
-		GameAction currentlyRunningAction = RunManager.Instance.ActionExecutor.CurrentlyRunningAction;
-		TaskCompletionSource completionSource;
-		if (currentlyRunningAction != null && ActionQueueSet.IsGameActionPlayerDriven(currentlyRunningAction))
+		if (!RunManager.Instance.ActionQueueSet.AreAnyPlayerDrivenActionsBeingExecuted())
 		{
-			completionSource = new TaskCompletionSource();
-			RunManager.Instance.ActionExecutor.AfterActionExecuted += AfterActionExecuted;
-			await completionSource.Task;
-			RunManager.Instance.ActionExecutor.AfterActionExecuted -= AfterActionExecuted;
+			return;
 		}
-		void AfterActionExecuted(GameAction action)
+		Log.Debug("End of turn is blocked by actions that are still executing.");
+		TaskCompletionSource completionSource = new TaskCompletionSource();
+		RunManager.Instance.ActionQueueSet.ActionQueueChanged += ActionQueueChanged;
+		try
 		{
-			GameAction readyAction = RunManager.Instance.ActionQueueSet.GetReadyAction();
-			if (readyAction == null || !ActionQueueSet.IsGameActionPlayerDriven(readyAction))
+			await completionSource.Task.WaitAsync(turnState.Ct);
+		}
+		finally
+		{
+			RunManager.Instance.ActionQueueSet.ActionQueueChanged -= ActionQueueChanged;
+		}
+		void ActionQueueChanged()
+		{
+			if (RunManager.Instance.ActionQueueSet.AreAnyPlayerDrivenActionsBeingExecuted())
 			{
-				completionSource.SetResult();
+				Log.Debug("End of turn is still blocked.");
+			}
+			else
+			{
+				Log.Debug("All player-driven actions complete, proceeding with end of turn.");
+				completionSource.TrySetResult();
 			}
 		}
 	}
 
 	/// <summary>
-	/// DO NOT CALL THIS unless you're in this class or ModelTest.
-	/// This calls all end-of-turn hooks that could require player choices to be made.
+	/// Calls all end-of-turn hooks that could require player choices to be made.
+	/// Prefer ModelTest.PassToEnemyTurn, whose doc comment covers when the bypass is safe.
 	/// </summary>
 	public async Task EndPlayerTurnPhaseOneInternal()
 	{
-		if (_state == null)
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
+		{
+			await EndPlayerTurnPhaseOneInternal(turnState);
+		}
+	}
+
+	private async Task EndPlayerTurnPhaseOneInternal(CombatTurnState turnState)
+	{
+		if (turnState.Ct.IsCancellationRequested)
 		{
 			return;
 		}
-		CombatState? state = _state;
-		if (state == null || state.CurrentSide != CombatSide.Player)
+		if (turnState.State.CurrentSide != CombatSide.Player)
 		{
-			throw new InvalidOperationException($"EndPlayerTurn called while the current side is {_state?.CurrentSide}!");
+			throw new InvalidOperationException($"EndPlayerTurn called while the current side is {turnState.State.CurrentSide}!");
 		}
-		await WaitForUnpause();
+		await WaitForUnpause(turnState);
 		List<Player> playersEndingTurn;
-		using (_playerReadyLock.EnterScope())
+		using (turnState.ReadyLock.EnterScope())
 		{
-			playersEndingTurn = ((_playersTakingExtraTurn.Count > 0) ? _playersTakingExtraTurn.ToList() : (_state?.Players.ToList() ?? new List<Player>()));
+			playersEndingTurn = ((turnState.PlayersTakingExtraTurn.Count > 0) ? turnState.PlayersTakingExtraTurn.ToList() : turnState.State.Players.ToList());
 		}
 		List<(Player, HookPlayerChoiceContext)> autoPostPlayContexts = new List<(Player, HookPlayerChoiceContext)>();
 		foreach (Player player in playersEndingTurn)
 		{
-			if (_state != null && LocalContext.NetId.HasValue)
+			if (turnState.Ct.IsCancellationRequested)
+			{
+				return;
+			}
+			if (LocalContext.NetId.HasValue)
 			{
 				player.PlayerCombatState.Phase = PlayerTurnPhase.AutoPostPlay;
 				HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(player, LocalContext.NetId.Value, GameActionType.CombatPlayPhaseOnly);
-				Task task = Hook.AfterAutoPostPlayPhaseEntered(playerChoiceContext, _state, player);
+				Task task = Hook.AfterAutoPostPlayPhaseEntered(playerChoiceContext, turnState.State, player);
 				await playerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 				autoPostPlayContexts.Add((player, playerChoiceContext));
 			}
@@ -1188,11 +1648,12 @@ public class CombatManager
 			await hookPlayerChoiceContext.WaitForCompletion();
 			player.PlayerCombatState.Phase = PlayerTurnPhase.End;
 		}
-		if (_state != null)
+		if (turnState.Ct.IsCancellationRequested)
 		{
-			await Hook.BeforeTurnEnd(_state, _state.CurrentSide, playersEndingTurn.Select((Player p) => p.Creature));
+			return;
 		}
-		if (await CheckWinCondition())
+		await Hook.BeforeSideTurnEnd(turnState.State, turnState.State.CurrentSide, playersEndingTurn.Select((Player p) => p.Creature));
+		if (await CheckWinCondition(turnState))
 		{
 			return;
 		}
@@ -1202,7 +1663,7 @@ public class CombatManager
 			if (LocalContext.NetId.HasValue)
 			{
 				HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item, LocalContext.NetId.Value, GameActionType.Combat);
-				Task task2 = DoTurnEnd(item, playerChoiceContext);
+				Task task2 = DoTurnEnd(turnState, item, playerChoiceContext);
 				await playerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task2);
 				playerEndContexts.Add(playerChoiceContext);
 			}
@@ -1211,15 +1672,19 @@ public class CombatManager
 		{
 			await item2.WaitForCompletion();
 		}
-		if (_state != null)
+		if (await CheckWinCondition(turnState))
+		{
+			return;
+		}
+		if (!turnState.Ct.IsCancellationRequested)
 		{
 			foreach (Player item3 in playersEndingTurn)
 			{
-				await Hook.BeforeFlush(_state, item3);
+				await Hook.BeforeFlush(turnState.State, item3);
 			}
 		}
 		RunManager.Instance.ChecksumTracker.GenerateChecksum("After player turn phase one end", null);
-		await CheckWinCondition();
+		await CheckWinCondition(turnState);
 	}
 
 	/// <summary>
@@ -1227,15 +1692,17 @@ public class CombatManager
 	/// If player choice occurs during this method, it uses the passed choice context. This way, each player's turn end
 	/// runs independently of all others.
 	/// </summary>
-	private async Task DoTurnEnd(Player player, PlayerChoiceContext choiceContext)
+	/// <param name="turnState">The turn state for the current combat.</param>
+	/// <param name="player">The player whose turn is ending.</param>
+	/// <param name="choiceContext">The context to use for any player choices.</param>
+	private async Task DoTurnEnd(CombatTurnState turnState, Player player, PlayerChoiceContext choiceContext)
 	{
 		await player.PlayerCombatState.OrbQueue.BeforeTurnEnd(choiceContext);
-		if (IsOverOrEnding)
+		if (!turnState.IsInProgress || IsCombatEnding(turnState))
 		{
 			return;
 		}
 		CardPile pile = PileType.Hand.GetPile(player);
-		PileType.Discard.GetPile(player);
 		List<CardModel> turnEndCards = new List<CardModel>();
 		List<CardModel> list = new List<CardModel>();
 		foreach (CardModel card in pile.Cards)
@@ -1253,61 +1720,162 @@ public class CombatManager
 		{
 			await CardCmd.Exhaust(choiceContext, item, causedByEthereal: true);
 		}
-		foreach (CardModel item2 in turnEndCards)
-		{
-			await item2.OnTurnEndInHandWrapper(choiceContext);
-		}
+		await DoTurnEndCards(turnState, turnEndCards, choiceContext);
 	}
 
-	private async Task EndEnemyTurnInternal()
+	/// <summary>
+	/// Invokes turn end effects on all cards in hand with such an effect.
+	/// Does some timing trickery so that the cards don't fly in one-by-one with linear timing.
+	/// Player choices can happen in between turn end resolutions. It is very rare, so I've ignored it for now, but the
+	/// UX for it is a little weird. Ideally it should pause the entire sequence.
+	/// </summary>
+	private async Task DoTurnEndCards(CombatTurnState turnState, List<CardModel> turnEndCards, PlayerChoiceContext choiceContext)
 	{
-		List<Creature> enemies = _state.CreaturesOnCurrentSide.ToList();
-		await Hook.BeforeTurnEnd(_state, _state.CurrentSide, enemies);
-		foreach (Player player in _state.Players)
+		Task task = null;
+		List<Task> list = new List<Task>();
+		float num = 0f;
+		int num2 = 0;
+		foreach (CardModel turnEndCard in turnEndCards)
+		{
+			Task task2 = AddTurnEndCardToPlayPileWithDelay(turnEndCard, num);
+			Task waitTask = task2;
+			if (task != null)
+			{
+				global::_003C_003Ey__InlineArray2<Task> buffer = default(global::_003C_003Ey__InlineArray2<Task>);
+				buffer[0] = task2;
+				buffer[1] = task;
+				waitTask = Task.WhenAll(buffer);
+			}
+			if (!turnEndCard.HasBeenRemovedFromState)
+			{
+				Task<CardPileAddResult?> task3 = ResolveTurnEndCardEffects(turnEndCard, choiceContext, waitTask);
+				Task item = TweenTurnEndCardToResultPile(turnState, task3);
+				list.Add(item);
+				task = task3;
+				float num3 = 1f - (float)num2 / ((float)num2 + 3f);
+				float num4 = ((!LocalContext.IsMine(turnEndCard)) ? 0.3f : ((SaveManager.Instance.PrefsSave.FastMode == FastModeType.Fast) ? 0.4f : 0.8f));
+				num += num4 * num3;
+				num2++;
+			}
+		}
+		await Task.WhenAll(list);
+	}
+
+	private async Task AddTurnEndCardToPlayPileWithDelay(CardModel card, float delay)
+	{
+		await Cmd.Wait(delay);
+		await CardPileCmd.Add(card, PileType.Play);
+	}
+
+	private async Task<CardPileAddResult?> ResolveTurnEndCardEffects(CardModel card, PlayerChoiceContext choiceContext, Task waitTask)
+	{
+		await waitTask;
+		await card.OnTurnEndInHandWrapper(choiceContext);
+		return (!card.Keywords.Contains(CardKeyword.Ethereal)) ? new CardPileAddResult?(await CardPileCmd.Add(card, PileType.Discard.GetPile(card.Owner), CardPilePosition.Bottom, null, skipVisuals: true)) : (await CardCmd.Exhaust(choiceContext, card, causedByEthereal: true, skipVisuals: true));
+	}
+
+	private async Task TweenTurnEndCardToResultPile(CombatTurnState turnState, Task<CardPileAddResult?> resultTask)
+	{
+		CardPileAddResult? cardPileAddResult = await resultTask;
+		if (cardPileAddResult.HasValue && cardPileAddResult.GetValueOrDefault().success)
+		{
+			await AwaitTurnEndCardTween(turnState, cardPileAddResult.Value);
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+	}
+
+	private Task<TweenOutcome> AwaitTurnEndCardTween(CombatTurnState turnState, CardPileAddResult finalAddResult)
+	{
+		Func<CombatTurnState, Task<TweenOutcome>> turnEndCardTweenWaitForTest = TurnEndCardTweenWaitForTest;
+		if (turnEndCardTweenWaitForTest != null)
+		{
+			return turnEndCardTweenWaitForTest(turnState);
+		}
+		Tween item = CardPileCmd.GetTweenForCardsChangingPiles(new global::_003C_003Ez__ReadOnlySingleElementList<CardPileAddResult>(finalAddResult), fromSilentAdd: true).Item1;
+		if (item != null)
+		{
+			NCombatRoom instance = NCombatRoom.Instance;
+			if (instance != null)
+			{
+				return item.AwaitFinished(instance, turnState.Ct);
+			}
+		}
+		return Task.FromResult(TweenOutcome.Finished);
+	}
+
+	private async Task EndEnemyTurnInternal(CombatTurnState turnState)
+	{
+		List<Creature> enemies = turnState.State.CreaturesOnCurrentSide.ToList();
+		await Hook.BeforeSideTurnEnd(turnState.State, turnState.State.CurrentSide, enemies);
+		foreach (Player player in turnState.State.Players)
 		{
 			player.PlayerCombatState.EndOfTurnCleanup();
 		}
-		await Hook.AfterTurnEnd(_state, _state.CurrentSide, enemies);
+		await Hook.AfterSideTurnEnd(turnState.State, turnState.State.CurrentSide, enemies);
 	}
 
-	private async Task AfterAllPlayersReadyToBeginEnemyTurn(Func<Task>? actionDuringEnemyTurn = null)
+	private async Task AfterAllPlayersReadyToBeginEnemyTurn(CombatTurnState turnState)
 	{
-		if (IsInProgress)
+		if (!turnState.IsInProgress)
 		{
-			CombatCt.ThrowIfCancellationRequested();
-			EndingPlayerTurnPhaseTwo = true;
+			return;
+		}
+		turnState.Ct.ThrowIfCancellationRequested();
+		turnState.EndingPlayerTurnPhaseTwo = true;
+		try
+		{
 			RunManager.Instance.ActionQueueSynchronizer.SetCombatState(ActionSynchronizerCombatState.NotPlayPhase);
-			this.AboutToSwitchToEnemyTurn?.Invoke(_state);
+			this.AboutToSwitchToEnemyTurn?.Invoke(turnState.State);
 			await Task.Yield();
-			await EndPlayerTurnPhaseTwoInternal();
-			await SwitchFromPlayerToEnemySide(actionDuringEnemyTurn);
-			EndingPlayerTurnPhaseTwo = false;
+			if (turnState.IsInProgress && !turnState.Ct.IsCancellationRequested && turnState.State.CurrentSide == CombatSide.Player)
+			{
+				await EndPlayerTurnPhaseTwoInternal(turnState);
+				await SwitchFromPlayerToEnemySide(turnState);
+			}
+		}
+		finally
+		{
+			turnState.EndingPlayerTurnPhaseTwo = false;
 		}
 	}
 
 	/// <summary>
-	/// DO NOT CALL THIS unless you're in this class or ModelTest.
-	/// This does all the player state cleanup for the end of their turn. It must not call any hooks that might cause
+	/// Does all the player state cleanup for the end of their turn. It must not call any hooks that might cause
 	/// player choices to occur.
+	/// Prefer ModelTest.PassToEnemyTurn, whose doc comment covers when the bypass is safe.
 	/// </summary>
 	public async Task EndPlayerTurnPhaseTwoInternal()
 	{
-		if (_state.CurrentSide != CombatSide.Player)
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
 		{
-			throw new InvalidOperationException($"EndPlayerTurnPhaseTwo called while the current side is {_state.CurrentSide}!");
+			await EndPlayerTurnPhaseTwoInternal(turnState);
+		}
+	}
+
+	private async Task EndPlayerTurnPhaseTwoInternal(CombatTurnState turnState)
+	{
+		turnState.Ct.ThrowIfCancellationRequested();
+		if (turnState.State.CurrentSide != CombatSide.Player)
+		{
+			throw new InvalidOperationException($"EndPlayerTurnPhaseTwo called while the current side is {turnState.State.CurrentSide}!");
 		}
 		List<Player> playersEndingTurn;
-		using (_playerReadyLock.EnterScope())
+		using (turnState.ReadyLock.EnterScope())
 		{
-			playersEndingTurn = ((_playersTakingExtraTurn.Count > 0) ? _playersTakingExtraTurn.ToList() : _state.Players.ToList());
+			playersEndingTurn = ((turnState.PlayersTakingExtraTurn.Count > 0) ? turnState.PlayersTakingExtraTurn.ToList() : turnState.State.Players.ToList());
 		}
 		List<HookPlayerChoiceContext> flushPlayerHandContexts = new List<HookPlayerChoiceContext>();
 		foreach (Player item in playersEndingTurn)
 		{
-			if (_state != null && LocalContext.NetId.HasValue)
+			if (turnState.Ct.IsCancellationRequested)
+			{
+				return;
+			}
+			if (LocalContext.NetId.HasValue)
 			{
 				HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item, LocalContext.NetId.Value, GameActionType.CombatPlayPhaseOnly);
-				Task task = FlushPlayerHand(item, playerChoiceContext);
+				Task task = FlushPlayerHand(turnState, item, playerChoiceContext);
 				await playerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 				flushPlayerHandContexts.Add(playerChoiceContext);
 			}
@@ -1316,26 +1884,26 @@ public class CombatManager
 		{
 			await item2.WaitForCompletion();
 		}
-		if (_state != null)
+		if (!turnState.Ct.IsCancellationRequested)
 		{
-			await Hook.AfterTurnEnd(_state, _state.CurrentSide, playersEndingTurn.Select((Player p) => p.Creature));
-			CombatCt.ThrowIfCancellationRequested();
+			await Hook.AfterSideTurnEnd(turnState.State, turnState.State.CurrentSide, playersEndingTurn.Select((Player p) => p.Creature));
+			turnState.Ct.ThrowIfCancellationRequested();
 		}
 		RunManager.Instance.ChecksumTracker.GenerateChecksum("after player turn phase two end", null);
 	}
 
-	private async Task FlushPlayerHand(Player player, HookPlayerChoiceContext playerChoiceContext)
+	private async Task FlushPlayerHand(CombatTurnState turnState, Player player, HookPlayerChoiceContext playerChoiceContext)
 	{
 		if (player.Creature.IsDead)
 		{
 			return;
 		}
-		if (_state == null || player.PlayerCombatState == null)
+		if (player.PlayerCombatState == null)
 		{
-			Log.Warn($"Combat state is null. Assuming that the run has been cleaned up. (CombatState: {_state} PlayerCombatState: {player.PlayerCombatState})");
+			Log.Warn($"Player combat state is null. Assuming that the run has been cleaned up. (Player: {player.NetId})");
 			return;
 		}
-		CombatState state = _state;
+		CombatState state = turnState.State;
 		List<CardModel> cardsToFlush = new List<CardModel>();
 		List<CardModel> cardsToRetain = new List<CardModel>();
 		bool flag = Hook.ShouldFlush(state, player);
@@ -1353,89 +1921,87 @@ public class CombatManager
 		if (cardsToFlush.Count > 0)
 		{
 			await CardPileCmd.Add(cardsToFlush, PileType.Discard);
-			CombatCt.ThrowIfCancellationRequested();
+			turnState.Ct.ThrowIfCancellationRequested();
 		}
 		await Hook.AfterFlush(state, player, playerChoiceContext, cardsToFlush, cardsToRetain);
-		CombatCt.ThrowIfCancellationRequested();
+		turnState.Ct.ThrowIfCancellationRequested();
 		player.PlayerCombatState.EndOfTurnCleanup();
 	}
 
 	/// <summary>
-	/// DO NOT CALL THIS unless you're in this class or ModelTest.
-	/// This switches from the player side to the enemy side, handling extra player turns if necessary.
+	/// Switches from the player side to the enemy side, handling extra player turns if necessary. It only performs the
+	/// switch; the turn loop runs the turn on the new side.
 	/// </summary>
-	/// <param name="actionDuringEnemyTurn">Optional action to execute during the enemy turn. This is useful for tests.</param>
-	public async Task SwitchFromPlayerToEnemySide(Func<Task>? actionDuringEnemyTurn = null)
+	private async Task SwitchFromPlayerToEnemySide(CombatTurnState turnState)
 	{
-		if (_state == null)
+		if (turnState.Ct.IsCancellationRequested)
 		{
 			return;
 		}
-		List<Player> list;
-		using (_playerReadyLock.EnterScope())
+		List<(Player, AbstractModel)> list = new List<(Player, AbstractModel)>();
+		using (turnState.ReadyLock.EnterScope())
 		{
-			_playersTakingExtraTurn.Clear();
-			foreach (Player player in _state.Players)
+			turnState.PlayersTakingExtraTurn.Clear();
+			foreach (Player player2 in turnState.State.Players)
 			{
-				if (Hook.ShouldTakeExtraTurn(_state, player))
+				if (Hook.ShouldTakeExtraTurn(turnState.State, player2, out AbstractModel source))
 				{
-					Log.Info($"Player {player.NetId} ({player.Character.Id.Entry}) is taking an extra turn");
-					_playersTakingExtraTurn.Add(player);
+					Log.Info($"Player {player2.NetId} ({player2.Character.Id.Entry}) is taking an extra turn due to {source}");
+					turnState.PlayersTakingExtraTurn.Add(player2);
+					list.Add((player2, source));
 				}
 			}
-			list = _playersTakingExtraTurn.ToList();
 		}
-		SwitchSides();
-		foreach (Player item in list)
+		SwitchSides(turnState);
+		foreach (var (player, source2) in list)
 		{
-			if (_state == null)
+			if (turnState.Ct.IsCancellationRequested)
 			{
 				return;
 			}
-			await Hook.AfterTakingExtraTurn(_state, item);
+			await Hook.AfterTakingExtraTurn(turnState.State, player, source2);
 		}
-		await WaitForUnpause();
-		await StartTurn(actionDuringEnemyTurn);
+		await WaitForUnpause(turnState);
 	}
 
-	private void SwitchSides()
+	private void SwitchSides(CombatTurnState turnState)
 	{
-		if (_state == null)
+		if (turnState.Ct.IsCancellationRequested)
 		{
 			return;
 		}
 		bool flag;
-		using (_playerReadyLock.EnterScope())
+		using (turnState.ReadyLock.EnterScope())
 		{
-			flag = _playersTakingExtraTurn.Count > 0;
+			flag = turnState.PlayersTakingExtraTurn.Count > 0;
 		}
-		if (_state.CurrentSide == CombatSide.Player && !flag)
+		if (turnState.State.CurrentSide == CombatSide.Player && !flag)
 		{
-			_state.CurrentSide = CombatSide.Enemy;
+			turnState.State.CurrentSide = CombatSide.Enemy;
 		}
 		else
 		{
-			_state.CurrentSide = CombatSide.Player;
+			turnState.State.CurrentSide = CombatSide.Player;
 			IReadOnlyList<Player> readOnlyList;
 			if (flag)
 			{
-				readOnlyList = _playersTakingExtraTurn;
+				readOnlyList = turnState.PlayersTakingExtraTurn;
 			}
 			else
 			{
-				readOnlyList = _state.Players;
-				_state.RoundNumber++;
+				readOnlyList = turnState.State.Players;
+				turnState.State.RoundNumber++;
 			}
 			foreach (Player item in readOnlyList)
 			{
 				item.PlayerCombatState.IncrementTurnNumber();
 			}
 		}
-		foreach (Creature creature in _state.Creatures)
+		foreach (Creature creature in turnState.State.Creatures)
 		{
 			creature.OnSideSwitch();
 		}
-		this.TurnEnded?.Invoke(_state);
+		this.TurnEnded?.Invoke(turnState.State);
 	}
 
 	/// <summary>
@@ -1467,23 +2033,40 @@ public class CombatManager
 	/// </summary>
 	public bool IsPartOfPlayerTurn(Player player)
 	{
-		CombatState? state = _state;
-		if (state == null || state.CurrentSide != CombatSide.Player)
+		CombatTurnState turnState = _turnState;
+		if (turnState == null || turnState.State.CurrentSide != CombatSide.Player)
 		{
 			return false;
 		}
-		if (_playersTakingExtraTurn.Count == 0)
+		using (turnState.ReadyLock.EnterScope())
 		{
-			return true;
+			if (turnState.PlayersTakingExtraTurn.Count == 0)
+			{
+				return true;
+			}
+			return turnState.PlayersTakingExtraTurn.Contains(player);
 		}
-		return _playersTakingExtraTurn.Contains(player);
 	}
 
-	public async Task WaitForUnpause()
+	public Task WaitForUnpause()
+	{
+		CombatTurnState turnState = _turnState;
+		if (turnState != null)
+		{
+			return WaitForUnpause(turnState);
+		}
+		return Task.CompletedTask;
+	}
+
+	/// <summary>
+	/// Turn-state-relative variant for the turn loop: waits against this turn state's combat, so a stale turn state
+	/// resumes (and then dies at its next token check) instead of waiting on the current combat's pause state.
+	/// </summary>
+	private async Task WaitForUnpause(CombatTurnState turnState)
 	{
 		if (!NonInteractiveMode.IsActive)
 		{
-			while (IsPaused && IsInProgress && _state != null)
+			while (IsPaused && turnState.IsLive)
 			{
 				await NGame.Instance.AwaitProcessFrame();
 			}

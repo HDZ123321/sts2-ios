@@ -166,7 +166,7 @@ public class NStatEntry : NClickableControl
 				NHoverTipSet.CreateAndShow(this, _hoverTip)?.SetGlobalPosition(new Vector2(base.GlobalPosition.X + 532f, base.GlobalPosition.Y));
 			}
 		}
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_controllerFocusReticle.OnSelect();
 		}

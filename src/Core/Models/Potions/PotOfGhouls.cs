@@ -16,7 +16,7 @@ public sealed class PotOfGhouls : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new CardsVar(2));
 
@@ -24,6 +24,7 @@ public sealed class PotOfGhouls : PotionModel
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		await Soul.CreateInHand(base.Owner, base.DynamicVars.Cards.IntValue, base.Owner.Creature.CombatState);
+		PotionModel.AssertValidForTargetedPotion(target);
+		await Soul.CreateInHand(target.Player, base.DynamicVars.Cards.IntValue, target.CombatState, base.Owner);
 	}
 }

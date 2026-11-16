@@ -80,7 +80,7 @@ public sealed class ToyBox : RelicModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new DynamicVar("Relics", 4m),
+		new DynamicVar("Relics", 5m),
 		new DynamicVar("Combats", 3m)
 	});
 
@@ -89,7 +89,7 @@ public sealed class ToyBox : RelicModel
 		List<Reward> list = new List<Reward>();
 		for (int i = 0; i < base.DynamicVars["Relics"].IntValue; i++)
 		{
-			RelicModel relicModel = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
+			RelicModel relicModel = RelicFactory.PullNextRelicForRewardFromFront(base.Owner).ToMutable();
 			relicModel.IsWax = true;
 			list.Add(new RelicReward(relicModel, base.Owner));
 		}
@@ -98,6 +98,10 @@ public sealed class ToyBox : RelicModel
 
 	public override async Task AfterCombatEnd(CombatRoom __)
 	{
+		if (IsUsedUp)
+		{
+			return;
+		}
 		CombatsSeen++;
 		if (CombatsSeen % base.DynamicVars["Combats"].IntValue == 0)
 		{

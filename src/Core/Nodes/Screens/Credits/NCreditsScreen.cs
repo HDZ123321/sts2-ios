@@ -238,7 +238,7 @@ public class NCreditsScreen : Control, IScreenContext
 
 	public override void _Ready()
 	{
-		NHotkeyManager.Instance.PushHotkeyReleasedBinding(MegaInput.back, CloseScreenDebug);
+		NHotkeyManager.Instance.PushHotkeyReleasedBinding(MegaInput.back, CloseScreenDebug, 0L);
 		_screenContents = GetNode<Control>("%ScreenContents");
 		_backButton = GetNode<NBackButton>("BackButton");
 		_screenContents.Modulate = StsColors.transparentWhite;
@@ -320,12 +320,16 @@ public class NCreditsScreen : Control, IScreenContext
 		(string, string) tuple = SplitTwoColumn(new LocString("credits", "LOC_ZHS.names").GetRawText());
 		GetNode<MegaRichTextLabel>("%zhsRoles").Text = tuple.Item1;
 		GetNode<MegaRichTextLabel>("%zhsNames").Text = tuple.Item2;
+		GetNode<MegaLabel>("%zhtHeader").Text = new LocString("credits", "LOC_ZHT.header").GetRawText();
+		GetNode<MegaRichTextLabel>("%zhtNames").Text = new LocString("credits", "LOC_ZHT.names").GetRawText();
 		GetNode<MegaLabel>("%fraHeader").Text = new LocString("credits", "LOC_FRA.header").GetRawText();
 		tuple = SplitTwoColumn(new LocString("credits", "LOC_FRA.names").GetRawText());
 		GetNode<MegaRichTextLabel>("%fraRoles").Text = tuple.Item1;
 		GetNode<MegaRichTextLabel>("%fraNames").Text = tuple.Item2;
 		GetNode<MegaLabel>("%deuHeader").Text = new LocString("credits", "LOC_DEU.header").GetRawText();
 		GetNode<MegaRichTextLabel>("%deuNames").Text = new LocString("credits", "LOC_DEU.names").GetRawText();
+		GetNode<MegaLabel>("%indHeader").Text = new LocString("credits", "LOC_IND.header").GetRawText();
+		GetNode<MegaRichTextLabel>("%indNames").Text = new LocString("credits", "LOC_IND.names").GetRawText();
 		GetNode<MegaLabel>("%itaHeader").Text = new LocString("credits", "LOC_ITA.header").GetRawText();
 		GetNode<MegaRichTextLabel>("%itaTeam").Text = new LocString("credits", "LOC_ITA.team").GetRawText();
 		tuple = SplitTwoColumn(new LocString("credits", "LOC_ITA.names").GetRawText());
@@ -416,7 +420,7 @@ public class NCreditsScreen : Control, IScreenContext
 	public override void _EnterTree()
 	{
 		NHotkeyManager.Instance.AddBlockingScreen(this);
-		NHotkeyManager.Instance.PushHotkeyReleasedBinding(MegaInput.cancel, CloseScreenDebug);
+		NHotkeyManager.Instance.PushHotkeyReleasedBinding(MegaInput.cancel, CloseScreenDebug, 0L);
 	}
 
 	public override void _ExitTree()
@@ -449,7 +453,7 @@ public class NCreditsScreen : Control, IScreenContext
 		_tween?.Kill();
 		_tween = CreateTween().SetParallel();
 		_tween.TweenProperty(_screenContents, "modulate:a", 0f, 1.0);
-		if (await _tween.AwaitFinished(this))
+		if (await _tween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			NModalContainer.Instance.Clear();
 		}

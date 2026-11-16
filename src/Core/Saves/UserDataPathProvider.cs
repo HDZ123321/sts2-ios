@@ -1,4 +1,3 @@
-using System.IO;
 using Godot;
 using MegaCrit.Sts2.Core.Platform;
 
@@ -31,16 +30,31 @@ public static class UserDataPathProvider
 		PlatformType platformType = platformOverride ?? PlatformUtil.PrimaryPlatform;
 		ulong value = userIdOverride ?? PlatformUtil.GetLocalPlayerId(platformType);
 		string platformDirectoryName = GetPlatformDirectoryName(platformType);
-		if (dataType == null)
+		string text = $"user://{platformDirectoryName}/{value}";
+		if (dataType != null)
 		{
-			return $"user://{platformDirectoryName}/{value}";
+			text = text.PathJoin(dataType);
 		}
-		return $"user://{platformDirectoryName}/{value}/{dataType}";
+		return text;
+	}
+
+	public static string GetAccountDir(bool? forceModState = null)
+	{
+		if (!(forceModState ?? IsRunningModded))
+		{
+			return "";
+		}
+		return "modded";
 	}
 
 	public static string GetProfileDir(int profileId)
 	{
-		return Path.Combine(IsRunningModded ? "modded/" : "", $"profile{profileId}");
+		return GetProfileDir(profileId, null);
+	}
+
+	public static string GetProfileDir(int profileId, bool? forceModState)
+	{
+		return GetAccountDir(forceModState).PathJoin($"profile{profileId}");
 	}
 
 	public static string GetLegacyPreAccountPath(string dataType)

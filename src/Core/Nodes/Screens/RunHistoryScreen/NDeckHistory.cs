@@ -38,6 +38,16 @@ public class NDeckHistory : VBoxContainer
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
+		/// Cached name for the 'OnEntryFocused' method.
+		/// </summary>
+		public static readonly StringName OnEntryFocused = "OnEntryFocused";
+
+		/// <summary>
+		/// Cached name for the 'OnEntryUnfocused' method.
+		/// </summary>
+		public static readonly StringName OnEntryUnfocused = "OnEntryUnfocused";
+
+		/// <summary>
 		/// Cached name for the 'ShowEntry' method.
 		/// </summary>
 		public static readonly StringName ShowEntry = "ShowEntry";
@@ -119,6 +129,8 @@ public class NDeckHistory : VBoxContainer
 	{
 		_headerLabel = GetNode<MegaRichTextLabel>("Header");
 		_cardContainer = GetNode<Control>("%CardContainer");
+		this.ApplyRtlLayout();
+		_cardContainer.GetParent<MarginContainer>().ApplyRtlMargins();
 	}
 
 	public void LoadDeck(Player player, IEnumerable<SerializableCard> cards)
@@ -171,20 +183,24 @@ public class NDeckHistory : VBoxContainer
 			CardModel cardModel = CardModel.FromSerializable(item.Key);
 			cardModel.Owner = player;
 			_allCards.Add(cardModel);
-			NDeckHistoryEntry entry = NDeckHistoryEntry.Create(cardModel, item.Count(), from c in item
+			NDeckHistoryEntry nDeckHistoryEntry = NDeckHistoryEntry.Create(cardModel, item.Count(), from c in item
 				where c.FloorAddedToDeck.HasValue
 				select c.FloorAddedToDeck.Value);
-			entry.Connect(NDeckHistoryEntry.SignalName.Clicked, Callable.From<NDeckHistoryEntry>(ShowEntry));
-			entry.Connect(NClickableControl.SignalName.Focused, Callable.From<NClickableControl>(delegate
-			{
-				EmitSignal(SignalName.Hovered, entry);
-			}));
-			entry.Connect(NClickableControl.SignalName.Unfocused, Callable.From<NClickableControl>(delegate
-			{
-				EmitSignal(SignalName.Unhovered, entry);
-			}));
-			_cardContainer.AddChildSafely(entry);
+			nDeckHistoryEntry.Connect(NDeckHistoryEntry.SignalName.Clicked, Callable.From<NDeckHistoryEntry>(ShowEntry));
+			nDeckHistoryEntry.Connect(NClickableControl.SignalName.Focused, Callable.From<NDeckHistoryEntry>(OnEntryFocused));
+			nDeckHistoryEntry.Connect(NClickableControl.SignalName.Unfocused, Callable.From<NDeckHistoryEntry>(OnEntryUnfocused));
+			_cardContainer.AddChildSafely(nDeckHistoryEntry);
 		}
+	}
+
+	private void OnEntryFocused(NDeckHistoryEntry entry)
+	{
+		EmitSignal(SignalName.Hovered, entry);
+	}
+
+	private void OnEntryUnfocused(NDeckHistoryEntry entry)
+	{
+		EmitSignal(SignalName.Unhovered, entry);
 	}
 
 	private void ShowEntry(NDeckHistoryEntry entry)
@@ -200,8 +216,16 @@ public class NDeckHistory : VBoxContainer
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(2);
+		List<MethodInfo> list = new List<MethodInfo>(4);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnEntryFocused, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "entry", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.OnEntryUnfocused, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "entry", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.ShowEntry, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "entry", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -219,6 +243,18 @@ public class NDeckHistory : VBoxContainer
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.OnEntryFocused && args.Count == 1)
+		{
+			OnEntryFocused(VariantUtils.ConvertTo<NDeckHistoryEntry>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnEntryUnfocused && args.Count == 1)
+		{
+			OnEntryUnfocused(VariantUtils.ConvertTo<NDeckHistoryEntry>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.ShowEntry && args.Count == 1)
 		{
 			ShowEntry(VariantUtils.ConvertTo<NDeckHistoryEntry>(in args[0]));
@@ -233,6 +269,14 @@ public class NDeckHistory : VBoxContainer
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName.OnEntryFocused)
+		{
+			return true;
+		}
+		if (method == MethodName.OnEntryUnfocused)
 		{
 			return true;
 		}

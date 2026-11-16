@@ -5,11 +5,15 @@ namespace MegaCrit.Sts2.Core.Helpers;
 
 public static class SeedHelper
 {
+	/// <summary>
+	/// Possible characters for the seed.
+	/// O and I are not included. They are replaced by 0 and 1.
+	/// </summary>
 	private const string _characters = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-	public const int seedDefaultLength = 10;
+	public const int seedDefaultLength = 12;
 
-	public static string GetRandomSeed(Rng? rng = null, int length = 10)
+	public static string GetRandomSeed(Rng? rng = null, int length = 12)
 	{
 		if (rng == null)
 		{

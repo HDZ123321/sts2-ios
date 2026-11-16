@@ -1,17 +1,35 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace MegaCrit.Sts2.Core.Models.Powers;
 
 public sealed class TankPower : PowerModel
 {
+	private const string _damageIncreaseKey = "DamageIncrease";
+
+	private const string _damageDecreaseKey = "DamageDecrease";
+
+	public const decimal damageIncrease = 1.5m;
+
+	public const decimal damageDecrease = 0.5m;
+
 	public override PowerType Type => PowerType.Buff;
 
 	public override PowerStackType StackType => PowerStackType.Single;
+
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
+	{
+		new DynamicVar("DamageIncrease", 1.5m),
+		new DynamicVar("DamageDecrease", 0.5m)
+	});
 
 	public override async Task AfterApplied(Creature? applier, CardModel? cardSource)
 	{
@@ -24,7 +42,22 @@ public sealed class TankPower : PowerModel
 		}
 	}
 
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override async Task AfterRemoved(Creature oldOwner)
+	{
+		if (oldOwner.CombatState == null)
+		{
+			return;
+		}
+		List<GuardedPower> list = (from g in oldOwner.CombatState.GetTeammatesOf(oldOwner).SelectMany((Creature t) => t.GetPowerInstances<GuardedPower>())
+			where g.Applier == oldOwner
+			select g).ToList();
+		foreach (GuardedPower item in list)
+		{
+			await PowerCmd.Remove(item);
+		}
+	}
+
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (target != base.Owner)
 		{
@@ -34,6 +67,6 @@ public sealed class TankPower : PowerModel
 		{
 			return 1m;
 		}
-		return 2m;
+		return base.DynamicVars["DamageIncrease"].BaseValue;
 	}
 }

@@ -15,7 +15,7 @@ namespace MegaCrit.Sts2.Core.Nodes.Screens.CardLibrary;
 
 /// <summary>
 /// The current pool the player is viewing in the Card Library.
-/// Unlike the other tickboxes, this one is a radio-buttion style.
+/// Unlike the other tickboxes, this one is a radio-button style.
 /// Clicking on a pool filter will deselect the others. If this filter
 /// is already active, then you can't click on it.
 /// </summary>
@@ -198,7 +198,7 @@ public class NCardPoolFilter : NButton
 		_tween?.Kill();
 		_tween = CreateTween().SetParallel();
 		_tween.TweenProperty(_image, "scale", (_isSelected ? _enabledScale : _disabledScale) * 1.2f, 0.05);
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_controllerSelectionReticle.OnSelect();
 		}

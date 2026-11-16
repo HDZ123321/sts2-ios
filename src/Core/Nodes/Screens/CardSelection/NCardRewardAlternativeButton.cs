@@ -6,7 +6,6 @@ using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Helpers;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.addons.mega_text;
 
@@ -182,14 +181,19 @@ public class NCardRewardAlternativeButton : NButton
 		{
 			_label.SetTextAutoSize(_optionName);
 		}
-		_controllerHotkeyIcon.Texture = NInputManager.Instance.GetHotkeyIcon(Hotkeys.First());
+		_hotkeyIcon.UpdateInput(Hotkeys.First());
 	}
 
 	public static NCardRewardAlternativeButton Create(string optionName, string hotkey)
 	{
+		return Create(optionName, new string[1] { hotkey });
+	}
+
+	public static NCardRewardAlternativeButton Create(string optionName, string[] hotkeys)
+	{
 		NCardRewardAlternativeButton nCardRewardAlternativeButton = PreloadManager.Cache.GetScene(ScenePath).Instantiate<NCardRewardAlternativeButton>(PackedScene.GenEditState.Disabled);
 		nCardRewardAlternativeButton._optionName = optionName;
-		nCardRewardAlternativeButton._hotkeys = new string[1] { hotkey };
+		nCardRewardAlternativeButton._hotkeys = hotkeys;
 		return nCardRewardAlternativeButton;
 	}
 

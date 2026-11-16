@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace MegaCrit.Sts2.Core.Random;
 
@@ -12,6 +14,8 @@ namespace MegaCrit.Sts2.Core.Random;
 /// </summary>
 public class Rng
 {
+	private int _counter;
+
 	private readonly MegaRandom _random;
 
 	/// <summary>
@@ -19,18 +23,27 @@ public class Rng
 	/// Good for when we need to randomize things that don't impact gameplay.
 	/// We use this instead of the GD.Rand functions because they're extremely slow when called from C#.
 	/// </summary>
-	public static Rng Chaotic { get; } = new Rng((uint)DateTimeOffset.Now.ToUnixTimeSeconds());
+	public static Rng Chaotic { get; } = new Rng(CreateChaoticSeed());
 
-	public int Counter { get; private set; }
-
-	public uint Seed { get; }
-
-	public Rng(uint seed = 0u, int counter = 0)
+	/// <summary>
+	/// Returns a seed from the operating system's cryptographic random source. Use this wherever a generator must
+	/// differ between game instances. Do not seed from the clock: two game instances launched in the same second
+	/// would then draw the same unseeded run seed.
+	/// </summary>
+	public static ulong CreateChaoticSeed()
 	{
-		Counter = 0;
-		Seed = seed;
+		return BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
+	}
+
+	public Rng(ulong seed = 0uL)
+	{
 		_random = new MegaRandom(seed);
-		FastForwardCounter(counter);
+	}
+
+	public Rng(SerializableRng serializable)
+	{
+		_counter = serializable.counter;
+		_random = new MegaRandom(serializable);
 	}
 
 	/// <summary>
@@ -44,32 +57,24 @@ public class Rng
 	/// Because it only uses the three things above, if the player sees the same piece of content again this run, the
 	/// RNG will return the same results. If that is a possibility, pass in a <paramref name="mixin" />.
 	/// </summary>
-	public Rng(Player player, ModelId id, uint mixin = 0u, int counter = 0)
-		: this((uint)((int)player.RunState.Rng.Seed + player.RunState.GetPlayerSlotIndex(player) + StringHelper.GetDeterministicHashCode(id.Entry)) + mixin, counter)
+	public Rng(Player player, ModelId id, ulong mixin = 0uL)
+		: this((ulong)((long)player.RunState.Rng.Seed + (long)player.RunState.GetPlayerSlotIndex(player) + (long)StringHelper.GetDeterministicHashCode(id.Entry)) + mixin)
 	{
 	}
 
-	public Rng(uint seed, string name)
-		: this(seed + (uint)StringHelper.GetDeterministicHashCode(name))
+	public Rng(ulong seed, string name)
+		: this(seed + StringHelper.GetDeterministicHashCode(name))
 	{
 	}
 
 	/// <summary>
-	/// Fast-forwards the counter of this Rng.
-	/// The counter is the number of times this Rng has generated a number.
+	/// Load RNG state from serializable.
+	/// Use this when you need to keep the old instance's references intact.
 	/// </summary>
-	/// <param name="targetCount">Count to fast-forward to.</param>
-	public void FastForwardCounter(int targetCount)
+	public void LoadFromSerializable(SerializableRng serializable)
 	{
-		if (Counter > targetCount)
-		{
-			throw new InvalidOperationException($"Cannot fast-forward an Rng counter to a lower number (current = {Counter}, target = {targetCount})");
-		}
-		while (Counter < targetCount)
-		{
-			Counter++;
-			_random.NextInt();
-		}
+		_counter = serializable.counter;
+		_random.Reinitialise(serializable);
 	}
 
 	/// <summary>
@@ -77,7 +82,7 @@ public class Rng
 	/// </summary>
 	public bool NextBool()
 	{
-		Counter++;
+		_counter++;
 		return _random.Next(2) == 0;
 	}
 
@@ -88,7 +93,7 @@ public class Rng
 	/// <returns>Random integer.</returns>
 	public int NextInt(int maxExclusive = int.MaxValue)
 	{
-		Counter++;
+		_counter++;
 		return _random.Next(maxExclusive);
 	}
 
@@ -104,7 +109,7 @@ public class Rng
 		{
 			throw new ArgumentOutOfRangeException("minInclusive", "Minimum must be lower than maximum.");
 		}
-		Counter++;
+		_counter++;
 		return _random.Next(minInclusive, maxExclusive);
 	}
 
@@ -130,10 +135,38 @@ public class Rng
 		{
 			throw new ArgumentOutOfRangeException("minInclusive", "Minimum must be lower than maximum.");
 		}
-		Counter++;
+		_counter++;
 		double num = _random.NextDouble();
 		double num2 = maxExclusive - minInclusive;
 		uint num3 = (uint)(num * num2);
+		return minInclusive + num3;
+	}
+
+	public ulong NextUnsignedLong()
+	{
+		_counter++;
+		return _random.NextULong();
+	}
+
+	public ulong NextUnsignedLong(ulong maxExclusive)
+	{
+		if (maxExclusive == ulong.MaxValue)
+		{
+			return NextUnsignedLong();
+		}
+		return NextUnsignedLong(0uL, maxExclusive);
+	}
+
+	public ulong NextUnsignedLong(ulong minInclusive, ulong maxExclusive)
+	{
+		if (minInclusive >= maxExclusive)
+		{
+			throw new ArgumentOutOfRangeException("minInclusive", "Minimum must be lower than maximum.");
+		}
+		_counter++;
+		double num = _random.NextDouble();
+		double num2 = maxExclusive - minInclusive;
+		ulong num3 = (ulong)(num * num2);
 		return minInclusive + num3;
 	}
 
@@ -159,7 +192,7 @@ public class Rng
 		{
 			throw new ArgumentOutOfRangeException("min", "Minimum must not be higher than maximum.");
 		}
-		Counter++;
+		_counter++;
 		return (float)(_random.NextDouble() * (double)(max - min) + (double)min);
 	}
 
@@ -169,7 +202,7 @@ public class Rng
 	/// <returns>Random double.</returns>
 	public double NextDouble()
 	{
-		Counter++;
+		_counter++;
 		return _random.NextDouble();
 	}
 
@@ -183,7 +216,7 @@ public class Rng
 		{
 			throw new ArgumentOutOfRangeException("min", "Minimum must not be higher than maximum.");
 		}
-		Counter++;
+		_counter++;
 		return _random.NextDouble() * (max - min) + min;
 	}
 
@@ -207,6 +240,10 @@ public class Rng
 		if (min > max)
 		{
 			throw new ArgumentOutOfRangeException("min", "Minimum must not be higher than maximum.");
+		}
+		if ((mean < 0.0 || mean > 1.0) ? true : false)
+		{
+			throw new ArgumentOutOfRangeException("mean", mean, "Mean must be within [0, 1].");
 		}
 		double num4;
 		do
@@ -233,6 +270,14 @@ public class Rng
 	/// </summary>
 	public int NextGaussianInt(int mean, int stdDev, int min, int max)
 	{
+		if (min > max)
+		{
+			throw new ArgumentOutOfRangeException("min", "Minimum must not be higher than maximum.");
+		}
+		if (mean < min || mean > max)
+		{
+			throw new ArgumentOutOfRangeException("mean", mean, "Mean must be within [min, max].");
+		}
 		int num3;
 		do
 		{
@@ -300,22 +345,13 @@ public class Rng
 		return fallback;
 	}
 
-	/// <summary>
-	/// Shuffles a list in place using the Fisher-Yates algorithm.
-	/// </summary>
-	/// <param name="list">The list to shuffle.</param>
-	/// <typeparam name="T">Type of items in the list.</typeparam>
-	public void Shuffle<T>(IList<T> list)
+	public SerializableRng ToSerializable()
 	{
-		for (int num = list.Count - 1; num > 0; num--)
+		SerializableRng serializableRng = new SerializableRng
 		{
-			int num2 = NextInt(num + 1);
-			int index = num;
-			int index2 = num2;
-			T value = list[num2];
-			T value2 = list[num];
-			list[index] = value;
-			list[index2] = value2;
-		}
+			counter = _counter
+		};
+		_random.FillSerializableState(serializableRng);
+		return serializableRng;
 	}
 }

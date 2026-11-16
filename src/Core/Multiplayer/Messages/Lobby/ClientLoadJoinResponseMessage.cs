@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Multiplayer.Transport;
@@ -13,7 +14,7 @@ public struct ClientLoadJoinResponseMessage : INetMessage, IPacketSerializable
 {
 	public SerializableRun serializableRun;
 
-	public List<ulong> playersAlreadyConnected;
+	public List<LoadRunLobbyPlayer> playersAlreadyConnected;
 
 	public bool ShouldBroadcast => false;
 
@@ -26,21 +27,21 @@ public struct ClientLoadJoinResponseMessage : INetMessage, IPacketSerializable
 	public void Serialize(PacketWriter writer)
 	{
 		writer.Write(serializableRun);
-		writer.WriteInt(playersAlreadyConnected.Count, 6);
-		foreach (ulong item in playersAlreadyConnected)
+		writer.WriteInt(playersAlreadyConnected.Count, 8);
+		foreach (LoadRunLobbyPlayer item in playersAlreadyConnected)
 		{
-			writer.WriteULong(item);
+			writer.Write(item);
 		}
 	}
 
 	public void Deserialize(PacketReader reader)
 	{
 		serializableRun = reader.Read<SerializableRun>();
-		playersAlreadyConnected = new List<ulong>();
-		int num = reader.ReadInt(6);
+		playersAlreadyConnected = new List<LoadRunLobbyPlayer>();
+		int num = reader.ReadInt(8);
 		for (int i = 0; i < num; i++)
 		{
-			playersAlreadyConnected.Add(reader.ReadULong());
+			playersAlreadyConnected.Add(reader.Read<LoadRunLobbyPlayer>());
 		}
 	}
 }

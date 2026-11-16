@@ -193,7 +193,21 @@ public class NPopupYesNoButton : NButton
 		}
 	}
 
-	protected override string[] Hotkeys => new string[1] { _isYes ? MegaInput.select : MegaInput.cancel };
+	protected override string[] Hotkeys
+	{
+		get
+		{
+			if (_isYes)
+			{
+				return new string[1] { MegaInput.select };
+			}
+			return new string[2]
+			{
+				MegaInput.cancel,
+				MegaInput.pauseAndBack
+			};
+		}
+	}
 
 	public override void _Ready()
 	{

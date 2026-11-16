@@ -102,6 +102,11 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 		public static readonly StringName BackButtonPressed = "BackButtonPressed";
 
 		/// <summary>
+		/// Cached name for the 'OnRelicHolderReleased' method.
+		/// </summary>
+		public static readonly StringName OnRelicHolderReleased = "OnRelicHolderReleased";
+
+		/// <summary>
 		/// Cached name for the 'OnRelicClicked' method.
 		/// </summary>
 		public static readonly StringName OnRelicClicked = "OnRelicClicked";
@@ -200,7 +205,7 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 
 	private Player _player;
 
-	private List<CardModel> _cards = new List<CardModel>();
+	private readonly List<CardModel> _cards = new List<CardModel>();
 
 	public bool UseSharedBackstop => true;
 
@@ -262,13 +267,10 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 		_potionsHeader.Text = locString4.GetFormattedText();
 		foreach (RelicModel relic in _player.Relics)
 		{
-			NRelicBasicHolder holder = NRelicBasicHolder.Create(relic);
-			_relicContainer.AddChildSafely(holder);
-			holder.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(delegate
-			{
-				OnRelicClicked(holder.Relic);
-			}));
-			holder.MouseDefaultCursorShape = CursorShape.Help;
+			NRelicBasicHolder nRelicBasicHolder = NRelicBasicHolder.Create(relic);
+			_relicContainer.AddChildSafely(nRelicBasicHolder);
+			nRelicBasicHolder.Connect(NClickableControl.SignalName.Released, Callable.From<NRelicBasicHolder>(OnRelicHolderReleased));
+			nRelicBasicHolder.MouseDefaultCursorShape = CursorShape.Help;
 		}
 		foreach (PotionModel potion in _player.Potions)
 		{
@@ -293,7 +295,7 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 
 	public override void _Input(InputEvent inputEvent)
 	{
-		if (!IsVisibleInTree() || NDevConsole.Instance.Visible || !NControllerManager.Instance.IsUsingController)
+		if (!IsVisibleInTree() || NDevConsole.IsConsoleVisible || !NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			return;
 		}
@@ -318,6 +320,11 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 	private void BackButtonPressed(NButton _)
 	{
 		NCapstoneContainer.Instance.Close();
+	}
+
+	private void OnRelicHolderReleased(NRelicBasicHolder holder)
+	{
+		OnRelicClicked(holder.Relic);
 	}
 
 	/// <summary>
@@ -406,7 +413,7 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(8);
+		List<MethodInfo> list = new List<MethodInfo>(9);
 		list.Add(new MethodInfo(MethodName.AfterCapstoneOpened, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.AfterCapstoneClosed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -421,6 +428,10 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 		list.Add(new MethodInfo(MethodName.BackButtonPressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.OnRelicHolderReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "holder", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.OnRelicClicked, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -470,6 +481,12 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.OnRelicHolderReleased && args.Count == 1)
+		{
+			OnRelicHolderReleased(VariantUtils.ConvertTo<NRelicBasicHolder>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.OnRelicClicked && args.Count == 1)
 		{
 			OnRelicClicked(VariantUtils.ConvertTo<NRelic>(in args[0]));
@@ -510,6 +527,10 @@ public class NMultiplayerPlayerExpandedState : Control, ICapstoneScreen, IScreen
 			return true;
 		}
 		if (method == MethodName.BackButtonPressed)
+		{
+			return true;
+		}
+		if (method == MethodName.OnRelicHolderReleased)
 		{
 			return true;
 		}

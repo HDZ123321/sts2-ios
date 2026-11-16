@@ -33,8 +33,6 @@ public sealed class LouseProgenitor : MonsterModel
 
 	private const int _webFrail = 2;
 
-	private const int _growStrength = 5;
-
 	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 138, 134);
 
 	public override int MaxInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 141, 136);
@@ -63,6 +61,8 @@ public sealed class LouseProgenitor : MonsterModel
 	private int PounceDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 16, 14);
 
 	private int CurlBlock => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 18, 14);
+
+	private int GrowStrength => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 7, 5);
 
 	public override async Task AfterAddedToRoom()
 	{
@@ -104,7 +104,7 @@ public sealed class LouseProgenitor : MonsterModel
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/giant_louse/giant_louse_curl");
 		await CreatureCmd.TriggerAnim(base.Creature, "Curl", 0.25f);
 		await CreatureCmd.GainBlock(base.Creature, CurlBlock, ValueProp.Move, null);
-		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, 5m, base.Creature, null);
+		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, GrowStrength, base.Creature, null);
 		Curled = true;
 	}
 

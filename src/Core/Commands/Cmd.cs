@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Saves;
@@ -42,23 +43,24 @@ public static class Cmd
 		}
 	}
 
-	private static Task WaitInternal(SceneTreeTimer timer, CancellationToken cancellationToken)
+	/// <summary>
+	/// <see cref="M:MegaCrit.Sts2.Core.Commands.Cmd.Wait(System.Single,System.Threading.CancellationToken,System.Boolean)" /> for a loop that runs until something cancels it. Returns false
+	/// when the wait was skipped. Stop the loop on false: it would otherwise never end the frame.
+	/// </summary>
+	public static async Task<bool> TryWait(float seconds, CancellationToken cancelToken = default(CancellationToken), bool ignoreCombatEnd = false)
 	{
-		TaskCompletionSource tcs = new TaskCompletionSource();
-		timer.Timeout += Receive;
-		if (cancellationToken.CanBeCanceled)
+		Task task = Wait(seconds, cancelToken, ignoreCombatEnd);
+		if (task.IsCompletedSuccessfully)
 		{
-			cancellationToken.Register(delegate
-			{
-				tcs.TrySetCanceled(cancellationToken);
-			});
+			return false;
 		}
-		return tcs.Task;
-		void Receive()
-		{
-			tcs.TrySetResult();
-			timer.Timeout -= Receive;
-		}
+		await task;
+		return true;
+	}
+
+	private static async Task WaitInternal(SceneTreeTimer timer, CancellationToken cancellationToken)
+	{
+		await timer.ToSignal(timer, SceneTreeTimer.SignalName.Timeout).ToTask().WaitAsync(cancellationToken);
 	}
 
 	/// <summary>

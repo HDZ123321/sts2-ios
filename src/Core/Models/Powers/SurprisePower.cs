@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
@@ -14,14 +15,13 @@ public sealed class SurprisePower : PowerModel
 
 	public override PowerStackType StackType => PowerStackType.Single;
 
-	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature target, bool wasRemovalPrevented, float deathAnimLength)
+	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature target, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (wasRemovalPrevented || base.Owner != target)
 		{
 			return;
 		}
-		await CreatureCmd.Add<SneakyGremlin>(base.CombatState, "sneaky");
-		Creature fatGremlin = await CreatureCmd.Add<FatGremlin>(base.CombatState, "fat");
+		Creature fatGremlin = base.CombatState.CreateCreature(ModelDb.Monster<FatGremlin>().ToMutable(), CombatSide.Enemy, "fat");
 		int totalStolen = 0;
 		foreach (ThieveryPower powerInstance in base.Owner.GetPowerInstances<ThieveryPower>())
 		{
@@ -31,6 +31,8 @@ public sealed class SurprisePower : PowerModel
 			heistPower.Target = powerInstance.Target;
 			await PowerCmd.Apply(choiceContext, heistPower, fatGremlin, intValue, base.Owner, null);
 		}
+		await CreatureCmd.Add<SneakyGremlin>(base.CombatState, "sneaky");
+		await CreatureCmd.Add(fatGremlin);
 		if (totalStolen > 0 && base.CombatState.Encounter is GremlinMercNormal gremlinMercNormal)
 		{
 			gremlinMercNormal.MarkGoldStolen();

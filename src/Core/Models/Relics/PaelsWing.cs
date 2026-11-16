@@ -87,7 +87,7 @@ public sealed class PaelsWing : RelicModel
 		if (RewardsSacrificed % base.DynamicVars["Sacrifices"].IntValue == 0)
 		{
 			TaskHelper.RunSafely(DoActivateVisuals());
-			await RelicCmd.Obtain(RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable(), base.Owner);
+			await RelicCmd.Obtain(RelicFactory.PullNextRelicForRewardFromFront(base.Owner).ToMutable(), base.Owner);
 		}
 	}
 

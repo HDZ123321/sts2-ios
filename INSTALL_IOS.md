@@ -11,8 +11,8 @@
 | 最低系统 | iOS 14.0 |
 | 架构 | arm64（真机，模拟器不支持） |
 | 签名 | **未签名**，需要自己签 |
-| 游戏版本 | 0.107.1 |
-| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-unsigned.ipa |
+| 游戏版本 | 0.113.1 |
+| 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.113.1-ios/sts2-unsigned.ipa |
 
 包内结构：
 

@@ -9,12 +9,14 @@ public sealed class EventRelicPool : RelicPoolModel
 
 	protected override IEnumerable<RelicModel> GenerateAllRelics()
 	{
-		return new global::_003C_003Ez__ReadOnlyArray<RelicModel>(new RelicModel[140]
+		return new global::_003C_003Ez__ReadOnlyArray<RelicModel>(new RelicModel[151]
 		{
 			ModelDb.Relic<AlchemicalCoffer>(),
 			ModelDb.Relic<ArcaneScroll>(),
 			ModelDb.Relic<ArchaicTooth>(),
 			ModelDb.Relic<Astrolabe>(),
+			ModelDb.Relic<BathRobes>(),
+			ModelDb.Relic<BathTowel>(),
 			ModelDb.Relic<BeautifulBracelet>(),
 			ModelDb.Relic<BigMushroom>(),
 			ModelDb.Relic<BiiigHug>(),
@@ -26,6 +28,7 @@ public sealed class EventRelicPool : RelicPoolModel
 			ModelDb.Relic<BoneTea>(),
 			ModelDb.Relic<BoomingConch>(),
 			ModelDb.Relic<BrilliantScarf>(),
+			ModelDb.Relic<Byrdine>(),
 			ModelDb.Relic<Byrdpip>(),
 			ModelDb.Relic<CallingBell>(),
 			ModelDb.Relic<ChoicesParadox>(),
@@ -39,6 +42,7 @@ public sealed class EventRelicPool : RelicPoolModel
 			ModelDb.Relic<DiamondDiadem>(),
 			ModelDb.Relic<DistinguishedCape>(),
 			ModelDb.Relic<DivineDestiny>(),
+			ModelDb.Relic<DowsingRod>(),
 			ModelDb.Relic<DreamCatcher>(),
 			ModelDb.Relic<Driftwood>(),
 			ModelDb.Relic<DustyTome>(),
@@ -84,14 +88,17 @@ public sealed class EventRelicPool : RelicPoolModel
 			ModelDb.Relic<MassiveScroll>(),
 			ModelDb.Relic<MawBank>(),
 			ModelDb.Relic<MeatCleaver>(),
+			ModelDb.Relic<MightyWings>(),
 			ModelDb.Relic<MrStruggles>(),
 			ModelDb.Relic<MusicBox>(),
 			ModelDb.Relic<NeowsBones>(),
+			ModelDb.Relic<NeowsSacrifice>(),
 			ModelDb.Relic<NeowsTalisman>(),
 			ModelDb.Relic<NeowsTorment>(),
 			ModelDb.Relic<NewLeaf>(),
 			ModelDb.Relic<NutritiousOyster>(),
 			ModelDb.Relic<NutritiousSoup>(),
+			ModelDb.Relic<ObsidianVice>(),
 			ModelDb.Relic<PaelsBlood>(),
 			ModelDb.Relic<PaelsClaw>(),
 			ModelDb.Relic<PaelsEye>(),
@@ -134,13 +141,16 @@ public sealed class EventRelicPool : RelicPoolModel
 			ModelDb.Relic<SpikedGauntlets>(),
 			ModelDb.Relic<StoneHumidifier>(),
 			ModelDb.Relic<Storybook>(),
+			ModelDb.Relic<Storyteller>(),
 			ModelDb.Relic<SwordOfJade>(),
 			ModelDb.Relic<SwordOfStone>(),
 			ModelDb.Relic<TanxsWhistle>(),
 			ModelDb.Relic<TeaOfDiscourtesy>(),
 			ModelDb.Relic<TheBoot>(),
 			ModelDb.Relic<ThrowingAxe>(),
+			ModelDb.Relic<Thumbscrew>(),
 			ModelDb.Relic<ToastyMittens>(),
+			ModelDb.Relic<TormentousCollar>(),
 			ModelDb.Relic<TouchOfOrobas>(),
 			ModelDb.Relic<ToyBox>(),
 			ModelDb.Relic<TriBoomerang>(),
@@ -150,6 +160,7 @@ public sealed class EventRelicPool : RelicPoolModel
 			ModelDb.Relic<WingedBoots>(),
 			ModelDb.Relic<WongoCustomerAppreciationBadge>(),
 			ModelDb.Relic<WongosMysteryTicket>(),
+			ModelDb.Relic<Wuppy>(),
 			ModelDb.Relic<YummyCookie>()
 		});
 	}

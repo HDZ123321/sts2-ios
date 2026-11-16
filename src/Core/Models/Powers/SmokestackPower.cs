@@ -19,7 +19,7 @@ public sealed class SmokestackPower : PowerModel
 		if (card.Type == CardType.Status && creator != null && creator.Creature == base.Owner)
 		{
 			Flash();
-			await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner);
 		}
 	}
 }

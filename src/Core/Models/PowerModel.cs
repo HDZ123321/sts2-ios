@@ -12,7 +12,6 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
-using MegaCrit.Sts2.Core.Models.Singleton;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -491,7 +490,7 @@ public abstract class PowerModel : AbstractModel
 	/// <summary>
 	/// If ShouldScaleInMultiplayer is true, this will be called before the power is applied to any enemies.
 	/// Unless overridden, it applies a default scaling based on the number of players and
-	/// <see cref="M:MegaCrit.Sts2.Core.Models.Singleton.MultiplayerScalingModel.GetMultiplayerScaling(MegaCrit.Sts2.Core.Models.EncounterModel,System.Int32)" />.
+	/// <see cref="M:MegaCrit.Sts2.Core.Models.MultiplayerScalingModel.GetMultiplayerScaling(MegaCrit.Sts2.Core.Models.EncounterModel,System.Int32)" />.
 	/// Be sure to use the passed combat state rather than CombatState, as it will not be set in time.
 	/// </summary>
 	/// <param name="combatState">The combat state which will own the power.</param>
@@ -534,9 +533,15 @@ public abstract class PowerModel : AbstractModel
 
 	private void AddDumbVariablesToDescription(LocString description, int? amountOverride = null)
 	{
-		description.Add("Amount", amountOverride ?? Amount);
+		int num = amountOverride ?? (base.IsCanonical ? 1 : Amount);
+		description.Add("Amount", num);
 		description.Add("singleStarIcon", "[img]res://images/packed/sprite_fonts/star_icon.png[/img]");
 		description.Add("energyPrefix", EnergyIconHelper.GetPrefix(this));
+	}
+
+	public IEnumerable<IHoverTip> GetExtraHoverTips()
+	{
+		return ExtraHoverTips;
 	}
 
 	public void SetAmount(int amount, bool silent = false)

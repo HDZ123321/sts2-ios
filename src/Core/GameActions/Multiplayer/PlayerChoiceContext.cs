@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 
@@ -17,6 +18,8 @@ public abstract class PlayerChoiceContext
 	/// </summary>
 	private Stack<AbstractModel>? _modelStack;
 
+	public IEnumerable<AbstractModel>? ModelStack => _modelStack;
+
 	public AbstractModel? LastInvolvedModel
 	{
 		get
@@ -29,6 +32,14 @@ public abstract class PlayerChoiceContext
 			return result;
 		}
 	}
+
+	public abstract ulong? OwnerId { get; }
+
+	/// <summary>
+	/// If this choice context were to spawn a game action, what type should it spawn?
+	/// Null for contexts that can never spin off game actions.
+	/// </summary>
+	public abstract GameActionType? GameActionType { get; }
 
 	/// <summary>
 	/// Add a new model to the top of the context stack.
@@ -58,7 +69,7 @@ public abstract class PlayerChoiceContext
 		}
 	}
 
-	public abstract Task SignalPlayerChoiceBegun(PlayerChoiceOptions options);
+	public abstract Task SignalPlayerChoiceBegun(Player chooser, PlayerChoiceOptions options);
 
 	public abstract Task SignalPlayerChoiceEnded();
 }

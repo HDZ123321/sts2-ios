@@ -12,7 +12,7 @@ public sealed class Flanking : CardModel
 	public override CardMultiplayerConstraint MultiplayerConstraint => CardMultiplayerConstraint.MultiplayerOnly;
 
 	public Flanking()
-		: base(2, CardType.Skill, CardRarity.Uncommon, TargetType.AnyEnemy)
+		: base(2, CardType.Skill, CardRarity.Rare, TargetType.AnyEnemy)
 	{
 	}
 

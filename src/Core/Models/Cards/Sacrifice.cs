@@ -22,7 +22,7 @@ public sealed class Sacrifice : CardModel
 	{
 		new CalculationBaseVar(0m),
 		new CalculationExtraVar(1m),
-		new CalculatedBlockVar(ValueProp.Move).WithMultiplier((CardModel card, Creature? _) => card.Owner.IsOstyAlive ? (card.Owner.Osty.MaxHp * 2) : 0)
+		new CalculatedBlockVar(ValueProp.Move).WithMultiplier((CardModel card, Creature? _) => card.Owner.IsOstyAlive ? (card.Owner.Osty.MaxHp * 3) : 0)
 	});
 
 	public Sacrifice()
@@ -36,7 +36,7 @@ public sealed class Sacrifice : CardModel
 		{
 			decimal blockGain = base.DynamicVars.CalculatedBlock.Calculate(cardPlay.Target);
 			await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
-			await CreatureCmd.Kill(base.Owner.Osty);
+			await CreatureCmd.Kill(base.Owner.Osty, this);
 			await CreatureCmd.GainBlock(base.Owner.Creature, blockGain, base.DynamicVars.CalculatedBlock.Props, cardPlay);
 		}
 	}

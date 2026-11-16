@@ -23,7 +23,7 @@ public sealed class ColorlessCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[64]
+		return new CardModel[66]
 		{
 			ModelDb.Card<Alchemize>(),
 			ModelDb.Card<Anointed>(),
@@ -60,6 +60,7 @@ public sealed class ColorlessCardPool : CardPoolModel
 			ModelDb.Card<Mayhem>(),
 			ModelDb.Card<Mimic>(),
 			ModelDb.Card<MindBlast>(),
+			ModelDb.Card<MyShinies>(),
 			ModelDb.Card<Nostalgia>(),
 			ModelDb.Card<Omnislice>(),
 			ModelDb.Card<Panache>(),
@@ -82,6 +83,7 @@ public sealed class ColorlessCardPool : CardPoolModel
 			ModelDb.Card<Splash>(),
 			ModelDb.Card<Stratagem>(),
 			ModelDb.Card<TagTeam>(),
+			ModelDb.Card<TheBall>(),
 			ModelDb.Card<TheBomb>(),
 			ModelDb.Card<TheGambit>(),
 			ModelDb.Card<ThinkingAhead>(),

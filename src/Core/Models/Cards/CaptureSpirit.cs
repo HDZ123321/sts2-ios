@@ -30,7 +30,7 @@ public sealed class CaptureSpirit : CardModel
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
-		await CreatureCmd.Damage(choiceContext, cardPlay.Target, base.DynamicVars.Damage, this);
+		await CreatureCmd.Damage(choiceContext, cardPlay.Target, base.DynamicVars.Damage, this, cardPlay);
 		List<Soul> cards = Soul.Create(base.Owner, base.DynamicVars.Cards.IntValue, base.CombatState).ToList();
 		CardCmd.PreviewCardPileAdd(await CardPileCmd.AddGeneratedCardsToCombat(cards, PileType.Draw, base.Owner, CardPilePosition.Random));
 	}

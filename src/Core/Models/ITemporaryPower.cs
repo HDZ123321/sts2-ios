@@ -13,12 +13,4 @@ public interface ITemporaryPower
 	/// </summary>
 	/// <example><see cref="T:MegaCrit.Sts2.Core.Models.Powers.StrengthPower" /> for <see cref="T:MegaCrit.Sts2.Core.Models.Powers.TemporaryStrengthPower" /></example>
 	PowerModel InternallyAppliedPower { get; }
-
-	/// <summary>
-	/// Set the next application of this power to not actually be applied.
-	/// This is used when debuffs are copied to other creatures by effects like <see cref="T:MegaCrit.Sts2.Core.Models.Cards.Misery" />.
-	/// In these cases, the internal debuff gets copied along with this power, and upon copying, it should not apply the
-	/// internal debuff again.
-	/// </summary>
-	void IgnoreNextInstance();
 }

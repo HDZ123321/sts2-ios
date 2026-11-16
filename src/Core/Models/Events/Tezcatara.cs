@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Godot;
 using MegaCrit.Sts2.Core.Entities.Ancients;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Characters;
 using MegaCrit.Sts2.Core.Events;
 using MegaCrit.Sts2.Core.Models.Characters;
 using MegaCrit.Sts2.Core.Models.Relics;
@@ -13,11 +14,23 @@ namespace MegaCrit.Sts2.Core.Models.Events;
 
 public class Tezcatara : AncientEventModel
 {
+	private const string _sfxLaugh = "event:/sfx/npcs/tezcatara/tezcatara_laugh";
+
+	private const string _sfxGreeting = "event:/sfx/npcs/tezcatara/tezcatara_greeting";
+
+	private const string _sfxCondescending = "event:/sfx/npcs/tezcatara/tezcatara_condescending";
+
+	private const string _sfxInquisitive = "event:/sfx/npcs/tezcatara/tezcatara_inquisitive";
+
+	public override FoolPronounGuess FoolPronounGuess => FoolPronounGuess.Masculine;
+
 	/// <summary>
 	/// This ancient's "any character" dialogue is friendly, but they don't trust the <see cref="T:MegaCrit.Sts2.Core.Models.Characters.Defect" />, so we
 	/// blacklist them so we don't show these friendly dialogue options for them.
 	/// </summary>
 	public override IEnumerable<CharacterModel> AnyCharacterDialogueBlacklist => new global::_003C_003Ez__ReadOnlySingleElementList<CharacterModel>(ModelDb.Character<Defect>());
+
+	public override string AmbientBgm => "event:/sfx/ambience/act2_ambience_tezcatara";
 
 	public override Color ButtonColor => new Color(0.08f, 0.04f, 0f, 0.75f);
 
@@ -104,75 +117,75 @@ public class Tezcatara : AncientEventModel
 			{
 				[AncientEventModel.CharKey<Ironclad>()] = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[3]
 				{
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting")
 					{
 						VisitIndex = 0
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 1
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_inquisitive")
 					{
 						VisitIndex = 4
 					}
 				}),
 				[AncientEventModel.CharKey<Silent>()] = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[3]
 				{
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_inquisitive", "", "")
 					{
 						VisitIndex = 0
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 1
 					},
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_laugh", "", "event:/sfx/npcs/tezcatara/tezcatara_inquisitive")
 					{
 						VisitIndex = 4
 					}
 				}),
 				[AncientEventModel.CharKey<Defect>()] = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[3]
 				{
-					new AncientDialogue("", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_laugh", "event:/sfx/npcs/tezcatara/tezcatara_inquisitive")
 					{
 						VisitIndex = 0
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 1
 					},
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_inquisitive", "event:/sfx/npcs/tezcatara/tezcatara_greeting", "event:/sfx/npcs/tezcatara/tezcatara_condescending")
 					{
 						VisitIndex = 4
 					}
 				}),
 				[AncientEventModel.CharKey<Necrobinder>()] = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[3]
 				{
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_inquisitive", "", "event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 0
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting")
 					{
 						VisitIndex = 1
 					},
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_inquisitive", "", "event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 4
 					}
 				}),
 				[AncientEventModel.CharKey<Regent>()] = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[3]
 				{
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_condescending", "", "event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 0
 					},
-					new AncientDialogue("")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting")
 					{
 						VisitIndex = 1
 					},
-					new AncientDialogue("", "", "")
+					new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting", "", "event:/sfx/npcs/tezcatara/tezcatara_laugh")
 					{
 						VisitIndex = 4
 					}
@@ -180,8 +193,8 @@ public class Tezcatara : AncientEventModel
 			},
 			AgnosticDialogues = new global::_003C_003Ez__ReadOnlyArray<AncientDialogue>(new AncientDialogue[2]
 			{
-				new AncientDialogue(""),
-				new AncientDialogue("")
+				new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting"),
+				new AncientDialogue("event:/sfx/npcs/tezcatara/tezcatara_greeting")
 			})
 		};
 	}
@@ -193,9 +206,6 @@ public class Tezcatara : AncientEventModel
 		{
 			list.Add(NutritiousSoupOption);
 		}
-		EventOption eventOption = base.Rng.NextItem(list);
-		EventOption eventOption2 = base.Rng.NextItem(OptionPool2);
-		EventOption eventOption3 = base.Rng.NextItem(OptionPool3);
-		return new global::_003C_003Ez__ReadOnlyArray<EventOption>(new EventOption[3] { eventOption, eventOption2, eventOption3 });
+		return GetOptionsFromThreePools(list, OptionPool2, OptionPool3);
 	}
 }

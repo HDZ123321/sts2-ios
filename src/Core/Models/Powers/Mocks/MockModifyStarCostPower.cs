@@ -4,6 +4,8 @@ namespace MegaCrit.Sts2.Core.Models.Powers.Mocks;
 
 public sealed class MockModifyStarCostPower : PowerModel
 {
+	public override bool IsMock => true;
+
 	public override PowerType Type => PowerType.Debuff;
 
 	public override PowerStackType StackType => PowerStackType.Counter;

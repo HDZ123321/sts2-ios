@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 
@@ -15,10 +16,13 @@ public sealed class TouchOfInsanity : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		(await CardSelectCmd.FromHand(prefs: new CardSelectorPrefs(base.SelectionScreenPrompt, 1), context: choiceContext, player: base.Owner, filter: (CardModel c) => c.CostsEnergyOrStars(includeGlobalModifiers: false) || c.CostsEnergyOrStars(includeGlobalModifiers: true), source: this)).FirstOrDefault()?.SetToFreeThisCombat();
+		PotionModel.AssertValidForTargetedPotion(target);
+		Player player = target.Player;
+		CardSelectorPrefs prefs = new CardSelectorPrefs(base.SelectionScreenPrompt, 1);
+		(await CardSelectCmd.FromHand(choiceContext, player, prefs, (CardModel c) => c.CostsEnergyOrStars(includeGlobalModifiers: false) || c.CostsEnergyOrStars(includeGlobalModifiers: true), this)).FirstOrDefault()?.SetToFreeThisCombat();
 	}
 }

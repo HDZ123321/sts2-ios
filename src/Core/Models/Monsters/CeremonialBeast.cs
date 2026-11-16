@@ -52,7 +52,7 @@ public sealed class CeremonialBeast : MonsterModel
 
 	private MoveState _beastCryState;
 
-	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 262, 252);
+	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 262, 252) + (AscensionHelper.IsDread() ? 30 : 0);
 
 	public override int MaxInitialHp => MinInitialHp;
 
@@ -60,7 +60,29 @@ public sealed class CeremonialBeast : MonsterModel
 
 	private int PlowDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 20, 18);
 
-	private int PlowStrength => 2;
+	private int PlowStrength
+	{
+		get
+		{
+			if (!AscensionHelper.IsDread())
+			{
+				return 2;
+			}
+			return 3;
+		}
+	}
+
+	private int RitualAmount
+	{
+		get
+		{
+			if (!AscensionHelper.IsDread())
+			{
+				return 0;
+			}
+			return 2;
+		}
+	}
 
 	private int StompDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 17, 15);
 
@@ -181,7 +203,7 @@ public sealed class CeremonialBeast : MonsterModel
 		InMidCharge = true;
 		await CreatureCmd.TriggerAnim(base.Creature, "Plow", 0f);
 		await Cmd.Wait(0.5f);
-		base.Creature.GetVfxContainer()?.AddChildSafely(NHorizontalLinesVfx.Create(new Color("BFFFC880"), 1.2000000476837158, movingRightwards: false));
+		base.Creature.GetVfxContainer()?.AddChildSafely(NHorizontalLinesVfx.Create(new Color("BFFFC880"), 1.2, movingRightwards: false));
 		await Cmd.Wait(0.5f);
 		NCombatRoom.Instance?.RadialBlur(VfxPosition.Left);
 		VfxCmd.PlayOnCreatureCenters(targets, "vfx/vfx_attack_blunt");
@@ -202,7 +224,10 @@ public sealed class CeremonialBeast : MonsterModel
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/ceremonial_beast/ceremonial_beast_plow_end");
 		await CreatureCmd.TriggerAnim(base.Creature, "EndPlow", 0f);
 		await Cmd.Wait(0.5f);
-		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, PlowStrength, base.Creature, null);
+		if (base.Creature.HasPower<PlowPower>())
+		{
+			await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, PlowStrength, base.Creature, null);
+		}
 	}
 
 	public async Task SetStunned()
@@ -211,6 +236,10 @@ public sealed class CeremonialBeast : MonsterModel
 		IsInSecondPhase = true;
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/ceremonial_beast/ceremonial_beast_stun");
 		await CreatureCmd.TriggerAnim(base.Creature, "Stun", 0.6f);
+		if (RitualAmount > 0)
+		{
+			await PowerCmd.Apply<RitualPower>(new ThrowingPlayerChoiceContext(), base.Creature, RitualAmount, base.Creature, null);
+		}
 	}
 
 	public async Task StunnedMove(IReadOnlyList<Creature> targets)
@@ -314,6 +343,11 @@ public sealed class CeremonialBeast : MonsterModel
 	public override List<BestiaryMonsterMove> GenerateBestiaryMoveList(NCreatureVisuals? creatureVisuals)
 	{
 		List<BestiaryMonsterMove> list = base.GenerateBestiaryMoveList(creatureVisuals);
+		list.RemoveAll(delegate(BestiaryMonsterMove m)
+		{
+			string stateId = m.stateId;
+			return (stateId == "STAMP_MOVE" || stateId == "CRUSH_MOVE") ? true : false;
+		});
 		list.Insert(2, BestiaryMonsterMove.FromStun(SetStunned));
 		return list;
 	}

@@ -12,6 +12,8 @@ using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.FeedbackScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
+using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Nodes.CommonUi;
@@ -24,6 +26,11 @@ namespace MegaCrit.Sts2.Core.Nodes.CommonUi;
 [ScriptPath("res://src/Core/Nodes/CommonUi/NErrorPopup.cs")]
 public class NErrorPopup : NVerticalPopup, IScreenContext
 {
+	/// <summary>
+	/// The popup text and buttons for a run save that could not be loaded.
+	/// </summary>
+	public readonly record struct RunSaveErrorContent(LocString Title, LocString Body, LocString? Cancel, bool ShowReportBugButton);
+
 	/// <summary>
 	/// Cached StringNames for the methods contained in this class, for fast lookup.
 	/// </summary>
@@ -38,6 +45,11 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 		/// Cached name for the 'Create' method.
 		/// </summary>
 		public static readonly StringName Create = "Create";
+
+		/// <summary>
+		/// Cached name for the 'CreateForRunSave' method.
+		/// </summary>
+		public static readonly StringName CreateForRunSave = "CreateForRunSave";
 
 		/// <summary>
 		/// Cached name for the 'OnOkButtonPressed' method.
@@ -176,97 +188,164 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 		return nErrorPopup;
 	}
 
-	private static LocString LocStringFromNetError(NetErrorInfo info, out bool showReportBugButton)
+	public static NErrorPopup? CreateForRunSave(ReadSaveStatus status)
+	{
+		RunSaveErrorContent runSaveErrorContent = GetRunSaveErrorContent(status);
+		return Create(runSaveErrorContent.Title, runSaveErrorContent.Body, runSaveErrorContent.Cancel, runSaveErrorContent.ShowReportBugButton);
+	}
+
+	public static RunSaveErrorContent GetRunSaveErrorContent(ReadSaveStatus status)
+	{
+		if (status == ReadSaveStatus.FutureVersion)
+		{
+			return new RunSaveErrorContent(new LocString("main_menu_ui", "FUTURE_VERSION_RUN_POPUP.title"), new LocString("main_menu_ui", "FUTURE_VERSION_RUN_POPUP.description"), null, ShowReportBugButton: false);
+		}
+		return new RunSaveErrorContent(new LocString("main_menu_ui", "INVALID_SAVE_POPUP.title"), new LocString("main_menu_ui", "INVALID_SAVE_POPUP.description_run"), new LocString("main_menu_ui", "INVALID_SAVE_POPUP.dismiss"), ShowReportBugButton: true);
+	}
+
+	public static LocString LocStringFromNetError(NetErrorInfo info, out bool showReportBugButton)
 	{
 		NetError reason = info.GetReason();
-		string text = default(string);
+		LocString locString = GetLocStringForReason(reason, info.ConnectionExtraInfo?.localIsHost ?? false);
+		if (locString == null)
+		{
+			ConnectionFailureExtraInfo? connectionExtraInfo = info.ConnectionExtraInfo;
+			if ((object)connectionExtraInfo != null && connectionExtraInfo.localIsHost)
+			{
+				locString = GetLocStringForReason(reason, isHost: false);
+			}
+		}
+		bool flag = !info.IsModded;
+		bool flag2 = flag;
+		if (flag2)
+		{
+			bool flag3 = ((reason == NetError.None || reason == NetError.StateDivergence || (uint)(reason - 202) <= 1u) ? true : false);
+			flag2 = flag3;
+		}
+		showReportBugButton = flag2;
+		if (locString == null)
+		{
+			Log.Error($"Invalid net error passed to {"NErrorPopup"}: {info}!");
+			locString = new LocString("main_menu_ui", "NETWORK_ERROR.INTERNAL_ERROR.body");
+			showReportBugButton = !info.IsModded;
+		}
+		locString.Add("info", info.GetErrorString());
+		if (info.JoinExtraInfo != null)
+		{
+			if (info.JoinExtraInfo.hostId.HasValue)
+			{
+				locString.Add("HostName", PlatformUtil.GetPlayerName(info.JoinExtraInfo.platform, info.JoinExtraInfo.hostId.Value));
+			}
+			else
+			{
+				locString.Add("HostName", "???");
+			}
+		}
+		return locString;
+	}
+
+	public static LocString? GetLocStringForReason(NetError reason, bool isHost)
+	{
+		string text = (isHost ? "NETWORK_ERROR.HOST." : "NETWORK_ERROR.");
+		string text2 = default(string);
 		switch (reason)
 		{
 		case NetError.None:
-			text = null;
+			text2 = null;
 			break;
 		case NetError.QuitGameOver:
-			text = null;
+			text2 = null;
 			break;
 		case NetError.CancelledJoin:
-			text = null;
+			text2 = null;
 			break;
 		case NetError.LobbyFull:
-			text = "NETWORK_ERROR.LOBBY_FULL.body";
+			text2 = "LOBBY_FULL.body";
 			break;
 		case NetError.Quit:
-			text = "NETWORK_ERROR.QUIT.body";
+			text2 = "QUIT.body";
 			break;
 		case NetError.HostAbandoned:
-			text = "NETWORK_ERROR.HOST_ABANDONED.body";
+			text2 = "HOST_ABANDONED.body";
 			break;
 		case NetError.Kicked:
-			text = "NETWORK_ERROR.KICKED.body";
+			text2 = "KICKED.body";
 			break;
 		case NetError.InvalidJoin:
-			text = "NETWORK_ERROR.INVALID_JOIN.body";
+			text2 = "INVALID_JOIN.body";
 			break;
 		case NetError.RunInProgress:
-			text = "NETWORK_ERROR.RUN_IN_PROGRESS.body";
+			text2 = "RUN_IN_PROGRESS.body";
 			break;
 		case NetError.StateDivergence:
-			text = "NETWORK_ERROR.STATE_DIVERGENCE.body";
+			text2 = "STATE_DIVERGENCE.body";
 			break;
 		case NetError.ModMismatch:
-			text = "NETWORK_ERROR.MOD_MISMATCH.body";
+			text2 = "MOD_MISMATCH.body";
+			break;
+		case NetError.DreadNotUnlocked:
+			text2 = "DREAD_NOT_UNLOCKED.body";
+			break;
+		case NetError.BlitzNotUnlocked:
+			text2 = "BLITZ_NOT_UNLOCKED.body";
 			break;
 		case NetError.JoinBlockedByUser:
-			text = "NETWORK_ERROR.JOIN_BLOCKED_BY_USER.body";
+			text2 = "JOIN_BLOCKED_BY_USER.body";
 			break;
 		case NetError.NoInternet:
-			text = "NETWORK_ERROR.NO_INTERNET.body";
+			text2 = "NO_INTERNET.body";
 			break;
 		case NetError.Timeout:
-			text = "NETWORK_ERROR.TIMEOUT.body";
+			text2 = "TIMEOUT.body";
 			break;
 		case NetError.HandshakeTimeout:
-			text = "NETWORK_ERROR.TIMEOUT.body";
+			text2 = "TIMEOUT.body";
 			break;
 		case NetError.InternalError:
-			text = "NETWORK_ERROR.INTERNAL_ERROR.body";
+			text2 = "INTERNAL_ERROR.body";
 			break;
 		case NetError.UnknownNetworkError:
-			text = "NETWORK_ERROR.UNKNOWN_ERROR.body";
+			text2 = "UNKNOWN_ERROR.body";
 			break;
 		case NetError.RateLimited:
-			text = "NETWORK_ERROR.RATE_LIMITED.body";
+			text2 = "RATE_LIMITED.body";
 			break;
 		case NetError.TryAgainLater:
-			text = "NETWORK_ERROR.TRY_AGAIN_LATER.body";
+			text2 = "TRY_AGAIN_LATER.body";
 			break;
 		case NetError.SecureConnectionFailed:
-			text = "NETWORK_ERROR.SECURE_CONNECTION_FAILED.body";
+			text2 = "SECURE_CONNECTION_FAILED.body";
 			break;
 		case NetError.FailedToHost:
-			text = "NETWORK_ERROR.FAILED_TO_HOST.body";
+			text2 = "FAILED_TO_HOST.body";
 			break;
 		case NetError.NotInSaveGame:
-			text = "NETWORK_ERROR.NOT_IN_SAVE_GAME.body";
+			text2 = "NOT_IN_SAVE_GAME.body";
 			break;
 		case NetError.VersionMismatch:
-			text = "NETWORK_ERROR.VERSION_MISMATCH.body";
+			text2 = "VERSION_MISMATCH.body";
+			break;
+		case NetError.InvalidHandshake:
+			text2 = "VERSION_MISMATCH.body";
+			break;
+		case NetError.LobbyJoinTimeout:
+			text2 = "TIMEOUT.body";
 			break;
 		default:
 			global::_003CPrivateImplementationDetails_003E.ThrowSwitchExpressionException(reason);
 			break;
 		}
-		string text2 = text;
-		bool flag = ((reason == NetError.None || reason == NetError.StateDivergence || (uint)(reason - 17) <= 1u) ? true : false);
-		showReportBugButton = flag;
-		if (text2 == null)
+		string text3 = text2;
+		string text4 = ((text3 != null) ? (text + text3) : null);
+		if (text4 != null)
 		{
-			Log.Error($"Invalid net error passed to {"NErrorPopup"}: {info}!");
-			text2 = "NETWORK_ERROR.INTERNAL_ERROR.body";
-			showReportBugButton = true;
+			LocString locString = new LocString("main_menu_ui", text4);
+			if (locString.Exists())
+			{
+				return locString;
+			}
 		}
-		LocString locString = new LocString("main_menu_ui", text2);
-		locString.Add("info", info.GetErrorString());
-		return locString;
+		return null;
 	}
 
 	private void OnOkButtonPressed(NButton _)
@@ -301,13 +380,17 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(5);
+		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.String, "title", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.String, "body", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.Bool, "showReportBugButton", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.CreateForRunSave, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "status", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.OnOkButtonPressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -339,6 +422,11 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 			ret = VariantUtils.CreateFrom<NErrorPopup>(Create(VariantUtils.ConvertTo<string>(in args[0]), VariantUtils.ConvertTo<string>(in args[1]), VariantUtils.ConvertTo<bool>(in args[2])));
 			return true;
 		}
+		if (method == MethodName.CreateForRunSave && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<NErrorPopup>(CreateForRunSave(VariantUtils.ConvertTo<ReadSaveStatus>(in args[0])));
+			return true;
+		}
 		if (method == MethodName.OnOkButtonPressed && args.Count == 1)
 		{
 			OnOkButtonPressed(VariantUtils.ConvertTo<NButton>(in args[0]));
@@ -368,6 +456,11 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 			ret = VariantUtils.CreateFrom<NErrorPopup>(Create(VariantUtils.ConvertTo<string>(in args[0]), VariantUtils.ConvertTo<string>(in args[1]), VariantUtils.ConvertTo<bool>(in args[2])));
 			return true;
 		}
+		if (method == MethodName.CreateForRunSave && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<NErrorPopup>(CreateForRunSave(VariantUtils.ConvertTo<ReadSaveStatus>(in args[0])));
+			return true;
+		}
 		ret = default(godot_variant);
 		return false;
 	}
@@ -381,6 +474,10 @@ public class NErrorPopup : NVerticalPopup, IScreenContext
 			return true;
 		}
 		if (method == MethodName.Create)
+		{
+			return true;
+		}
+		if (method == MethodName.CreateForRunSave)
 		{
 			return true;
 		}

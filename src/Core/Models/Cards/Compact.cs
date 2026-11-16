@@ -33,6 +33,7 @@ public sealed class Compact : CardModel
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
 		await CreatureCmd.GainBlock(base.Owner.Creature, base.DynamicVars.Block, cardPlay);
 		List<CardModel> list = PileType.Hand.GetPile(base.Owner).Cards.Where((CardModel c) => c != null && c.IsTransformable && c.Type == CardType.Status).ToList();
+		List<CardTransformation> list2 = new List<CardTransformation>();
 		foreach (CardModel item in list)
 		{
 			CardModel cardModel = base.CombatState.CreateCard<Fuel>(base.Owner);
@@ -40,8 +41,9 @@ public sealed class Compact : CardModel
 			{
 				CardCmd.Upgrade(cardModel);
 			}
-			await CardCmd.Transform(item, cardModel);
+			list2.Add(new CardTransformation(item, cardModel));
 		}
+		await CardCmd.Transform(list2, null);
 	}
 
 	protected override void OnUpgrade()

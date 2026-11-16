@@ -54,7 +54,7 @@ public sealed class Regret : CardModel
 
 	protected override async Task OnTurnEndInHand(PlayerChoiceContext choiceContext)
 	{
-		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, CardsInHand, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this);
+		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, CardsInHand, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this, null);
 		CardsInHand = 0;
 	}
 }

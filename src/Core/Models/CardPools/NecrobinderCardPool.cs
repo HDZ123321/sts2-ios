@@ -23,7 +23,7 @@ public sealed class NecrobinderCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[88]
+		return new CardModel[91]
 		{
 			ModelDb.Card<Afterlife>(),
 			ModelDb.Card<BansheesCry>(),
@@ -32,6 +32,7 @@ public sealed class NecrobinderCardPool : CardPoolModel
 			ModelDb.Card<BoneShards>(),
 			ModelDb.Card<BorrowedTime>(),
 			ModelDb.Card<Bury>(),
+			ModelDb.Card<Cacophony>(),
 			ModelDb.Card<Calcify>(),
 			ModelDb.Card<CallOfTheVoid>(),
 			ModelDb.Card<CaptureSpirit>(),
@@ -101,6 +102,7 @@ public sealed class NecrobinderCardPool : CardPoolModel
 			ModelDb.Card<SleightOfFlesh>(),
 			ModelDb.Card<Snap>(),
 			ModelDb.Card<SoulStorm>(),
+			ModelDb.Card<Soulbound>(),
 			ModelDb.Card<Sow>(),
 			ModelDb.Card<SpiritOfAsh>(),
 			ModelDb.Card<Spur>(),
@@ -110,6 +112,7 @@ public sealed class NecrobinderCardPool : CardPoolModel
 			ModelDb.Card<TimesUp>(),
 			ModelDb.Card<Transfigure>(),
 			ModelDb.Card<Undeath>(),
+			ModelDb.Card<Underworld>(),
 			ModelDb.Card<Unleash>(),
 			ModelDb.Card<Veilpiercer>(),
 			ModelDb.Card<Wisp>()

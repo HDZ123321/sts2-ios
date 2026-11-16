@@ -4,7 +4,6 @@ using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
-using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Helpers;
@@ -34,6 +33,11 @@ public class NPauseMenu : NSubmenu
 		/// Cached name for the '_Ready' method.
 		/// </summary>
 		public new static readonly StringName _Ready = "_Ready";
+
+		/// <summary>
+		/// Cached name for the '_ExitTree' method.
+		/// </summary>
+		public new static readonly StringName _ExitTree = "_ExitTree";
 
 		/// <summary>
 		/// Cached name for the 'RefreshLabels' method.
@@ -234,6 +238,11 @@ public class NPauseMenu : NSubmenu
 		}
 	}
 
+	public override void _ExitTree()
+	{
+		RunManager.Instance.IsPaused = false;
+	}
+
 	private void RefreshLabels()
 	{
 		_pausedLabel.SetTextAutoSize(_pausedLoc.GetFormattedText());
@@ -316,13 +325,13 @@ public class NPauseMenu : NSubmenu
 		_saveAndQuitButton.Disable();
 		_backButton.Disable();
 		NRunMusicController.Instance.StopMusic();
-		NDebugAudioManager.Instance?.StopAll();
 		await NGame.Instance.ReturnToMainMenu();
 	}
 
 	public override void OnSubmenuOpened()
 	{
 		base.OnSubmenuOpened();
+		RunManager.Instance.IsPaused = true;
 		NHotkeyManager.Instance.AddBlockingScreen(this);
 	}
 
@@ -330,6 +339,7 @@ public class NPauseMenu : NSubmenu
 	{
 		_backButton.Disable();
 		base.Visible = false;
+		RunManager.Instance.IsPaused = false;
 		NHotkeyManager.Instance.RemoveBlockingScreen(this);
 	}
 
@@ -341,8 +351,9 @@ public class NPauseMenu : NSubmenu
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(10);
+		List<MethodInfo> list = new List<MethodInfo>(11);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.RefreshLabels, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnBackOrResumeButtonPressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -380,6 +391,12 @@ public class NPauseMenu : NSubmenu
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName._ExitTree && args.Count == 0)
+		{
+			_ExitTree();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -445,6 +462,10 @@ public class NPauseMenu : NSubmenu
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}

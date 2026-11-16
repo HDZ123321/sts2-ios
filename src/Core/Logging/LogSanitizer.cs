@@ -1,6 +1,7 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.RegularExpressions.Generated;
 
@@ -41,6 +42,18 @@ public static class LogSanitizer
 		}
 		text = SteamIdRegex().Replace(text, ReplaceSteamId);
 		return text;
+	}
+
+	/// <summary>
+	/// Replaces Steam IDs with anonymized plain numbers, without the A prefix of <see cref="M:MegaCrit.Sts2.Core.Logging.LogSanitizer.Sanitize(System.String)" />, so that a
+	/// save still parses. Latin-1 maps each byte to one char and back, so every other byte is unchanged, and a corrupt
+	/// save stays as it was.
+	/// </summary>
+	public static byte[] AnonymizeSteamIds(byte[] bytes)
+	{
+		string input = Encoding.Latin1.GetString(bytes);
+		input = SteamIdRegex().Replace(input, (Match m) => IdAnonymizer.Anonymize(ulong.Parse(m.Value)).ToString());
+		return Encoding.Latin1.GetBytes(input);
 	}
 
 	public static string ReplaceSteamId(Match m)

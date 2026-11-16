@@ -27,15 +27,36 @@ public class EventSynchronizer : IDisposable
 
 	private readonly List<EventModel> _events = new List<EventModel>();
 
+	/// <summary>
+	/// The canonical event we are currently in the middle of.
+	/// </summary>
 	private EventModel? _canonicalEvent;
 
+	/// <summary>
+	/// Votes received from players on which option to choose. Only set during shared events.
+	/// </summary>
 	private readonly List<uint?> _playerVotes = new List<uint?>();
 
+	/// <summary>
+	/// The "page" of options we are on. Increments every time an option is chosen.
+	/// </summary>
 	private uint _pageIndex;
 
+	/// <summary>
+	/// Tracks in-flight event option tasks so we can await them before room exit.
+	/// Option handlers run as fire-and-forget tasks via TaskHelper.RunSafely. Without tracking,
+	/// the room can exit (and checksum) before a slow handler (e.g. Shatter's per-card loop)
+	/// finishes on the peer whose local event completed first, causing state divergence.
+	/// </summary>
 	private readonly List<Task> _pendingOptionTasks = new List<Task>();
 
+	/// <summary>
+	/// Determines what event option is chosen in multiplayer when multiple options have the same number of votes.
+	/// This is only rolled on the host. Do not depend on the RNG being deterministic across peers.
+	/// </summary>
 	private readonly Rng _multiplayerOptionSelectionRng;
+
+	private readonly EventCombatSynchronizer _combatSynchronizer;
 
 	private readonly Logger _logger = new Logger("EventSynchronizer", LogType.GameSync);
 
@@ -47,13 +68,14 @@ public class EventSynchronizer : IDisposable
 
 	public event Action<Player>? PlayerVoteChanged;
 
-	public EventSynchronizer(RunLocationTargetedMessageBuffer messageBuffer, INetGameService netService, IPlayerCollection playerCollection, ulong localPlayerId, uint seed)
+	public EventSynchronizer(RunLocationTargetedMessageBuffer messageBuffer, INetGameService netService, IPlayerCollection playerCollection, IRunState runState, ulong localPlayerId, ulong seed)
 	{
 		_netService = netService;
 		_messageBuffer = messageBuffer;
 		_playerCollection = playerCollection;
 		_localPlayerId = localPlayerId;
 		_multiplayerOptionSelectionRng = new Rng(seed, "event_synchronizer");
+		_combatSynchronizer = new EventCombatSynchronizer(playerCollection, runState);
 		_messageBuffer.RegisterMessageHandler<OptionIndexChosenMessage>(HandleEventOptionChosenMessage);
 		_messageBuffer.RegisterMessageHandler<VotedForSharedEventOptionMessage>(HandleVotedForSharedEventOptionMessage);
 		_messageBuffer.RegisterMessageHandler<SharedEventOptionChosenMessage>(HandleSharedEventOptionChosenMessage);
@@ -98,7 +120,7 @@ public class EventSynchronizer : IDisposable
 			EventModel eventModel = canonicalEvent.ToMutable();
 			debugOnStart?.Invoke(eventModel);
 			_events.Add(eventModel);
-			TaskHelper.RunSafely(eventModel.BeginEvent(player, isPrefinished));
+			TaskHelper.RunSafely(eventModel.BeginEvent(player, _combatSynchronizer, isPrefinished));
 			_logger.VeryDebug($"Event {eventModel.Id} began for player {player.NetId} with options: {string.Join(",", eventModel.CurrentOptions)}");
 		}
 	}
@@ -320,6 +342,24 @@ public class EventSynchronizer : IDisposable
 		{
 			TaskHelper.RunSafely(@event.Resume(exitedRoom));
 		}
+	}
+
+	/// <summary>
+	/// Called when the room is entered to ensure that state necessary for the event layout is generated.
+	/// </summary>
+	/// <param name="localEvent"></param>
+	public void GenerateInternalCombatStateIfNecessary(EventModel localEvent)
+	{
+		_combatSynchronizer.InitializeForEvent(localEvent);
+	}
+
+	/// <summary>
+	/// Called before the room is exited to ensure combat synchronizer state is reset.
+	/// If we end up supporting multiple event combats in a single event, this will likely have to be refactored.
+	/// </summary>
+	public void BeforeExitingRoom()
+	{
+		_combatSynchronizer.ResetState();
 	}
 
 	/// <summary>

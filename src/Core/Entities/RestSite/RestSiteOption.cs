@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Entities.RestSite;
 
@@ -17,13 +18,15 @@ namespace MegaCrit.Sts2.Core.Entities.RestSite;
 /// </summary>
 public abstract class RestSiteOption
 {
+	public static Func<Player, List<RestSiteOption>>? generateForTests;
+
 	public abstract string OptionId { get; }
 
 	protected Player Owner { get; }
 
 	public LocString Title => new LocString("rest_site_ui", "OPTION_" + OptionId + ".name");
 
-	public virtual LocString Description => new LocString("rest_site_ui", "OPTION_" + OptionId + ".description");
+	public virtual LocString Description => new LocString("rest_site_ui", IsEnabled ? ("OPTION_" + OptionId + ".description") : ("OPTION_" + OptionId + ".descriptionDisabled"));
 
 	private string IconPath => ImageHelper.GetImagePath("ui/rest_site/option_" + OptionId.ToLowerInvariant() + ".png");
 
@@ -49,6 +52,10 @@ public abstract class RestSiteOption
 	/// <returns>List of rest site options.</returns>
 	public static List<RestSiteOption> Generate(Player player)
 	{
+		if (TestMode.IsOn && generateForTests != null)
+		{
+			return generateForTests(player);
+		}
 		int num = 2;
 		List<RestSiteOption> list = new List<RestSiteOption>(num);
 		CollectionsMarshal.SetCount(list, num);

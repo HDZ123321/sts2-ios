@@ -78,8 +78,8 @@ public class EventOption
 	{
 		TextKey = textKey;
 		OnChosen = onChosen;
-		Title = eventModel.GetOptionTitle(textKey);
-		Description = eventModel.GetOptionDescription(textKey);
+		Title = eventModel.GetOptionTitle(textKey) ?? throw new InvalidOperationException("Title for " + textKey + " not found!");
+		Description = eventModel.GetOptionDescription(textKey) ?? throw new InvalidOperationException("Description for " + textKey + " not found!");
 		HoverTips = hoverTips;
 		IsLocked = OnChosen == null;
 		DisableOnChosen = true;
@@ -121,6 +121,20 @@ public class EventOption
 	{
 		IsProceed = isProceed;
 		DisableOnChosen = disableOnChosen;
+	}
+
+	public EventOption(EventOption eventOption)
+	{
+		TextKey = eventOption.TextKey;
+		OnChosen = eventOption.OnChosen;
+		Title = eventOption.Title;
+		Description = eventOption.Description;
+		HoverTips = eventOption.HoverTips;
+		IsLocked = eventOption.IsLocked;
+		DisableOnChosen = eventOption.DisableOnChosen;
+		HistoryName = eventOption.HistoryName;
+		IsProceed = eventOption.IsProceed;
+		DisableOnChosen = eventOption.DisableOnChosen;
 	}
 
 	public static EventOption FromRelic(RelicModel relic, EventModel eventModel, Func<Task>? onChosen, string textKey)
@@ -225,7 +239,7 @@ public class EventOption
 
 	private void AddLocVars(EventModel eventModel)
 	{
-		eventModel.Owner?.Character.AddDetailsTo(Description);
+		eventModel.Owner?.Character.AddDetailsTo(Description, eventModel.FoolPronounGuess);
 		LocString description = Description;
 		Player? owner = eventModel.Owner;
 		description.Add("IsMultiplayer", owner != null && owner.RunState.Players.Count > 1);

@@ -21,6 +21,7 @@ using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -90,11 +91,6 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		/// Cached name for the 'CleanUpLobby' method.
 		/// </summary>
 		public static readonly StringName CleanUpLobby = "CleanUpLobby";
-
-		/// <summary>
-		/// Cached name for the 'PlayerConnected' method.
-		/// </summary>
-		public static readonly StringName PlayerConnected = "PlayerConnected";
 
 		/// <summary>
 		/// Cached name for the 'PlayerReadyChanged' method.
@@ -339,7 +335,7 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		_embarkButton.Enable();
 		_unreadyButton.Disable();
 		_backButton.Enable();
-		_lobby.SetReady(ready: true);
+		_lobby.SetReady(ready: false);
 		_readyAndWaitingContainer.Visible = false;
 	}
 
@@ -348,7 +344,7 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		LoadRunLobby? lobby = _lobby;
 		if (lobby != null && lobby.NetService.Type.IsMultiplayer())
 		{
-			PlatformUtil.SetRichPresence("LOADING_MP_LOBBY", _lobby.NetService.GetRawLobbyIdentifier(), _lobby.ConnectedPlayerIds.Count);
+			PlatformUtil.SetRichPresence("LOADING_MP_LOBBY", _lobby.NetService.GetRawLobbyIdentifier(), _lobby.PlayerCount);
 		}
 	}
 
@@ -363,18 +359,22 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 
 	private void CleanUpLobby(bool disconnectSession, NetError error = NetError.Quit)
 	{
-		_lobby.CleanUp(disconnectSession, error);
-		_lobby = null;
+		if (_lobby != null)
+		{
+			_lobby.PlayerFailedToConnect -= RemoteClientFailedToConnectToLocalHost;
+			_lobby.CleanUp(disconnectSession, error);
+			_lobby = null;
+		}
 	}
 
 	public async Task<bool> ShouldAllowRunToBegin()
 	{
-		if (_lobby.ConnectedPlayerIds.Count >= _lobby.Run.Players.Count)
+		if (_lobby.PlayerCount >= _lobby.Run.Players.Count)
 		{
 			return true;
 		}
 		LocString locString = new LocString("gameplay_ui", "CONFIRM_LOAD_SAVE.body");
-		locString.Add("MissingCount", _lobby.Run.Players.Count - _lobby.ConnectedPlayerIds.Count);
+		locString.Add("MissingCount", _lobby.Run.Players.Count - _lobby.PlayerCount);
 		NGenericPopup nGenericPopup = NGenericPopup.Create();
 		NModalContainer.Instance.Add(nGenericPopup);
 		return await nGenericPopup.WaitForConfirmation(locString, new LocString("gameplay_ui", "CONFIRM_LOAD_SAVE.header"), new LocString("gameplay_ui", "CONFIRM_LOAD_SAVE.cancel"), new LocString("gameplay_ui", "CONFIRM_LOAD_SAVE.confirm"));
@@ -384,7 +384,7 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 	{
 		try
 		{
-			Log.Info("Loading a multiplayer run. Players: " + string.Join(",", _lobby.ConnectedPlayerIds) + ".");
+			Log.Info("Loading a multiplayer run. Players: " + string.Join(",", _lobby.PlayerIds) + ".");
 			SerializablePlayer serializablePlayer = _lobby.Run.Players.First((SerializablePlayer p) => p.NetId == _lobby.NetService.NetId);
 			SfxCmd.Play(ModelDb.GetById<CharacterModel>(serializablePlayer.CharacterId).CharacterTransitionSfx);
 			await NGame.Instance.Transition.FadeOut(0.8f, ModelDb.GetById<CharacterModel>(serializablePlayer.CharacterId).CharacterSelectTransitionPath);
@@ -403,10 +403,10 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		await NGame.Instance.Transition.FadeIn();
 	}
 
-	public void PlayerConnected(ulong playerId)
+	public void PlayerConnected(LoadRunLobbyPlayer player)
 	{
-		Log.Info($"Player connected: {playerId}");
-		_remotePlayerContainer.OnPlayerConnected(playerId);
+		Log.Info($"Player connected: {player.id}");
+		_remotePlayerContainer.OnPlayerConnected(player.id);
 		UpdateRichPresence();
 	}
 
@@ -459,10 +459,21 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		}
 	}
 
+	private void RemoteClientFailedToConnectToLocalHost(ulong sender, NetErrorInfo info)
+	{
+		bool showReportBugButton;
+		string formattedText = NErrorPopup.LocStringFromNetError(info, out showReportBugButton).GetFormattedText();
+		LocString locString = new LocString("main_menu_ui", "NETWORK_ERROR.HOST.PREFIX.body");
+		locString.Add("playerName", PlatformUtil.GetPlayerName(_lobby.NetService.Platform, sender));
+		locString.Add("info", formattedText);
+		this.AddChildSafely(NFailedJoinVfx.Create(locString.GetFormattedText()));
+	}
+
 	private void AfterMultiplayerStarted()
 	{
-		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.ConnectedPlayerIds);
+		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.PlayerIds);
 		NGame.Instance.ReactionContainer.InitializeNetworking(_lobby.NetService);
+		_lobby.PlayerFailedToConnect += RemoteClientFailedToConnectToLocalHost;
 		InitializeDisplay();
 		UpdateRichPresence();
 		MegaCrit.Sts2.Core.Logging.Logger.logLevelTypeMap[LogType.Network] = LogLevel.Debug;
@@ -478,7 +489,7 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(15);
+		List<MethodInfo> list = new List<MethodInfo>(14);
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnSubmenuOpened, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -501,10 +512,6 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		{
 			new PropertyInfo(Variant.Type.Bool, "disconnectSession", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.Int, "error", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
-		}, null));
-		list.Add(new MethodInfo(MethodName.PlayerConnected, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Int, "playerId", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.PlayerReadyChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -579,12 +586,6 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 		if (method == MethodName.CleanUpLobby && args.Count == 2)
 		{
 			CleanUpLobby(VariantUtils.ConvertTo<bool>(in args[0]), VariantUtils.ConvertTo<NetError>(in args[1]));
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName.PlayerConnected && args.Count == 1)
-		{
-			PlayerConnected(VariantUtils.ConvertTo<ulong>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -668,10 +669,6 @@ public class NDailyRunLoadScreen : NSubmenu, ILoadRunLobbyListener
 			return true;
 		}
 		if (method == MethodName.CleanUpLobby)
-		{
-			return true;
-		}
-		if (method == MethodName.PlayerConnected)
 		{
 			return true;
 		}

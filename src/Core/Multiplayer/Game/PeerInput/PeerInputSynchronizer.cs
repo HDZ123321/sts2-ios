@@ -62,7 +62,7 @@ public class PeerInputSynchronizer : IDisposable
 
 	private INetCursorPositionTranslator? _cursorTranslator;
 
-	private MegaCrit.Sts2.Core.Logging.Logger _logger = new MegaCrit.Sts2.Core.Logging.Logger("PeerInputSynchronizer", LogType.VisualSync);
+	private readonly MegaCrit.Sts2.Core.Logging.Logger _logger = new MegaCrit.Sts2.Core.Logging.Logger("PeerInputSynchronizer", LogType.VisualSync);
 
 	/// <summary>
 	/// If this is unset, Time.GetTicksMsec is used to check how much time has passed.
@@ -397,7 +397,7 @@ public class PeerInputSynchronizer : IDisposable
 	/// Returns the control-space position of a given player within the given control.
 	/// If the player is using a mouse, then this would be the mouse's position
 	/// If the player is using the controller, then this would be the position of the control node that that player is
-	/// currently focused on (this is currently only set up for the treasure room).
+	/// currently focused on.
 	/// Different resolutions and aspect ratios are all mapped to the same 1920x1080 reference resolution in control-
 	/// space. Essentially, the position returned by this method can be used set the position property on a Control with
 	/// a cursor image as rootControl's child and have it look approximately the same across all peers.

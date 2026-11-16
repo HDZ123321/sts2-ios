@@ -25,13 +25,15 @@ public class ActionQueueSet
 
 		public ulong ownerId;
 
-		public bool isCancellingPlayCardActions;
+		public GameAction? actionCancellingPlayCardActions;
 
 		public bool isCancellingPlayerDrivenCombatActions;
 
 		public bool isCancellingCombatActions = true;
 
 		public bool isPaused;
+
+		public bool IsCancellingPlayCardActions => actionCancellingPlayCardActions != null;
 	}
 
 	private struct ActionWaitingForResumption
@@ -52,6 +54,18 @@ public class ActionQueueSet
 	private uint _nextId;
 
 	private bool _isInCombat;
+
+	/// <summary>
+	/// Set to true by <see cref="M:MegaCrit.Sts2.Core.GameActions.Multiplayer.ActionQueueSet.Reset" /> and back to false by <see cref="M:MegaCrit.Sts2.Core.GameActions.Multiplayer.ActionQueueSet.CombatStarted" />.
+	/// This lets <see cref="M:MegaCrit.Sts2.Core.GameActions.Multiplayer.ActionQueueSet.PopAction(MegaCrit.Sts2.Core.GameActions.GameAction)" /> no-op for actions that were orphaned mid-execution when their queue was
+	/// cleared out from under them.
+	/// </summary>
+	private bool _wasReset;
+
+	/// <summary>
+	/// True after <see cref="M:MegaCrit.Sts2.Core.GameActions.Multiplayer.ActionQueueSet.Reset" /> and until the next combat is set up. While true there are no queues to enqueue to.
+	/// </summary>
+	public bool WasReset => _wasReset;
 
 	public bool IsEmpty
 	{
@@ -112,7 +126,7 @@ public class ActionQueueSet
 			Log.Error($"Exception encountered in ActionEnqueued for action {gameAction}: {ex}");
 			SentryService.CaptureException(ex);
 		}
-		if (queue.isCancellingPlayCardActions && gameAction is PlayCardAction)
+		if (queue.IsCancellingPlayCardActions && gameAction is PlayCardAction)
 		{
 			_logger.Debug($"Attempted to enqueue PlayCardAction {gameAction} to player queue owned by {gameAction.OwnerId}, but it's currently cancelling all play card actions due to player choice");
 			gameAction.Cancel();
@@ -193,6 +207,19 @@ public class ActionQueueSet
 				_logger.VeryDebug($"We are currently in combat and candidate action {gameAction2} has type {gameAction2.ActionType}");
 				continue;
 			}
+			bool flag = !_isInCombat;
+			bool flag2 = flag;
+			if (flag2)
+			{
+				GameActionType actionType = gameAction2.ActionType;
+				bool flag3 = (uint)(actionType - 1) <= 1u;
+				flag2 = flag3;
+			}
+			if (flag2)
+			{
+				_logger.VeryDebug($"We are currently not in combat and candidate action {gameAction2} has type {gameAction2.ActionType}");
+				continue;
+			}
 			if (actionQueue.isPaused && gameAction2.ActionType == GameActionType.CombatPlayPhaseOnly)
 			{
 				_logger.VeryDebug($"Queue for player {actionQueue.ownerId} is paused and candidate action {gameAction2} has type {gameAction2.ActionType}");
@@ -229,6 +256,25 @@ public class ActionQueueSet
 	}
 
 	/// <summary>
+	/// Returns true if there are any player-driven actions currently at the front of a player's queue.
+	/// This differs from GetReadyAction because it returns true even for actions that are paused and not yet ready to
+	/// execute, like those waiting for player choice.
+	/// </summary>
+	/// <param name="excludeEndOfTurn">This is a hack for the player hand, so that it knows whether it should disable
+	/// itself or not.</param>
+	public bool AreAnyPlayerDrivenActionsBeingExecuted(bool excludeEndOfTurn = false)
+	{
+		foreach (ActionQueue actionQueue in _actionQueues)
+		{
+			if (actionQueue.actions.Count > 0 && (!excludeEndOfTurn || !(actionQueue.actions[0] is EndPlayerTurnAction)) && IsGameActionPlayerDriven(actionQueue.actions[0]))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary>
 	/// Pauses an action for player choice. The action will be removed from the ActionExecutor and a new action will be
 	/// allowed to execute, if there are any actions that are ready.
 	/// To resume the action after this is called, call RequestResumeActionAfterPlayerChoice.
@@ -258,14 +304,14 @@ public class ActionQueueSet
 		if (options.HasFlag(PlayerChoiceOptions.CancelPlayCardActions))
 		{
 			CancelNonExecutingActionsOfType<PlayCardAction>(action.OwnerId, actionWaitingForResumption?.newId);
-			queue.isCancellingPlayCardActions = true;
+			queue.actionCancellingPlayCardActions = action;
 		}
 		this.ActionQueueChanged?.Invoke();
 		if (actionWaitingForResumption.HasValue)
 		{
 			_logger.Debug($"Immediately resuming action {action} - already had resumption waiting");
 			action.ResumeAfterGatheringPlayerChoice(actionWaitingForResumption.Value.newId);
-			queue.isCancellingPlayCardActions = false;
+			queue.actionCancellingPlayCardActions = null;
 			this.ActionQueueChanged?.Invoke();
 		}
 	}
@@ -374,7 +420,7 @@ public class ActionQueueSet
 					_logger.VeryDebug($"Not cancelling action {gameAction}, type: {gameAction.ActionType}, state: {gameAction.State}");
 				}
 			}
-			actionQueue.isCancellingPlayCardActions = false;
+			actionQueue.actionCancellingPlayCardActions = null;
 			actionQueue.isCancellingPlayerDrivenCombatActions = false;
 			actionQueue.isCancellingCombatActions = true;
 		}
@@ -383,12 +429,27 @@ public class ActionQueueSet
 	}
 
 	/// <summary>
-	/// Allows combat actions to be added to player queues.
+	/// Allows combat actions to be added to player queues, but not be executed.
+	/// </summary>
+	public void SetUpForCombat()
+	{
+		_logger.Debug("Setting up for combat.");
+		_wasReset = false;
+		_isInCombat = false;
+		foreach (ActionQueue actionQueue in _actionQueues)
+		{
+			actionQueue.isCancellingCombatActions = false;
+		}
+	}
+
+	/// <summary>
+	/// Allows combat actions to start executing.
 	/// </summary>
 	public void CombatStarted()
 	{
 		_logger.Debug("Combat started.");
 		_isInCombat = true;
+		_wasReset = false;
 		foreach (ActionQueue actionQueue in _actionQueues)
 		{
 			actionQueue.isCancellingCombatActions = false;
@@ -397,6 +458,7 @@ public class ActionQueueSet
 
 	public void Reset()
 	{
+		_wasReset = true;
 		_actionQueues.Clear();
 		CheckIfQueuesEmpty();
 		this.ActionQueueChanged?.Invoke();
@@ -465,7 +527,7 @@ public class ActionQueueSet
 		if (TryGetAction(id, out GameAction gameAction, out ActionQueue queue) && gameAction.State == GameActionState.GatheringPlayerChoice)
 		{
 			_logger.Debug($"Resuming action {gameAction} after player choice");
-			queue.isCancellingPlayCardActions = false;
+			queue.actionCancellingPlayCardActions = null;
 			gameAction.ResumeAfterGatheringPlayerChoice(andIncrementActionId);
 			this.ActionQueueChanged?.Invoke();
 		}
@@ -521,6 +583,10 @@ public class ActionQueueSet
 	/// </summary>
 	private void PopAction(GameAction action)
 	{
+		if (_wasReset)
+		{
+			return;
+		}
 		bool flag = false;
 		foreach (ActionQueue actionQueue in _actionQueues)
 		{
@@ -532,6 +598,11 @@ public class ActionQueueSet
 			{
 				flag = true;
 				actionQueue.actions.RemoveAt(0);
+				if (actionQueue.actionCancellingPlayCardActions == action)
+				{
+					_logger.Debug($"Action {action} left the queue while still cancelling play card actions. No longer cancelling them.");
+					actionQueue.actionCancellingPlayCardActions = null;
+				}
 				continue;
 			}
 			foreach (GameAction action2 in actionQueue.actions)

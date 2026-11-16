@@ -22,6 +22,8 @@ namespace MegaCrit.Sts2.Core.Saves;
 /// </summary>
 public class CloudSaveStore : ICloudSaveStore, ISaveStore
 {
+	private readonly CloudSyncFailureReporter _syncFailureReporter = new CloudSyncFailureReporter();
+
 	public ISaveStore LocalStore { get; }
 
 	public ICloudSaveStore CloudStore { get; }
@@ -75,6 +77,10 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 	public void WriteFile(string path, string content)
 	{
 		LocalStore.WriteFile(path, content);
+		if (!ShouldSyncFileToCloud(path))
+		{
+			return;
+		}
 		try
 		{
 			CloudStore.WriteFile(path, content);
@@ -93,6 +99,10 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 	public void WriteFile(string path, byte[] bytes)
 	{
 		LocalStore.WriteFile(path, bytes);
+		if (!ShouldSyncFileToCloud(path))
+		{
+			return;
+		}
 		try
 		{
 			CloudStore.WriteFile(path, bytes);
@@ -111,6 +121,10 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 	public async Task WriteFileAsync(string path, string content)
 	{
 		await LocalStore.WriteFileAsync(path, content);
+		if (!ShouldSyncFileToCloud(path))
+		{
+			return;
+		}
 		try
 		{
 			await CloudStore.WriteFileAsync(path, content);
@@ -129,6 +143,10 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 	public async Task WriteFileAsync(string path, byte[] bytes)
 	{
 		await LocalStore.WriteFileAsync(path, bytes);
+		if (!ShouldSyncFileToCloud(path))
+		{
+			return;
+		}
 		try
 		{
 			await CloudStore.WriteFileAsync(path, bytes);
@@ -328,47 +346,53 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 		}
 		catch (Exception ex)
 		{
-			Log.Warn("SteamRemoteStorage: Failed to sync " + path + " from cloud, skipping: " + ex.Message);
-			SentryService.CaptureException(ex);
+			Log.Warn("Failed to sync " + path + " from cloud, skipping: " + ex.Message);
+			if (_syncFailureReporter.ShouldReport(ex))
+			{
+				SentryService.CaptureException(ex);
+			}
 		}
 	}
 
 	private async Task SyncCloudToLocalInternal(string path)
 	{
 		bool flag = CloudStore.FileExists(path);
-		bool flag2 = LocalStore.FileExists(path);
+		bool localHasFile = LocalStore.FileExists(path);
 		if (flag)
 		{
-			DateTimeOffset lastModifiedTime = CloudStore.GetLastModifiedTime(path);
-			DateTimeOffset? dateTimeOffset = (flag2 ? new DateTimeOffset?(LocalStore.GetLastModifiedTime(path)) : ((DateTimeOffset?)null));
-			bool flag3 = !flag2 || lastModifiedTime != dateTimeOffset;
-			if (!flag3)
+			DateTimeOffset cloudSaveTime = CloudStore.GetLastModifiedTime(path);
+			DateTimeOffset? localSaveTime = (localHasFile ? new DateTimeOffset?(LocalStore.GetLastModifiedTime(path)) : ((DateTimeOffset?)null));
+			int cloudFileSize = CloudStore.GetFileSize(path);
+			int? localFileSize = (localHasFile ? new int?(LocalStore.GetFileSize(path)) : ((int?)null));
+			bool needsDownload = !localHasFile || cloudSaveTime != localSaveTime;
+			if (!needsDownload)
 			{
-				string value = LocalStore.ReadFile(path);
-				if (string.IsNullOrWhiteSpace(value))
+				string text = await LocalStore.ReadFileAsync(path);
+				if (string.IsNullOrWhiteSpace(text) || text[0] == '\0')
 				{
 					Log.Warn("Local file " + path + " appears corrupt (empty content) despite matching cloud timestamp, forcing re-download from cloud");
-					flag3 = true;
+					needsDownload = true;
 				}
 			}
-			if (flag3)
+			if (needsDownload)
 			{
-				Log.Info($"Copying {path} from cloud to local. Local file exists: {flag2} Cloud save time: {lastModifiedTime} Local save time: {dateTimeOffset}");
-				string text = await CloudStore.ReadFileAsync(path);
-				if (string.IsNullOrWhiteSpace(text) || text[0] == '\0')
+				Log.Info($"Copying {path} from cloud to local. Local file exists: {localHasFile} Cloud vs local time: {cloudSaveTime} - {localSaveTime}. Cloud vs local size: {cloudFileSize} - {localFileSize}.");
+				string text2 = await CloudStore.ReadFileAsync(path);
+				if (string.IsNullOrWhiteSpace(text2) || text2[0] == '\0')
 				{
 					Log.Warn("Cloud file " + path + " has empty content, skipping download");
 					return;
 				}
-				await LocalStore.WriteFileAsync(path, text);
+				await LocalStore.WriteFileAsync(path, text2);
 				SyncLocalTimestamp(path);
 			}
 			else
 			{
-				Log.Debug($"Skipping sync for {path}, last modified time matches on local and remote ({lastModifiedTime})");
+				LogLevel level = ((!path.Contains("history")) ? LogLevel.Info : LogLevel.Debug);
+				Log.LogMessage(level, LogType.Generic, $"Skipping sync for {path}, last modified time matches on local and remote ({cloudSaveTime}). Cloud vs local size: {cloudFileSize} - {localFileSize}.");
 			}
 		}
-		else if (flag2)
+		else if (localHasFile)
 		{
 			Log.Info("Deleting " + path + " because it does not exist on remote");
 			LocalStore.DeleteFile(path);
@@ -408,7 +432,7 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 		{
 			if (!ShouldSyncFileToCloud(text))
 			{
-				DeleteStaleBackupFromCloud(directoryPath, text);
+				DeleteStaleLocalOnlyFileFromCloud(directoryPath, text);
 				continue;
 			}
 			string text2 = directoryPath + "/" + text;
@@ -527,7 +551,7 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 		{
 			if (!ShouldSyncFileToCloud(text))
 			{
-				DeleteStaleBackupFromCloud(directoryPath, text);
+				DeleteStaleLocalOnlyFileFromCloud(directoryPath, text);
 				continue;
 			}
 			filePathsRead.Add(text);
@@ -620,31 +644,35 @@ public class CloudSaveStore : ICloudSaveStore, ISaveStore
 	}
 
 	/// <summary>
-	/// Returns true if the file should be included in cloud sync operations. Filters out .backup files,
-	/// which are local crash-recovery artifacts created by CopyBackup. These should never be uploaded to
-	/// or synced from cloud storage.
+	/// Returns true if the file should be written to and synced with cloud storage. Filters out .backup files,
+	/// which are local crash-recovery artifacts created by CopyBackup, and .pre-repair files, the original of a save
+	/// that only loaded after JSON repair. Both are kept on this device only.
 	/// </summary>
 	private static bool ShouldSyncFileToCloud(string fileName)
 	{
-		return !fileName.EndsWith(".backup");
+		if (!fileName.EndsWith(".backup"))
+		{
+			return !fileName.EndsWith(".pre-repair");
+		}
+		return false;
 	}
 
 	/// <summary>
-	/// Removes a .backup file that should never have been uploaded to cloud storage. These are local-only
-	/// artifacts that were uploaded before OverwriteCloudWithLocalDirectory filtered them. Cleaning them
-	/// up frees cloud quota.
+	/// Removes a local-only file that should never have been uploaded to cloud storage: .backup files uploaded
+	/// before OverwriteCloudWithLocalDirectory filtered them, and .pre-repair files written through WriteFile before
+	/// it kept them local. Cleaning them up frees cloud quota.
 	/// </summary>
-	private void DeleteStaleBackupFromCloud(string directoryPath, string cloudPath)
+	private void DeleteStaleLocalOnlyFileFromCloud(string directoryPath, string cloudPath)
 	{
 		string text = directoryPath + "/" + cloudPath;
-		Log.Info("Removing stale .backup file from cloud: " + text);
+		Log.Info("Removing stale local-only file from cloud: " + text);
 		try
 		{
 			CloudStore.DeleteFile(text);
 		}
 		catch (Exception ex)
 		{
-			Log.Warn("Failed to remove .backup from cloud " + text + ": " + ex.Message);
+			Log.Warn("Failed to remove local-only file from cloud " + text + ": " + ex.Message);
 		}
 	}
 

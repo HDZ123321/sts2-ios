@@ -32,7 +32,7 @@ public sealed class ThunderPower : PowerModel
 			SfxCmd.Play("slash_attack.mp3");
 			VfxCmd.PlayOnCreatureCenters(livingTargets, "vfx/vfx_attack_slash");
 			await CreatureCmd.TriggerAnim(orb.Owner.Creature, "Attack", base.Owner.Player.Character.AttackAnimDelay);
-			await CreatureCmd.Damage(choiceContext, livingTargets, base.Amount, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, livingTargets, base.Amount, ValueProp.Unpowered, base.Owner, null, null);
 		}
 	}
 }

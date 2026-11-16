@@ -124,7 +124,7 @@ public class NFeedbackCategoryDropdown : NDropdown
 	protected override void OnFocus()
 	{
 		_currentOptionHighlight.Modulate = new Color("afcdde");
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_selectionReticle.OnSelect();
 		}

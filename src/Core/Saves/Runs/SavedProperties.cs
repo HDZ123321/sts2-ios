@@ -73,7 +73,7 @@ public class SavedProperties : IPacketSerializable
 	public static SavedProperties? FromInternal(object model, ModelId? id)
 	{
 		SavedProperties savedProperties = new SavedProperties();
-		foreach (PropertyInfo item in SavedPropertiesTypeCache.GetJsonPropertiesForType(model.GetType()) ?? new List<PropertyInfo>())
+		foreach (PropertyInfo item in ModelIdSerializationCache.GetJsonPropertiesForType(model.GetType()) ?? new List<PropertyInfo>())
 		{
 			string name = item.Name;
 			object value = item.GetValue(model);
@@ -350,13 +350,13 @@ public class SavedProperties : IPacketSerializable
 
 	private static void WritePropertyName(PacketWriter writer, string propertyName)
 	{
-		writer.WriteInt(SavedPropertiesTypeCache.GetNetIdForPropertyName(propertyName), SavedPropertiesTypeCache.NetIdBitSize);
+		writer.WriteInt(ModelIdSerializationCache.GetNetIdForPropertyName(propertyName), ModelIdSerializationCache.PropertyIdBitSize);
 	}
 
 	private static string ReadPropertyName(PacketReader reader)
 	{
-		int netId = reader.ReadInt(SavedPropertiesTypeCache.NetIdBitSize);
-		return SavedPropertiesTypeCache.GetPropertyNameForNetId(netId);
+		int netId = reader.ReadInt(ModelIdSerializationCache.PropertyIdBitSize);
+		return ModelIdSerializationCache.GetPropertyNameForNetId(netId);
 	}
 
 	public void Serialize(PacketWriter writer)

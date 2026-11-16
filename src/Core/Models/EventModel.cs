@@ -5,22 +5,27 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Assets;
-using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.CardSelection;
+using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Debug;
-using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Characters;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Runs.History;
 using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Models;
@@ -29,15 +34,7 @@ public abstract class EventModel : AbstractModel
 {
 	protected const string _initialPageKey = "INITIAL";
 
-	/// <summary>
-	/// Generated via <see cref="M:MegaCrit.Sts2.Core.Models.EventModel.GenerateInternalCombatState(MegaCrit.Sts2.Core.Runs.IRunState)" /> for combat-style events.
-	/// </summary>
-	private EncounterModel? _mutableEncounter;
-
-	/// <summary>
-	/// Generated via <see cref="M:MegaCrit.Sts2.Core.Models.EventModel.GenerateInternalCombatState(MegaCrit.Sts2.Core.Runs.IRunState)" /> for combat-style events.
-	/// </summary>
-	protected CombatState? _combatStateForCombatLayout;
+	protected EventCombatSynchronizer? _combatSynchronizer;
 
 	private List<EventOption>? _currentOptions;
 
@@ -91,6 +88,12 @@ public abstract class EventModel : AbstractModel
 	/// Only relevant when <see cref="P:MegaCrit.Sts2.Core.Models.EventModel.LayoutType" /> is <see cref="F:MegaCrit.Sts2.Core.Events.EventLayoutType.Combat" />.
 	/// </summary>
 	public virtual EncounterModel? CanonicalEncounter => null;
+
+	/// <summary>
+	/// What this event (or Ancient) guesses the Fool's pronouns are when its text refers to them.
+	/// Override to give a specific event/Ancient its own guess. Ignored for non-Fool characters.
+	/// </summary>
+	public virtual FoolPronounGuess FoolPronounGuess => FoolPronounGuess.Neutral;
 
 	public bool IsFinished
 	{
@@ -227,7 +230,7 @@ public abstract class EventModel : AbstractModel
 		return LocString.GetIfExists(LocTable, key + ".description");
 	}
 
-	public async Task BeginEvent(Player player, bool isPreFinished)
+	public async Task BeginEvent(Player player, EventCombatSynchronizer? combatSynchronizer, bool isPreFinished)
 	{
 		AssertMutable();
 		if (Owner != null)
@@ -235,7 +238,12 @@ public abstract class EventModel : AbstractModel
 			throw new InvalidOperationException("Tried to begin event, but it already has an owner!");
 		}
 		Owner = player;
-		Rng = new Rng((uint)((uint)((int)Owner.RunState.Rng.Seed + ((!IsShared) ? Owner.RunState.GetPlayerSlotIndex(Owner) : 0)) + StringHelper.GetDeterministicHashCode(base.Id.Entry)));
+		Rng = new Rng((ulong)((long)Owner.RunState.Rng.Seed + (long)(IsShared ? 0 : Owner.RunState.GetPlayerSlotIndex(Owner))) + StringHelper.GetDeterministicHashCode(base.Id.Entry));
+		if (CanonicalEncounter != null && combatSynchronizer == null)
+		{
+			throw new InvalidOperationException("Combat synchronizer must be passed to events that may transition to combat!");
+		}
+		_combatSynchronizer = combatSynchronizer;
 		try
 		{
 			await BeforeEventStarted(isPreFinished);
@@ -377,46 +385,7 @@ public abstract class EventModel : AbstractModel
 		{
 			throw new InvalidOperationException("Tried to create combat room visuals for non-combat event!");
 		}
-		return new CombatEventVisuals(_mutableEncounter, players, act);
-	}
-
-	public void GenerateInternalCombatState(IRunState runState)
-	{
-		if (LayoutType != EventLayoutType.Combat)
-		{
-			throw new InvalidOperationException("Tried to generate internal encounter for non-combat event!");
-		}
-		_mutableEncounter = CanonicalEncounter.ToMutable();
-		_mutableEncounter.GenerateMonstersWithSlots(runState);
-		_combatStateForCombatLayout = new CombatState(_mutableEncounter, runState, runState.Modifiers, runState.BadgeModels, runState.MultiplayerScalingModel);
-		foreach (Player player in runState.Players)
-		{
-			_combatStateForCombatLayout.AddPlayer(player);
-		}
-		foreach (var monstersWithSlot in _combatStateForCombatLayout.Encounter.MonstersWithSlots)
-		{
-			MonsterModel item = monstersWithSlot.Item1;
-			string item2 = monstersWithSlot.Item2;
-			Creature creature = _combatStateForCombatLayout.CreateCreature(item, CombatSide.Enemy, item2);
-			_combatStateForCombatLayout.AddCreature(creature);
-		}
-	}
-
-	public void ResetInternalCombatState()
-	{
-		if (LayoutType != EventLayoutType.Combat)
-		{
-			throw new InvalidOperationException("Tried to reset internal encounter for non-combat event!");
-		}
-		if (_combatStateForCombatLayout == null)
-		{
-			return;
-		}
-		foreach (Creature item in _combatStateForCombatLayout.Creatures.ToList())
-		{
-			_combatStateForCombatLayout.RemoveCreature(item);
-		}
-		_combatStateForCombatLayout = null;
+		return new CombatEventVisuals(_combatSynchronizer.MutableEncounterForLayout, players, act);
 	}
 
 	public EventModel ToMutable()
@@ -478,9 +447,9 @@ public abstract class EventModel : AbstractModel
 			break;
 		case EventLayoutType.Combat:
 			list2.AddRange(NCombatRoom.AssetPaths);
-			if (_mutableEncounter != null)
+			if (_combatSynchronizer?.MutableEncounterForLayout != null)
 			{
-				list2.AddRange(_mutableEncounter.GetAssetPaths(runState));
+				list2.AddRange(_combatSynchronizer.MutableEncounterForLayout.GetAssetPaths(runState));
 			}
 			break;
 		case EventLayoutType.Ancient:
@@ -494,6 +463,13 @@ public abstract class EventModel : AbstractModel
 	/// Gets called when entering an Event. Useful for setting ambient vfx, changing music, etc
 	/// </summary>
 	public virtual void OnRoomEnter()
+	{
+	}
+
+	/// <summary>
+	/// Gets called when exiting an Event. Useful for cleaning up ambient vfx, changing music, etc
+	/// </summary>
+	public virtual void OnRoomExit()
 	{
 	}
 
@@ -530,6 +506,7 @@ public abstract class EventModel : AbstractModel
 
 	/// <summary>
 	/// Virtual function for events to hook onto if they need to do stuff after the event starts.
+	/// ONLY called for the locally owned event in multiplayer.
 	/// </summary>
 	public virtual Task AfterEventStarted()
 	{
@@ -592,20 +569,20 @@ public abstract class EventModel : AbstractModel
 	/// </param>
 	protected void EnterCombatWithoutExitingEvent<T>(IReadOnlyList<Reward> extraRewards, bool shouldResumeAfterCombat) where T : EncounterModel
 	{
-		EnterCombatWithoutExitingEvent(ModelDb.Encounter<T>().ToMutable(), extraRewards, shouldResumeAfterCombat);
+		EnterCombatWithoutExitingEvent(ModelDb.Encounter<T>(), extraRewards, shouldResumeAfterCombat);
 	}
 
 	/// <summary>
 	/// Enter an encounter, then return to this event once the encounter is finished.
 	/// </summary>
-	/// <param name="mutableEncounter">The mutable model of the encounter to start.</param>
+	/// <param name="canonicalEncounter">The canonical encounter to enter.</param>
 	/// <param name="extraRewards">Extra rewards to give the player in addition to the encounter's normal rewards.</param>
 	/// <param name="shouldResumeAfterCombat">
 	/// Whether to resume this event after the encounter is finished.
 	/// Usually true, but some events (like <see cref="T:MegaCrit.Sts2.Core.Models.Events.DenseVegetation" />) have no more options after combat ends, so
 	/// they pass false to directly proceed to the next map point after combat ends.
 	/// </param>
-	protected void EnterCombatWithoutExitingEvent(EncounterModel mutableEncounter, IReadOnlyList<Reward> extraRewards, bool shouldResumeAfterCombat)
+	protected void EnterCombatWithoutExitingEvent(EncounterModel canonicalEncounter, IReadOnlyList<Reward> extraRewards, bool shouldResumeAfterCombat)
 	{
 		if (!IsShared)
 		{
@@ -616,23 +593,11 @@ public abstract class EventModel : AbstractModel
 			throw new InvalidOperationException($"Cannot resume event {base.Id} after combat because it has a Combat layout — " + "there is no event layout to return to.");
 		}
 		this.EnteringEventCombat?.Invoke();
-		if (!LocalContext.IsMe(Owner))
+		if (LocalContext.IsMe(Owner))
 		{
-			return;
+			Node = null;
 		}
-		Node = null;
-		CombatState combatState = ((LayoutType != EventLayoutType.Combat) ? new CombatState(mutableEncounter, Owner.RunState, Owner.RunState.Modifiers, Owner.RunState.BadgeModels, Owner.RunState.MultiplayerScalingModel) : _combatStateForCombatLayout);
-		CombatRoom combatRoom = new CombatRoom(combatState)
-		{
-			ShouldCreateCombat = (LayoutType != EventLayoutType.Combat),
-			ShouldResumeParentEventAfterCombat = shouldResumeAfterCombat,
-			ParentEventId = base.Id
-		};
-		foreach (Reward extraReward in extraRewards)
-		{
-			combatRoom.AddExtraReward(extraReward.Player, extraReward);
-		}
-		TaskHelper.RunSafely(RunManager.Instance.EnterRoomWithoutExitingCurrentRoom(combatRoom, LayoutType != EventLayoutType.Combat));
+		_combatSynchronizer.ReadyToEnterCombat(canonicalEncounter, Owner, extraRewards, shouldResumeAfterCombat);
 	}
 
 	/// <summary>
@@ -686,5 +651,25 @@ public abstract class EventModel : AbstractModel
 	private string OptionKey(string pageName, string optionName)
 	{
 		return $"{StringHelper.Slugify(GetType().Name)}.pages.{pageName}.options.{optionName}";
+	}
+
+	/// <summary>
+	/// Helper function for events that have you choose cards from a grid.
+	/// Adds the unselected cards as cards skipped in the run history.
+	/// </summary>
+	/// <param name="cards">Care creation results to choose from</param>
+	/// <param name="prefs">Card Selector prefs for the choice</param>
+	protected async Task SelectCardsToAddToDeckFromGrid(List<CardCreationResult> cards, CardSelectorPrefs prefs)
+	{
+		IEnumerable<CardModel> selectedCards = await CardSelectCmd.FromSimpleGridForRewards(new BlockingPlayerChoiceContext(), cards, Owner, prefs);
+		IEnumerable<CardCreationResult> unselectedCards = cards.Where((CardCreationResult c) => !selectedCards.Contains(c.Card));
+		foreach (CardModel item in selectedCards)
+		{
+			CardCmd.PreviewCardPileAdd(await CardPileCmd.Add(item, PileType.Deck));
+		}
+		foreach (CardCreationResult item2 in unselectedCards)
+		{
+			Owner.RunState.CurrentMapPointHistoryEntry.GetEntry(Owner.NetId).CardChoices.Add(new CardChoiceHistoryEntry(item2.Card, wasPicked: false));
+		}
 	}
 }

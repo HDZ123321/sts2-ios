@@ -18,7 +18,7 @@ public sealed class Thunder : CardModel
 		HoverTipFactory.FromOrb<LightningOrb>()
 	});
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new PowerVar<ThunderPower>(6m));
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new PowerVar<ThunderPower>(8m));
 
 	public Thunder()
 		: base(1, CardType.Power, CardRarity.Uncommon, TargetType.Self)
@@ -33,6 +33,6 @@ public sealed class Thunder : CardModel
 
 	protected override void OnUpgrade()
 	{
-		base.DynamicVars["ThunderPower"].UpgradeValueBy(2m);
+		base.DynamicVars["ThunderPower"].UpgradeValueBy(3m);
 	}
 }

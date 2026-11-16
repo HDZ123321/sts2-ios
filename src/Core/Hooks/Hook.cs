@@ -8,14 +8,17 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.CardRewardAlternatives;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.FoolArrows;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -52,7 +55,7 @@ public static class Hook
 	/// </summary>
 	private static IEnumerable<AbstractModel> IterateCombatHookListeners(ICombatState combatState)
 	{
-		if (CombatManager.Instance.IsOverOrEnding && !CombatManager.Instance.IsStarting)
+		if (CombatManager.Instance.ShouldSkipCombatEffect)
 		{
 			yield break;
 		}
@@ -70,6 +73,42 @@ public static class Hook
 		foreach (AbstractModel model in runState.IterateHookListeners(null))
 		{
 			await model.AfterActEntered();
+			model.InvokeExecutionFinished();
+		}
+	}
+
+	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterArrowDislodged(MegaCrit.Sts2.Core.Models.Powers.ImpaledPower,MegaCrit.Sts2.Core.Entities.FoolArrows.ArrowSlot,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// </summary>
+	public static async Task AfterArrowDislodged(ICombatState combatState, ImpaledPower power, ArrowSlot arrow, PlayerChoiceContext context, CardModel? source)
+	{
+		foreach (AbstractModel model in IterateCombatHookListeners(combatState))
+		{
+			await model.AfterArrowDislodged(power, arrow, context, source);
+			model.InvokeExecutionFinished();
+		}
+	}
+
+	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterArrowImpaled(MegaCrit.Sts2.Core.Models.Powers.ImpaledPower,MegaCrit.Sts2.Core.Entities.FoolArrows.ArrowSlot,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// </summary>
+	public static async Task AfterArrowImpaled(ICombatState combatState, ImpaledPower power, ArrowSlot arrow, PlayerChoiceContext context, CardModel? source)
+	{
+		foreach (AbstractModel model in IterateCombatHookListeners(combatState))
+		{
+			await model.AfterArrowImpaled(power, arrow, context, source);
+			model.InvokeExecutionFinished();
+		}
+	}
+
+	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterArrowShot(MegaCrit.Sts2.Core.Entities.Players.Player,MegaCrit.Sts2.Core.Entities.FoolArrows.ArrowSlot,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// </summary>
+	public static async Task AfterArrowShot(ICombatState combatState, Player owner, ArrowSlot? arrow, PlayerChoiceContext context, CardModel? source)
+	{
+		foreach (AbstractModel model in IterateCombatHookListeners(combatState))
+		{
+			await model.AfterArrowShot(owner, arrow, context, source);
 			model.InvokeExecutionFinished();
 		}
 	}
@@ -99,16 +138,16 @@ public static class Hook
 	}
 
 	/// <summary>
-	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterBlockBroken(MegaCrit.Sts2.Core.Entities.Creatures.Creature)" />.
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterBlockBroken(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.Creature)" />.
 	///
 	/// Dispatched directly, not through the IterateCombatHookListeners guard: it fires from the same
 	/// damage event that ends combat (the killing hit), so it must still resolve for that hit.
 	/// </summary>
-	public static async Task AfterBlockBroken(ICombatState combatState, Creature creature)
+	public static async Task AfterBlockBroken(ICombatState combatState, PlayerChoiceContext choiceContext, Creature target, Creature? breaker)
 	{
 		foreach (AbstractModel model in combatState.IterateHookListeners())
 		{
-			await model.AfterBlockBroken(creature);
+			await model.AfterBlockBroken(choiceContext, target, breaker);
 			model.InvokeExecutionFinished();
 		}
 	}
@@ -335,6 +374,18 @@ public static class Hook
 	}
 
 	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCombatRewardOffered(MegaCrit.Sts2.Core.Rewards.RewardsSet,MegaCrit.Sts2.Core.Rooms.CombatRoom)" />.
+	/// </summary>
+	public static async Task BeforeCombatRewardOffered(RewardsSet rewards, IRunState runState, CombatRoom room)
+	{
+		foreach (AbstractModel model in runState.IterateHookListeners(null))
+		{
+			await model.BeforeCombatRewardOffered(rewards, room);
+			model.InvokeExecutionFinished();
+		}
+	}
+
+	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterCombatVictory(MegaCrit.Sts2.Core.Rooms.CombatRoom)" />.
 	/// </summary>
 	public static async Task AfterCombatVictory(IRunState runState, ICombatState? combatState, CombatRoom room)
@@ -445,9 +496,9 @@ public static class Hook
 	}
 
 	/// <summary>
-	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDeath(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Boolean,System.Single)" />.
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterDeath(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean,System.Single)" />.
 	/// </summary>
-	public static async Task AfterDeath(IRunState runState, ICombatState? combatState, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public static async Task AfterDeath(IRunState runState, ICombatState? combatState, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		ulong? netId = LocalContext.NetId;
 		if (!netId.HasValue)
@@ -456,8 +507,8 @@ public static class Hook
 		}
 		foreach (AbstractModel model in runState.IterateHookListeners(combatState))
 		{
-			HookPlayerChoiceContext hookPlayerChoiceContext = new HookPlayerChoiceContext(model, netId.Value, creature.CombatState, GameActionType.Combat);
-			Task task = model.AfterDeath(hookPlayerChoiceContext, creature, wasRemovalPrevented, deathAnimLength);
+			HookPlayerChoiceContext hookPlayerChoiceContext = new HookPlayerChoiceContext(model, netId.Value, combatState, (combatState != null) ? GameActionType.Combat : GameActionType.NonCombat);
+			Task task = model.AfterDeath(hookPlayerChoiceContext, creature, source, wasRemovalPrevented, deathAnimLength);
 			await hookPlayerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 			model.InvokeExecutionFinished();
 		}
@@ -539,14 +590,14 @@ public static class Hook
 		List<Task> tasksToAwait = new List<Task>();
 		foreach (AbstractModel item in IterateCombatHookListeners(combatState))
 		{
-			HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item, netId.Value, player.Creature.CombatState, GameActionType.Combat);
+			HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item, netId.Value, combatState, GameActionType.Combat);
 			Task task = item.BeforeFlush(playerChoiceContext, player);
 			await playerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 			tasksToAwait.Add(playerChoiceContext.WaitForCompletion());
 		}
 		foreach (AbstractModel item2 in IterateCombatHookListeners(combatState))
 		{
-			HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item2, netId.Value, player.Creature.CombatState, GameActionType.Combat);
+			HookPlayerChoiceContext playerChoiceContext = new HookPlayerChoiceContext(item2, netId.Value, combatState, GameActionType.Combat);
 			Task task2 = item2.BeforeFlushLate(playerChoiceContext, player);
 			await playerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task2);
 			tasksToAwait.Add(playerChoiceContext.WaitForCompletion());
@@ -1217,19 +1268,22 @@ public static class Hook
 	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterTakingExtraTurn(MegaCrit.Sts2.Core.Entities.Players.Player)" />.
 	/// </summary>
-	public static async Task AfterTakingExtraTurn(ICombatState combatState, Player player)
+	public static async Task AfterTakingExtraTurn(ICombatState combatState, Player player, AbstractModel source)
 	{
 		foreach (AbstractModel model in IterateCombatHookListeners(combatState))
 		{
-			await model.AfterTakingExtraTurn(player);
-			model.InvokeExecutionFinished();
+			if (model == source)
+			{
+				await model.AfterTakingExtraTurn(player);
+				model.InvokeExecutionFinished();
+			}
 		}
 	}
 
 	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.BeforeSideTurnEnd(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})" />.
 	/// </summary>
-	public static async Task BeforeTurnEnd(ICombatState combatState, CombatSide side, IEnumerable<Creature> participants)
+	public static async Task BeforeSideTurnEnd(ICombatState combatState, CombatSide side, IEnumerable<Creature> participants)
 	{
 		ulong? netId = LocalContext.NetId;
 		if (!netId.HasValue)
@@ -1264,7 +1318,7 @@ public static class Hook
 	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.AfterSideTurnEnd(MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Combat.CombatSide,System.Collections.Generic.IEnumerable{MegaCrit.Sts2.Core.Entities.Creatures.Creature})" />.
 	/// </summary>
-	public static async Task AfterTurnEnd(ICombatState combatState, CombatSide side, IEnumerable<Creature> participants)
+	public static async Task AfterSideTurnEnd(ICombatState combatState, CombatSide side, IEnumerable<Creature> participants)
 	{
 		ulong? netId = LocalContext.NetId;
 		if (!netId.HasValue)
@@ -1386,25 +1440,22 @@ public static class Hook
 	}
 
 	/// <summary>
-	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardPlayResultPileTypeAndPosition(MegaCrit.Sts2.Core.Models.CardModel,System.Boolean,MegaCrit.Sts2.Core.Entities.Cards.ResourceInfo,MegaCrit.Sts2.Core.Entities.Cards.PileType,MegaCrit.Sts2.Core.Entities.Cards.CardPilePosition)" />.
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyCardPlayResultLocation(MegaCrit.Sts2.Core.Models.CardModel,System.Boolean,MegaCrit.Sts2.Core.Entities.Cards.ResourceInfo,MegaCrit.Sts2.Core.Entities.Cards.CardLocation)" />.
 	/// </summary>
-	public static (PileType, CardPilePosition) ModifyCardPlayResultPileTypeAndPosition(ICombatState combatState, CardModel card, bool isAutoPlay, ResourceInfo resources, PileType pileType, CardPilePosition position, out IEnumerable<AbstractModel> modifiers)
+	public static CardLocation ModifyCardPlayResultLocation(ICombatState combatState, CardModel card, bool isAutoPlay, ResourceInfo resources, CardLocation cardLocation, out IEnumerable<AbstractModel> modifiers)
 	{
-		PileType pileType2 = pileType;
-		CardPilePosition cardPilePosition = position;
 		List<AbstractModel> list = new List<AbstractModel>();
 		foreach (AbstractModel item in IterateCombatHookListeners(combatState))
 		{
-			PileType pileType3 = pileType2;
-			CardPilePosition cardPilePosition2 = cardPilePosition;
-			(pileType2, cardPilePosition) = item.ModifyCardPlayResultPileTypeAndPosition(card, isAutoPlay, resources, pileType2, cardPilePosition);
-			if (pileType3 != pileType2 || cardPilePosition2 != cardPilePosition)
+			CardLocation cardLocation2 = cardLocation;
+			cardLocation = item.ModifyCardPlayResultLocation(card, isAutoPlay, resources, cardLocation);
+			if (cardLocation2 != cardLocation)
 			{
 				list.Add(item);
 			}
 		}
 		modifiers = list;
-		return (pileType2, cardPilePosition);
+		return cardLocation;
 	}
 
 	/// <summary>
@@ -1481,9 +1532,9 @@ public static class Hook
 	}
 
 	/// <summary>
-	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" />.
 	/// </summary>
-	public static decimal ModifyDamage(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage, ValueProp props, CardModel? cardSource, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode, out IEnumerable<AbstractModel> modifiers)
+	public static decimal ModifyDamage(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode, out IEnumerable<AbstractModel> modifiers)
 	{
 		List<AbstractModel> modifiers2 = new List<AbstractModel>();
 		decimal num = damage;
@@ -1534,7 +1585,7 @@ public static class Hook
 			foreach (Creature item in combatState?.HittableEnemies ?? Array.Empty<Creature>())
 			{
 				List<AbstractModel> modifiers3;
-				decimal num3 = ModifyDamageInternal(runState, combatState, item, dealer, num, props, cardSource, modifyDamageHookType, out modifiers3);
+				decimal num3 = ModifyDamageInternal(runState, combatState, item, dealer, num, props, cardSource, cardPlay, modifyDamageHookType, out modifiers3);
 				if (!num2.HasValue)
 				{
 					num2 = num3;
@@ -1559,7 +1610,7 @@ public static class Hook
 		}
 		if (!flag4 || !flag5)
 		{
-			num = ModifyDamageInternal(runState, combatState, target, dealer, num, props, cardSource, modifyDamageHookType, out modifiers2);
+			num = ModifyDamageInternal(runState, combatState, target, dealer, num, props, cardSource, cardPlay, modifyDamageHookType, out modifiers2);
 		}
 		modifiers = modifiers2;
 		return Math.Max(0m, num);
@@ -1648,6 +1699,18 @@ public static class Hook
 		foreach (AbstractModel item in runState.IterateHookListeners(null))
 		{
 			extraText = item.ModifyExtraRestSiteHealText(player, extraText);
+		}
+		return extraText;
+	}
+
+	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyExtraRestSiteMendText(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Localization.LocString})" />.
+	/// </summary>
+	public static IReadOnlyList<LocString> ModifyExtraRestSiteMendText(IRunState runState, Player player, IReadOnlyList<LocString> extraText)
+	{
+		foreach (AbstractModel item in runState.IterateHookListeners(null))
+		{
+			extraText = item.ModifyExtraRestSiteMendText(player, extraText);
 		}
 		return extraText;
 	}
@@ -1999,6 +2062,33 @@ public static class Hook
 	}
 
 	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.TryReplaceDefaultRoomRewards(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Rewards.Reward},MegaCrit.Sts2.Core.Rooms.AbstractRoom)" />.
+	/// Only one model may replace the rewards. Every model is asked, and a second one that tries is reported and
+	/// ignored, so that the winner is never decided silently by hook listener order.
+	/// </summary>
+	public static bool TryReplaceDefaultRoomRewards(IRunState runState, Player player, List<Reward> rewards, AbstractRoom room)
+	{
+		AbstractModel abstractModel = null;
+		foreach (AbstractModel item in runState.IterateHookListeners(null))
+		{
+			List<Reward> list = new List<Reward>();
+			if (item.TryReplaceDefaultRoomRewards(player, list, room))
+			{
+				if (abstractModel != null)
+				{
+					Log.Error($"{item.Id} tried to replace the rewards for {room.RoomType}, but {abstractModel.Id} already did. Keeping the first.");
+				}
+				else
+				{
+					abstractModel = item;
+					rewards.AddRange(list);
+				}
+			}
+		}
+		return abstractModel != null;
+	}
+
+	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyShuffleOrder(MegaCrit.Sts2.Core.Entities.Players.Player,System.Collections.Generic.List{MegaCrit.Sts2.Core.Models.CardModel},System.Boolean)" />.
 	/// </summary>
 	public static void ModifyShuffleOrder(ICombatState combatState, Player player, List<CardModel> cards, bool isInitialShuffle)
@@ -2045,12 +2135,28 @@ public static class Hook
 	/// Dispatched directly, not through the IterateCombatHookListeners guard: it runs during damage
 	/// resolution, which proceeds while combat is ending.
 	/// </summary>
-	public static Creature ModifyUnblockedDamageTarget(ICombatState combatState, Creature originalTarget, decimal amount, ValueProp props, Creature? dealer)
+	public static Creature ModifyUnblockedDamageTarget(ICombatState? combatState, Creature originalTarget, decimal amount, ValueProp props, Creature? dealer)
 	{
 		Creature creature = originalTarget;
-		foreach (AbstractModel item in combatState.IterateHookListeners())
+		foreach (AbstractModel item in combatState?.IterateHookListeners() ?? Array.Empty<AbstractModel>())
 		{
 			creature = item.ModifyUnblockedDamageTarget(creature, amount, props, dealer);
+		}
+		return creature;
+	}
+
+	/// <summary>
+	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyPreBlockDamageTarget(MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature)" />.
+	///
+	/// Dispatched directly, not through the IterateCombatHookListeners guard: it runs during damage
+	/// resolution, which proceeds while combat is ending.
+	/// </summary>
+	public static Creature? ModifyPreBlockDamageTarget(ICombatState? combatState, Creature originalTarget, decimal amount, ValueProp props, Creature? dealer)
+	{
+		Creature creature = null;
+		foreach (AbstractModel item in combatState?.IterateHookListeners() ?? Array.Empty<AbstractModel>())
+		{
+			creature = item.ModifyPreBlockDamageTarget(originalTarget, creature, amount, props, dealer);
 		}
 		return creature;
 	}
@@ -2454,15 +2560,25 @@ public static class Hook
 	/// <summary>
 	/// See <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ShouldTakeExtraTurn(MegaCrit.Sts2.Core.Entities.Players.Player)" />.
 	/// </summary>
-	public static bool ShouldTakeExtraTurn(ICombatState combatState, Player player)
+	public static bool ShouldTakeExtraTurn(ICombatState combatState, Player player, out AbstractModel? source)
 	{
 		foreach (AbstractModel item in IterateCombatHookListeners(combatState))
 		{
-			if (item.ShouldTakeExtraTurn(player))
+			if (item.ShouldTakeExtraTurnEarly(player))
 			{
+				source = item;
 				return true;
 			}
 		}
+		foreach (AbstractModel item2 in IterateCombatHookListeners(combatState))
+		{
+			if (item2.ShouldTakeExtraTurn(player))
+			{
+				source = item2;
+				return true;
+			}
+		}
+		source = null;
 		return false;
 	}
 
@@ -2508,7 +2624,7 @@ public static class Hook
 		return true;
 	}
 
-	private static decimal ModifyDamageInternal(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage, ValueProp props, CardModel? cardSource, ModifyDamageHookType modifyDamageHookType, out List<AbstractModel> modifiers)
+	private static decimal ModifyDamageInternal(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType, out List<AbstractModel> modifiers)
 	{
 		decimal num = damage;
 		List<AbstractModel> list = new List<AbstractModel>();
@@ -2516,7 +2632,7 @@ public static class Hook
 		{
 			foreach (AbstractModel item in runState.IterateHookListeners(combatState))
 			{
-				decimal num2 = item.ModifyDamageAdditive(target, num, props, dealer, cardSource);
+				decimal num2 = item.ModifyDamageAdditive(target, num, props, dealer, cardSource, cardPlay);
 				num += num2;
 				if (num2 != 0m)
 				{
@@ -2528,27 +2644,36 @@ public static class Hook
 		{
 			foreach (AbstractModel item2 in runState.IterateHookListeners(combatState))
 			{
-				decimal num3 = item2.ModifyDamageMultiplicative(target, num, props, dealer, cardSource);
+				decimal num3 = item2.ModifyDamageMultiplicative(target, num, props, dealer, cardSource, cardPlay);
 				num *= num3;
 				if (num3 != 1m)
 				{
 					list.Add(item2);
 				}
 			}
+			foreach (AbstractModel item3 in runState.IterateHookListeners(combatState))
+			{
+				decimal num4 = item3.ModifyDamageMultiplicativeLate(target, num, props, dealer, cardSource, cardPlay);
+				num *= num4;
+				if (num4 != 1m)
+				{
+					list.Add(item3);
+				}
+			}
 		}
 		if (modifyDamageHookType.HasFlag(ModifyDamageHookType.Cap))
 		{
-			decimal num4 = decimal.MaxValue;
-			foreach (AbstractModel item3 in runState.IterateHookListeners(combatState))
+			decimal num5 = decimal.MaxValue;
+			foreach (AbstractModel item4 in runState.IterateHookListeners(combatState))
 			{
-				decimal num5 = item3.ModifyDamageCap(target, props, dealer, cardSource);
-				if (num5 < num4)
+				decimal num6 = item4.ModifyDamageCap(target, props, dealer, cardSource, cardPlay);
+				if (num6 < num5)
 				{
-					num4 = num5;
-					if (num > num5)
+					num5 = num6;
+					if (num > num6)
 					{
-						num = num5;
-						list.Add(item3);
+						num = num6;
+						list.Add(item4);
 					}
 				}
 			}

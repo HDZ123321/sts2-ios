@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Nodes.Audio;
+using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 
@@ -78,7 +79,7 @@ public sealed class KinPriest : MonsterModel
 		}
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (creature.Monster is KinFollower)
 		{
@@ -86,15 +87,11 @@ public sealed class KinPriest : MonsterModel
 			{
 				return Task.CompletedTask;
 			}
-			IReadOnlyList<Creature> readOnlyList = base.Creature.CombatState?.GetTeammatesOf(base.Creature);
-			if (readOnlyList == null)
-			{
-				return Task.CompletedTask;
-			}
 			NRunMusicController.Instance?.UpdateMusicParameter("the_kin_progress", 1f);
-			if (!readOnlyList.Any((Creature c) => c != null && c.Monster is KinFollower && c.IsAlive))
+			IReadOnlyList<Creature> teammatesOf = base.CombatState.GetTeammatesOf(base.Creature);
+			if (!teammatesOf.Any((Creature c) => c != null && c.Monster is KinFollower && c.IsAlive))
 			{
-				Creature creature2 = readOnlyList.FirstOrDefault((Creature c) => c != null && c.Monster is KinPriest && c.IsAlive);
+				Creature creature2 = teammatesOf.FirstOrDefault((Creature c) => c != null && c.Monster is KinPriest && c.IsAlive);
 				if (creature2 != null && creature2.Monster is KinPriest kinPriest)
 				{
 					kinPriest.AllFollowerDeathResponse();
@@ -194,8 +191,15 @@ public sealed class KinPriest : MonsterModel
 		return creatureAnimator;
 	}
 
-	public void AllFollowerDeathResponse()
+	private void AllFollowerDeathResponse()
 	{
 		TalkCmd.Play(_followersDeathLine, base.Creature, VfxColor.Purple, VfxDuration.Standard);
+	}
+
+	public override List<BestiaryMonsterMove> GenerateBestiaryMoveList(NCreatureVisuals? creatureVisuals)
+	{
+		List<BestiaryMonsterMove> list = base.GenerateBestiaryMoveList(creatureVisuals);
+		list.RemoveAll((BestiaryMonsterMove m) => m.stateId == "ORB_OF_WEAKNESS_MOVE");
+		return list;
 	}
 }

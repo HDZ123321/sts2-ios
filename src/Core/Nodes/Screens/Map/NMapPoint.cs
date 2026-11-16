@@ -278,9 +278,10 @@ public abstract class NMapPoint : NButton
 	/// </summary>
 	private bool ShouldDisplayPlayerVote(Player player)
 	{
-		if (_screen.PlayerVoteDictionary.TryGetValue(player, out var value) && value.HasValue)
+		MapCoord? mapCoord = RunManager.Instance.MapSelectionSynchronizer.GetVote(player)?.coord;
+		if (mapCoord.HasValue)
 		{
-			return value == Point.coord;
+			return mapCoord == Point.coord;
 		}
 		return _runState.MapLocation.coord == Point.coord;
 	}
@@ -306,7 +307,7 @@ public abstract class NMapPoint : NButton
 	/// </summary>
 	protected sealed override void OnRelease()
 	{
-		if (IsTravelable && (Point.coord.row != 0 || !TestMode.IsOff || SaveManager.Instance.SeenFtue("map_select_ftue")) && _screen.Drawings.GetLocalDrawingMode() == DrawingMode.None && (_screen.IsNodeOnScreen(this) || !NControllerManager.Instance.IsUsingController))
+		if (IsTravelable && (Point.coord.row != 0 || !TestMode.IsOff || SaveManager.Instance.SeenFtue("map_select_ftue")) && _screen.Drawings.GetLocalDrawingMode() == DrawingMode.None && (_screen.IsNodeOnScreen(this) || !NControllerManager.Instance.IsUsingDirectionalNavigation))
 		{
 			_screen.OnMapPointSelectedLocally(this);
 		}
@@ -334,11 +335,11 @@ public abstract class NMapPoint : NButton
 		{
 			return;
 		}
-		if (_isEnabled && NControllerManager.Instance.IsUsingController)
+		if (_isEnabled && NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_controllerSelectionReticle.OnSelect();
 		}
-		if (_state != MapPointState.Traveled || !(_runState.MapLocation.coord != Point.coord) || NControllerManager.Instance.IsUsingController)
+		if (_state != MapPointState.Traveled || !(_runState.MapLocation.coord != Point.coord) || NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			return;
 		}
@@ -350,7 +351,7 @@ public abstract class NMapPoint : NButton
 			{
 				num += _runState.MapPointHistory[i].Count;
 			}
-			NHoverTipSet tip = NHoverTipSet.CreateAndShowMapPointHistory(this, NMapPointHistoryHoverTip.Create(num, LocalContext.NetId.Value, historyEntryFor));
+			NHoverTipSet tip = NHoverTipSet.CreateAndShowMapPointHistory(this, NMapPointHistoryHoverTip.Create(num, LocalContext.NetId.Value, historyEntryFor, _runState.GameMode));
 			Callable.From(delegate
 			{
 				tip.SetAlignment(this, HoverTip.GetHoverTipAlignment(this));

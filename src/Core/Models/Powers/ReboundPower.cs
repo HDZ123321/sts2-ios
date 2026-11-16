@@ -16,20 +16,22 @@ public sealed class ReboundPower : PowerModel
 
 	public override PowerStackType StackType => PowerStackType.Counter;
 
-	public override (PileType, CardPilePosition) ModifyCardPlayResultPileTypeAndPosition(CardModel card, bool isAutoPlay, ResourceInfo resources, PileType pileType, CardPilePosition position)
+	public override CardLocation ModifyCardPlayResultLocation(CardModel card, bool isAutoPlay, ResourceInfo resources, CardLocation location)
 	{
 		if (card.Owner.Creature != base.Owner)
 		{
-			return (pileType, position);
+			return location;
 		}
-		if (pileType != PileType.Discard)
+		if (location.pileType != PileType.Discard)
 		{
-			return (pileType, position);
+			return location;
 		}
-		return (PileType.Draw, CardPilePosition.Top);
+		location.pileType = PileType.Draw;
+		location.position = CardPilePosition.Top;
+		return location;
 	}
 
-	public override async Task AfterModifyingCardPlayResultPileOrPosition(CardModel card, PileType pileType, CardPilePosition position)
+	public override async Task AfterModifyingCardPlayResultLocation(CardModel card, CardLocation location)
 	{
 		if (card.Owner.Creature == base.Owner)
 		{

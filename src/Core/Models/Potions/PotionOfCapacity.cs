@@ -17,13 +17,14 @@ public sealed class PotionOfCapacity : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new RepeatVar(2));
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, new Color("91a19f"));
-		await OrbCmd.AddSlots(base.Owner, base.DynamicVars.Repeat.IntValue);
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, new Color("91a19f"));
+		await OrbCmd.AddSlots(target.Player, base.DynamicVars.Repeat.IntValue);
 	}
 }

@@ -35,19 +35,35 @@ public abstract class ControllerConfig
 		},
 		{
 			"Up",
-			Controller.dPadNorth
+			Controller.dPadUp
 		},
 		{
 			"Down",
-			Controller.dPadSouth
+			Controller.dPadDown
 		},
 		{
 			"Left",
-			Controller.dPadWest
+			Controller.dPadLeft
 		},
 		{
 			"Right",
-			Controller.dPadEast
+			Controller.dPadRight
+		},
+		{
+			"Alt_Up",
+			Controller.rStickUp
+		},
+		{
+			"Alt_Down",
+			Controller.rStickDown
+		},
+		{
+			"Alt_Left",
+			Controller.rStickLeft
+		},
+		{
+			"Alt_Right",
+			Controller.rStickRight
 		},
 		{
 			"Select",
@@ -83,7 +99,7 @@ public abstract class ControllerConfig
 		},
 		{
 			"Peek",
-			Controller.joystickPress
+			Controller.lStickPress
 		}
 	};
 
@@ -95,7 +111,11 @@ public abstract class ControllerConfig
 	public virtual Dictionary<StringName, StringName> DefaultControllerInputMap => new Dictionary<StringName, StringName>
 	{
 		{
-			MegaInput.accept,
+			MegaInput.confirm,
+			Controller.faceButtonNorth
+		},
+		{
+			MegaInput.endTurn,
 			Controller.faceButtonNorth
 		},
 		{
@@ -132,23 +152,39 @@ public abstract class ControllerConfig
 		},
 		{
 			MegaInput.peek,
-			Controller.joystickPress
+			Controller.lStickPress
 		},
 		{
 			MegaInput.up,
-			Controller.dPadNorth
+			Controller.dPadUp
 		},
 		{
 			MegaInput.down,
-			Controller.dPadSouth
+			Controller.dPadDown
 		},
 		{
 			MegaInput.left,
-			Controller.dPadWest
+			Controller.dPadLeft
 		},
 		{
 			MegaInput.right,
-			Controller.dPadEast
+			Controller.dPadRight
+		},
+		{
+			MegaInput.altUp,
+			Controller.rStickUp
+		},
+		{
+			MegaInput.altDown,
+			Controller.rStickDown
+		},
+		{
+			MegaInput.altLeft,
+			Controller.rStickLeft
+		},
+		{
+			MegaInput.altRight,
+			Controller.rStickRight
 		},
 		{
 			MegaInput.pauseAndBack,
@@ -188,7 +224,15 @@ public abstract class ControllerConfig
 
 	private string Ps4Touchpad => ImageHelper.GetImagePath(FolderPath + "/touchpad.tres");
 
-	private Dictionary<string, string> GlyphMap
+	protected virtual string RightJoystickNorth => ImageHelper.GetImagePath(FolderPath + "/rs_up.tres");
+
+	protected virtual string RightJoystickSouth => ImageHelper.GetImagePath(FolderPath + "/rs_down.tres");
+
+	protected virtual string RightJoystickEast => ImageHelper.GetImagePath(FolderPath + "/rs_right.tres");
+
+	protected virtual string RightJoystickWest => ImageHelper.GetImagePath(FolderPath + "/rs_left.tres");
+
+	internal Dictionary<string, string> GlyphMap
 	{
 		get
 		{
@@ -237,28 +281,44 @@ public abstract class ControllerConfig
 						StartButtonGlyph
 					},
 					{
-						Controller.joystickPress,
+						Controller.lStickPress,
 						JoystickPressGlyph
 					},
 					{
-						Controller.dPadNorth,
+						Controller.dPadUp,
 						DPadNorth
 					},
 					{
-						Controller.dPadSouth,
+						Controller.dPadDown,
 						DPadSouth
 					},
 					{
-						Controller.dPadEast,
+						Controller.dPadRight,
 						DPadEast
 					},
 					{
-						Controller.dPadWest,
+						Controller.dPadLeft,
 						DPadWest
 					},
 					{
 						Controller.ps4Touchpad,
 						Ps4Touchpad
+					},
+					{
+						Controller.rStickUp,
+						RightJoystickNorth
+					},
+					{
+						Controller.rStickDown,
+						RightJoystickSouth
+					},
+					{
+						Controller.rStickLeft,
+						RightJoystickWest
+					},
+					{
+						Controller.rStickRight,
+						RightJoystickEast
 					}
 				};
 			}

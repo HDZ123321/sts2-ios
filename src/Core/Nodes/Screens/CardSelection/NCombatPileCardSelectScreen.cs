@@ -137,7 +137,7 @@ public sealed class NCombatPileCardSelectScreen : NCardGridSelectionScreen
 
 	private CardPile _pile;
 
-	private Func<CardModel, bool> _filter;
+	private Func<CardModel, bool>? _filter;
 
 	private List<CardCreationResult>? _cardResults;
 
@@ -149,7 +149,7 @@ public sealed class NCombatPileCardSelectScreen : NCardGridSelectionScreen
 
 	protected override IEnumerable<Control> PeekButtonTargets => new global::_003C_003Ez__ReadOnlySingleElementList<Control>(_bottomTextContainer);
 
-	public static NCombatPileCardSelectScreen Create(CardPile pile, CardSelectorPrefs prefs, Func<CardModel, bool> filter)
+	public static NCombatPileCardSelectScreen Create(CardPile pile, CardSelectorPrefs prefs, Func<CardModel, bool>? filter)
 	{
 		NCombatPileCardSelectScreen nCombatPileCardSelectScreen = PreloadManager.Cache.GetScene(ScenePath).Instantiate<NCombatPileCardSelectScreen>(PackedScene.GenEditState.Disabled);
 		nCombatPileCardSelectScreen.Name = "NCombatPileCardSelectScreen";
@@ -312,7 +312,17 @@ public sealed class NCombatPileCardSelectScreen : NCardGridSelectionScreen
 
 	private void UpdatePileContents()
 	{
-		List<CardModel> validPileCards = _pile.Cards.Where(_filter).ToList();
+		IReadOnlyList<CardModel> readOnlyList;
+		if (_filter == null)
+		{
+			readOnlyList = _pile.Cards;
+		}
+		else
+		{
+			IReadOnlyList<CardModel> readOnlyList2 = _pile.Cards.Where(_filter).ToList();
+			readOnlyList = readOnlyList2;
+		}
+		IReadOnlyList<CardModel> validPileCards = readOnlyList;
 		_selectedCards = _selectedCards.Where((CardModel c) => validPileCards.Contains(c)).ToHashSet();
 		if (validPileCards.Count == 0)
 		{

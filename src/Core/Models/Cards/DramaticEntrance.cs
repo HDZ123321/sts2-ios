@@ -37,7 +37,7 @@ public sealed class DramaticEntrance : CardModel
 	{
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Attack", base.Owner.Character.AttackAnimDelay);
 		VfxCmd.PlayFullScreenInCombat("vfx/vfx_dramatic_entrance_fullscreen", base.Owner.Creature);
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).TargetingAllOpponents(base.CombatState)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).TargetingAllOpponents(base.CombatState)
 			.WithHitFx("vfx/vfx_attack_slash")
 			.Execute(choiceContext);
 	}

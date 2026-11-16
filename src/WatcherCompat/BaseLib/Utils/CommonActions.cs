@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BaseLib.Extensions;
@@ -40,7 +40,7 @@ public static class CommonActions
 			Log.Warn($"{card.Id} declares neither a Damage nor a CalculatedDamage var, attacking for nothing.");
 			command = DamageCmd.Attack(0m);
 		}
-		command.FromCard(card);
+		command.FromCard(card, cardPlay);
 		if (cardPlay.Target != null)
 		{
 			command.Targeting(cardPlay.Target);

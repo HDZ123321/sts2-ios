@@ -7,6 +7,8 @@ namespace MegaCrit.Sts2.Core.Models.Powers.Mocks;
 
 public sealed class MockRemoveDrawnCardsFromCombatPower : PowerModel
 {
+	public override bool IsMock => true;
+
 	public override PowerType Type => PowerType.Debuff;
 
 	public override PowerStackType StackType => PowerStackType.Single;

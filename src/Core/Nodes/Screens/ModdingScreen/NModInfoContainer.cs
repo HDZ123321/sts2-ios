@@ -23,6 +23,11 @@ public class NModInfoContainer : Control
 		/// Cached name for the '_Ready' method.
 		/// </summary>
 		public new static readonly StringName _Ready = "_Ready";
+
+		/// <summary>
+		/// Cached name for the 'Clear' method.
+		/// </summary>
+		public static readonly StringName Clear = "Clear";
 	}
 
 	/// <summary>
@@ -66,6 +71,13 @@ public class NModInfoContainer : Control
 		_description = GetNode<MegaRichTextLabel>("ModDescription");
 		_title.Text = "";
 		_image.Texture = null;
+		_description.Text = "";
+	}
+
+	public void Clear()
+	{
+		_image.Texture = null;
+		_title.Text = "";
 		_description.Text = "";
 	}
 
@@ -126,8 +138,9 @@ public class NModInfoContainer : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(1);
+		List<MethodInfo> list = new List<MethodInfo>(2);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.Clear, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
 
@@ -141,6 +154,12 @@ public class NModInfoContainer : Control
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.Clear && args.Count == 0)
+		{
+			Clear();
+			ret = default(godot_variant);
+			return true;
+		}
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
@@ -149,6 +168,10 @@ public class NModInfoContainer : Control
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName.Clear)
 		{
 			return true;
 		}

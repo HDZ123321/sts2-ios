@@ -100,7 +100,7 @@ public abstract class NMapDrawingInput : Control
 
 	public static NMapDrawingInput Create(NMapDrawings drawings, DrawingMode drawingMode, bool stopOnMouseRelease = false)
 	{
-		NMapDrawingInput nMapDrawingInput = (stopOnMouseRelease ? new NMouseHeldMapDrawingInput() : ((!NControllerManager.Instance.IsUsingController) ? new NMouseModeMapDrawingInput() : NControllerMapDrawingInput.Create()));
+		NMapDrawingInput nMapDrawingInput = (stopOnMouseRelease ? new NMouseHeldMapDrawingInput() : ((!NControllerManager.Instance.IsUsingDirectionalNavigation) ? new NMouseModeMapDrawingInput() : NControllerMapDrawingInput.Create()));
 		nMapDrawingInput._drawings = drawings;
 		nMapDrawingInput.DrawingMode = drawingMode;
 		nMapDrawingInput._drawings.SetDrawingModeLocal(drawingMode);

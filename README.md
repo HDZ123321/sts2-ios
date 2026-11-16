@@ -1,6 +1,6 @@
 # 杀戮尖塔 2 · iOS 构建包
 
-从 PC 版 `Slay the Spire 2`（v0.107.1，Godot 4.5.1 mono / .NET 9）反编译并重建的可移植工程，
+从 PC 版 `Slay the Spire 2`（v0.113.1，Godot 4.5.1 mono / .NET 9）反编译并重建的可移植工程，
 面向 iOS 14+ 真机。**在 Windows 上能做完的部分已经全部做完**，剩下的必须 macOS + Xcode。
 
 ---
@@ -185,7 +185,7 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 `hitch` 只在某一帧真的超过 33 ms 时才有输出，而进战卡顿常常是**一串**二十几毫秒的帧叠出来的。所以进战这条链跑完时还会多打一行阶段总账（`Perf.ReportPhases`，在 `CombatRoom.StartCombat` 末尾和 `StartPreFinishedCombat` 末尾各调一次）：
 
 ```
-[Perf] combat entry total=1120ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.creature-node=11ms combat.ui-activate=26ms combat.background=31ms combat.bgm=4ms combat.after-creature-added=18ms
+[Perf] combat entry total=1290ms max=64.0ms hitchby=combat.creatures:96ms spine.ready:41ms map.travel=142ms map.arrive=28ms combat.generate=3ms combat.preload=812ms combat.creatures=44ms combat.create-room=171ms combat.room-ready=48ms combat.creature-node=12ms combat.creature-node=9ms combat.creature-node=11ms combat.ui-activate=26ms combat.background=31ms combat.bgm=4ms combat.after-creature-added=18ms
 ```
 
 #### 数据怎么从手机里拿出来
@@ -221,7 +221,7 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 
 关掉它做对照：写 `user://combat_prewarm.txt`，内容 `off`（大小写不敏感），下次进战就退回老的单帧路径。
 
-读法：`total` 是整段真实墙钟（含 await 的空帧），每项是**两个标签之间**的时间。`combat.preload` 里包含后台加载让出的帧，所以它大不代表卡；真正要看的是**同一帧里干完的那几项**——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node` 加起来接近某次 `hitch` 的毫秒数，就是它。这样即使一帧都没超过 33 ms，也能看出时间被谁吃了。
+读法：`total` 是整段真实墙钟（含 await 的空帧），每项是**两个标签之间**的时间。行尾的 `max=` 是这段里最慢的一帧，`hitchby=` 是这段里超阈值帧的时间归属（前 3 名），所以一行就能回答「点了之后等了多久、最卡那一下在哪一阶段」，不必再和 30 秒窗口的帧报表对表。`combat.preload` 里包含后台加载让出的帧，所以它大不代表卡；真正要看的是**同一帧里干完的那几项**——`creatures` / `create-room` / `room-ready` / 重复出现的 `creature-node` 加起来接近某次 `hitch` 的毫秒数，就是它。这样即使一帧都没超过 33 ms，也能看出时间被谁吃了。
 
 已经因此改掉的两处（同一提交）：
 
@@ -308,7 +308,9 @@ chmod +x BUILD_MACOS.sh
 产出未签名 IPA 作为 artifact。
 
 ### 4.1 `sts2.pck` 怎么进仓库
-1.51 GB 超过 GitHub 单文件 100 MB 限制，两条路：
+iOS 用的 `sts2.pck` 是 2.15 GB，超过 GitHub 单文件 100 MB 和单 release 资产 2 GiB 两条限制，
+所以 release 上放的是 deflate 过的 `sts2.pck.zip`（约 1.29 GB），CI 下载后 `unzip` 再校验 `GDPC` 头。
+workflow 里的 `Fetch sts2.pck from release` 已经这么做了，本地已有 `sts2.pck` 时自动跳过。
 
 **路线 1 — Git LFS**
 ```bash
@@ -323,10 +325,12 @@ workflow 里已经开了 `with: lfs: true`。
 **路线 2 — Release 资产**（更省 LFS 配额）
 把 `sts2.pck` 传到一个 Release，然后在 workflow 的 `Verify PCK present` 步骤前插一段：
 ```yaml
-      - name: Download PCK
+      - name: Fetch sts2.pck from release
         run: |
-          curl -L -o sts2.pck \
-            https://github.com/<owner>/<repo>/releases/download/v0.107.1-ios/sts2.pck
+          curl -fL -o sts2.pck.zip \
+            https://github.com/<owner>/<repo>/releases/download/v0.113.1-ios/sts2.pck.zip
+          unzip -q sts2.pck.zip -d .
+          rm -f sts2.pck.zip
 ```
 
 ### 4.2 仓库结构
@@ -394,7 +398,7 @@ workflow 里已经开了 `with: lfs: true`。
 
 | 项 | 值 |
 |---|---|
-| 游戏版本 | v0.107.1 / commit 59260271 |
+| 游戏版本 | v0.113.1 / commit d09d48e5 |
 | 引擎 | Godot 4.5.1-stable mono（MegaDot 定制版） |
 | 运行时 | .NET 9.0.7 → NativeAOT |
 | 反编译 | ilspycmd 10.1.0.8386，3425 个 .cs，无混淆 |

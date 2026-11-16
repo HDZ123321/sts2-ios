@@ -20,7 +20,7 @@ public class PlasmaOrb : OrbModel
 
 	public override async Task AfterTurnStartOrbTrigger(PlayerChoiceContext choiceContext)
 	{
-		await Passive(choiceContext, null);
+		await TriggerPassive(choiceContext, null);
 	}
 
 	public override async Task Passive(PlayerChoiceContext choiceContext, Creature? target)
@@ -29,13 +29,14 @@ public class PlasmaOrb : OrbModel
 		{
 			throw new InvalidOperationException("Plasma orbs cannot target creatures.");
 		}
-		Trigger();
+		ActivatePassive();
 		await PlayerCmd.GainEnergy(PassiveVal, base.Owner);
 	}
 
 	public override async Task<IEnumerable<Creature>> Evoke(PlayerChoiceContext playerChoiceContext)
 	{
 		PlayEvokeSfx();
+		ActivateEvoke(new Creature[1] { base.Owner.Creature });
 		await PlayerCmd.GainEnergy(EvokeVal, base.Owner);
 		return new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(base.Owner.Creature);
 	}

@@ -31,9 +31,9 @@ public class NRunTimer : Control
 		public static readonly StringName DeferredInit = "DeferredInit";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'RefreshVisibility' method.
@@ -76,7 +76,7 @@ public class NRunTimer : Control
 
 	private MegaLabel _timerLabel;
 
-	private Timer _timer;
+	private Timer? _timer;
 
 	public override void _Ready()
 	{
@@ -92,14 +92,21 @@ public class NRunTimer : Control
 		_timer = new Timer();
 		_timer.WaitTime = 1.0;
 		_timer.Autostart = false;
-		_timer.Connect(Timer.SignalName.Timeout, Callable.From(OnTimerTimeout));
+		_timer.Connect(Timer.SignalName.Timeout, Callable.From(delegate
+		{
+			RefreshVisibility();
+			OnTimerTimeout();
+		}));
 		this.AddChildSafely(_timer);
 		_timer.Start();
 	}
 
-	public override void _ExitTree()
+	public override void _Notification(int what)
 	{
-		_timer.Stop();
+		if ((long)what == 1)
+		{
+			_timer?.Stop();
+		}
 	}
 
 	public void RefreshVisibility()
@@ -138,7 +145,10 @@ public class NRunTimer : Control
 		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.DeferredInit, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.RefreshVisibility, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ToggleTimer, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -164,9 +174,9 @@ public class NRunTimer : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -203,7 +213,7 @@ public class NRunTimer : Control
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

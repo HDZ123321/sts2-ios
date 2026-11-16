@@ -8,19 +8,22 @@ using MegaCrit.Sts2.Core.Models;
 namespace MegaCrit.Sts2.Core.Helpers;
 
 /// <summary>
-/// Renders the run's character portrait into a small PNG the island can carry.
+/// Renders the run's character portrait into a small image the island can carry.
 /// <para>
 /// A Live Activity renders inside the widget extension, which has its own sandbox - it cannot read
 /// Godot's <c>user://</c> directory, and this port is signed ad hoc so there is no App Group to
 /// share one. The picture therefore travels inside the activity's content state: this writes the
-/// PNG next to <c>island_state.json</c>, <c>Sts2IslandBridge.swift</c> reads the bytes and puts them
-/// in <c>ContentState.avatar</c>, and the widget decodes them with <c>UIImage(data:)</c>.
+/// image next to <c>island_state.json</c>, <c>Sts2IslandBridge.swift</c> reads the bytes and puts
+/// them in <c>ContentState.avatar</c>, and the widget decodes them with <c>UIImage(data:)</c>.
 /// </para>
 /// <para>
-/// The content state is archived and shipped to the widget on every update, so the image has to
-/// stay small: 132 px on the long edge (3x for a 44 pt slot) and under 48 KB. When the portrait
-/// will not fit - a texture the renderer refuses to hand back, a PNG that stays too heavy - the
-/// reporter publishes no avatar and the widget falls back to its symbol.
+/// ActivityKit archives attributes and content state together and refuses the whole request when
+/// the result exceeds 4 KB (<c>ActivityAuthorizationError.attributesTooLarge</c>). A 132 px PNG of a
+/// painted portrait lands well past 10 KB, so the old 48 KB budget meant every request threw and no
+/// island ever appeared. The budget here is <see cref="BudgetBytes" />, chosen to leave room for the
+/// struct's own fields plus ActivityKit's archiving overhead, and the encoder walks a ladder of
+/// sizes and qualities until the file fits - JPEG first, because a photograph at 96 px is a couple
+/// of kilobytes where the same picture as PNG is not.
 /// </para>
 /// <para>
 /// Encoding happens once per character, not once per poll: switching heroes rewrites the file, and
@@ -29,25 +32,42 @@ namespace MegaCrit.Sts2.Core.Helpers;
 /// </summary>
 public static class IslandAvatar
 {
-	/// <summary>File name inside <c>user://</c>; the Swift bridge joins it onto the state directory.</summary>
-	public const string FileName = "island_avatar.png";
+	/// <summary>
+	/// File name stem inside <c>user://</c>. The published name carries the real extension, because
+	/// the encoder switches between PNG and JPEG depending on which one fits the budget.
+	/// </summary>
+	private const string Stem = "island_avatar";
 
-	/// <summary>Long edge of the encoded portrait, in pixels. 132 = 3x for the 44 pt island slot.</summary>
+	/// <summary>
+	/// Ceiling for the encoded image. ActivityKit's hard limit is 4096 bytes for the archived
+	/// attributes plus content state; the struct's integers, the character name and the archiving
+	/// envelope take a few hundred, so the picture gets 3000.
+	/// </summary>
+	private const int BudgetBytes = 3000;
+
+	/// <summary>Largest edge we ever encode: 3x for the 44 pt lock-screen slot.</summary>
 	private const int MaxEdge = 132;
 
-	/// <summary>Smallest edge we are willing to publish; below this the picture is not worth sending.</summary>
-	private const int MinEdge = 72;
+	/// <summary>Below this the portrait is a smear; publish nothing and let the widget use its symbol.</summary>
+	private const int MinEdge = 48;
 
-	/// <summary>Ceiling for the encoded PNG. Content state rides in every update, so keep it tight.</summary>
-	private const int MaxBytes = 48 * 1024;
+	/// <summary>
+	/// Edges to try, in order. The island's leading slot is 30 pt and the compact slot 17 pt, so
+	/// anything at or above 96 px is already sharper than the space it is drawn into.
+	/// </summary>
+	private static readonly int[] Edges = { 132, 112, 96, 80, 64, 48 };
+
+	/// <summary>JPEG qualities to try at each edge, best first.</summary>
+	private static readonly float[] Qualities = { 0.85f, 0.7f, 0.55f, 0.4f, 0.28f };
 
 	private static string _encodedFor = string.Empty;
 
 	private static bool _unavailable;
 
 	/// <summary>
-	/// Makes sure <c>user://island_avatar.png</c> matches <paramref name="character" /> and returns
-	/// the file name to publish, or an empty string when there is no usable portrait.
+	/// Makes sure the portrait file next to <c>island_state.json</c> matches
+	/// <paramref name="character" /> and returns the file name to publish, or an empty string when
+	/// there is no usable portrait (the widget then falls back to its symbol).
 	/// </summary>
 	public static string Ensure(CharacterModel? character)
 	{
@@ -66,56 +86,122 @@ public static class IslandAvatar
 		}
 		if (id == _encodedFor)
 		{
-			return _unavailable ? string.Empty : FileName;
+			return _unavailable ? string.Empty : _publishedName;
 		}
 		_encodedFor = id;
 		_unavailable = false;
+		_publishedName = string.Empty;
 		try
 		{
-			if (!Encode(character))
+			_publishedName = Encode(character) ?? string.Empty;
+			if (_publishedName.Length == 0)
 			{
 				_unavailable = true;
-				return string.Empty;
 			}
-			return FileName;
+			return _publishedName;
 		}
 		catch (Exception ex)
 		{
 			_unavailable = true;
+			_publishedName = string.Empty;
 			Log.Warn($"[Island] no avatar for '{id}': {ex.Message}");
 			return string.Empty;
 		}
 	}
 
-	private static bool Encode(CharacterModel character)
+	private static string _publishedName = string.Empty;
+
+	/// <summary>
+	/// Walks the size ladder and returns the file name of the first encoding that fits
+	/// <see cref="BudgetBytes" />, or null when nothing fits.
+	/// </summary>
+	private static string? Encode(CharacterModel character)
 	{
 		Image? source = LoadPortrait(character);
 		if (source == null)
 		{
 			Log.Warn($"[Island] '{character.Id.Entry}' has no readable portrait texture");
+			return null;
+		}
+
+		// JPEG first: the lock-screen art is a painting, and PNG of a painting is enormous.
+		foreach (int edge in Edges)
+		{
+			if (edge < MinEdge)
+			{
+				continue;
+			}
+			Image scaled = Fit(source, edge);
+			foreach (float quality in Qualities)
+			{
+				if (TryWrite(scaled, edge, quality, jpeg: true, out string name, out long bytes))
+				{
+					Log.Info($"[Island] avatar for '{character.Id.Entry}': {scaled.GetWidth()}x{scaled.GetHeight()} jpeg q={quality.ToString(CultureInfo.InvariantCulture)}, {bytes.ToString(CultureInfo.InvariantCulture)} bytes");
+					return name;
+				}
+			}
+		}
+
+		// Then PNG, which wins only for flat artwork with large areas of one colour.
+		foreach (int edge in Edges)
+		{
+			if (edge < MinEdge)
+			{
+				continue;
+			}
+			Image scaled = Fit(source, edge);
+			if (TryWrite(scaled, edge, 0f, jpeg: false, out string name, out long bytes))
+			{
+				Log.Info($"[Island] avatar for '{character.Id.Entry}': {scaled.GetWidth()}x{scaled.GetHeight()} png, {bytes.ToString(CultureInfo.InvariantCulture)} bytes");
+				return name;
+			}
+		}
+
+		DeleteAll();
+		Log.Warn($"[Island] avatar for '{character.Id.Entry}' will not fit {BudgetBytes} bytes at any size");
+		return null;
+	}
+
+	/// <summary>
+	/// Encodes one candidate into memory and, if it fits <see cref="BudgetBytes" />, commits it to
+	/// disk. Encoding to a buffer first keeps the ladder from leaving half-tried files behind.
+	/// </summary>
+	private static bool TryWrite(Image image, int edge, float quality, bool jpeg, out string name, out long bytes)
+	{
+		name = string.Empty;
+		bytes = 0L;
+		byte[]? buffer;
+		try
+		{
+			buffer = jpeg ? image.SaveJpgToBuffer(quality) : image.SavePngToBuffer();
+		}
+		catch (Exception ex)
+		{
+			Log.Warn($"[Island] avatar encode failed at {edge}px ({(jpeg ? "jpeg" : "png")}): {ex.Message}");
 			return false;
 		}
-		int edge = MaxEdge;
-		while (edge >= MinEdge)
+		if (buffer == null || buffer.Length == 0)
 		{
-			Image scaled = Fit(source, edge);
-			Error error = scaled.SavePng(UserPath());
-			if (error != Error.Ok)
-			{
-				Log.Warn($"[Island] avatar write failed: {error}");
-				return false;
-			}
-			long bytes = new FileInfo(AbsolutePath()).Length;
-			if (bytes <= MaxBytes)
-			{
-				Log.Info($"[Island] avatar for '{character.Id.Entry}': {scaled.GetWidth()}x{scaled.GetHeight()}, {bytes.ToString(CultureInfo.InvariantCulture)} bytes");
-				return true;
-			}
-			edge /= 2;
+			return false;
 		}
-		Delete(UserPath());
-		Log.Warn($"[Island] avatar for '{character.Id.Entry}' stays over {MaxBytes} bytes even at {MinEdge}px");
-		return false;
+		if (buffer.Length > BudgetBytes)
+		{
+			return false;
+		}
+		string candidate = jpeg ? Stem + ".jpg" : Stem + ".png";
+		try
+		{
+			DeleteAll();
+			File.WriteAllBytes(AbsolutePath(candidate), buffer);
+		}
+		catch (Exception ex)
+		{
+			Log.Warn($"[Island] avatar write failed: {ex.Message}");
+			return false;
+		}
+		name = candidate;
+		bytes = buffer.Length;
+		return true;
 	}
 
 	/// <summary>
@@ -155,7 +241,11 @@ public static class IslandAvatar
 		return image.IsEmpty() ? null : image;
 	}
 
-	/// <summary>Scales the long edge down to <paramref name="edge" />, never up, and lands on RGBA8.</summary>
+	/// <summary>
+	/// Scales the long edge down to <paramref name="edge" />, never up. The island draws the picture
+	/// in a circle, so the frame is squared off around the centre first: a tall full-body portrait
+	/// squeezed into a circle otherwise arrives as a sliver of legs.
+	/// </summary>
 	private static Image Fit(Image source, int edge)
 	{
 		Image image = (Image)source.Duplicate();
@@ -165,26 +255,45 @@ public static class IslandAvatar
 		}
 		int width = image.GetWidth();
 		int height = image.GetHeight();
-		int longEdge = Math.Max(width, height);
-		if (longEdge <= edge)
+		if (width <= 0 || height <= 0)
 		{
 			return image;
 		}
-		float scale = (float)edge / longEdge;
-		int targetWidth = Math.Max(1, (int)MathF.Round(width * scale));
-		int targetHeight = Math.Max(1, (int)MathF.Round(height * scale));
-		image.Resize(targetWidth, targetHeight, Image.Interpolation.Lanczos);
+		int side = Math.Min(width, height);
+		if (side > edge)
+		{
+			// Crop to a square around the middle, biased upward: portraits carry faces in the
+			// upper half, so a centred square cuts the head off.
+			int left = Math.Max(0, (width - side) / 2);
+			int top = Math.Max(0, (int)((height - side) * 0.25f));
+			image = image.GetRegion(new Rect2I(left, top, side, side));
+		}
+		int longEdge = Math.Max(image.GetWidth(), image.GetHeight());
+		if (longEdge > edge)
+		{
+			float scale = (float)edge / longEdge;
+			int targetWidth = Math.Max(1, (int)MathF.Round(image.GetWidth() * scale));
+			int targetHeight = Math.Max(1, (int)MathF.Round(image.GetHeight() * scale));
+			image.Resize(targetWidth, targetHeight, Image.Interpolation.Lanczos);
+		}
 		return image;
 	}
 
-	private static string UserPath()
+	private static string UserPath(string name)
 	{
-		return "user://" + FileName;
+		return "user://" + name;
 	}
 
-	private static string AbsolutePath()
+	private static string AbsolutePath(string name)
 	{
-		return Path.Combine(OS.GetUserDataDir(), FileName);
+		return Path.Combine(OS.GetUserDataDir(), name);
+	}
+
+	/// <summary>Removes both possible extensions so a stale PNG cannot shadow a fresh JPEG.</summary>
+	private static void DeleteAll()
+	{
+		Delete(UserPath(Stem + ".png"));
+		Delete(UserPath(Stem + ".jpg"));
 	}
 
 	private static void Delete(string path)

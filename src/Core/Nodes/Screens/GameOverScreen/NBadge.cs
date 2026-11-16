@@ -208,7 +208,7 @@ public class NBadge : NButton
 	{
 		base.OnFocus();
 		NHoverTipSet.CreateAndShow(_hoverNode, _hoverTip)?.SetGlobalPosition(_hoverNode.GlobalPosition + new Vector2(10f, -132f));
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_selectionReticle.OnSelect();
 		}

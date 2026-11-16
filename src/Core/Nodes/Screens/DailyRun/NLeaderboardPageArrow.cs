@@ -24,11 +24,6 @@ public class NLeaderboardPageArrow : NButton
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the 'GetControllerIconNode' method.
-		/// </summary>
-		public new static readonly StringName GetControllerIconNode = "GetControllerIconNode";
-
-		/// <summary>
 		/// Cached name for the 'OnDisable' method.
 		/// </summary>
 		public new static readonly StringName OnDisable = "OnDisable";
@@ -137,12 +132,7 @@ public class NLeaderboardPageArrow : NButton
 		ConnectSignals();
 		_image = GetNode<TextureRect>("Image");
 		_baseScale = _image.Scale;
-		_hsv = (ShaderMaterial)_image.Material;
-	}
-
-	protected override void GetControllerIconNode()
-	{
-		_controllerHotkeyIcon = GetNodeOrNull<TextureRect>("ControllerIcon");
+		_hsv = (ShaderMaterial)base.Material;
 	}
 
 	public void Connect(Action onRelease)
@@ -152,12 +142,16 @@ public class NLeaderboardPageArrow : NButton
 
 	protected override void OnDisable()
 	{
+		base.OnDisable();
 		base.Modulate = StsColors.exhaustGray;
+		UpdateShaderV(0.9f);
 	}
 
 	protected override void OnEnable()
 	{
+		base.OnEnable();
 		base.Modulate = Colors.White;
+		UpdateShaderV(0.9f);
 	}
 
 	protected override void OnRelease()
@@ -209,9 +203,8 @@ public class NLeaderboardPageArrow : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(8);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.GetControllerIconNode, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnDisable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnEnable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -232,12 +225,6 @@ public class NLeaderboardPageArrow : NButton
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName.GetControllerIconNode && args.Count == 0)
-		{
-			GetControllerIconNode();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -291,10 +278,6 @@ public class NLeaderboardPageArrow : NButton
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
-		{
-			return true;
-		}
-		if (method == MethodName.GetControllerIconNode)
 		{
 			return true;
 		}

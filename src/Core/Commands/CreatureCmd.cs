@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Save;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
@@ -17,6 +18,7 @@ using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Monsters;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Audio;
 using MegaCrit.Sts2.Core.Nodes.Combat;
@@ -27,7 +29,6 @@ using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Runs.History;
-using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -74,7 +75,7 @@ public static class CreatureCmd
 			creature.PrepareForNextTurn(combatState.Players.Select((Player p) => p.Creature), rollNewMove: false);
 		}
 		MapPointRoomHistoryEntry mapPointRoomHistoryEntry = combatState.RunState.CurrentMapPointHistoryEntry?.Rooms.Last();
-		if (mapPointRoomHistoryEntry != null && creature.Monster != null && !mapPointRoomHistoryEntry.MonsterIds.Contains(creature.Monster.Id))
+		if (mapPointRoomHistoryEntry != null && creature != null && creature.Monster != null && creature.Side == CombatSide.Enemy && !mapPointRoomHistoryEntry.MonsterIds.Contains(creature.Monster.Id))
 		{
 			mapPointRoomHistoryEntry.MonsterIds.Add(creature.Monster.Id);
 		}
@@ -90,12 +91,15 @@ public static class CreatureCmd
 	/// DamageVar containing the amount of damage they are taking and the properties of the damage.
 	/// </param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
 	/// <returns>
 	/// A set of damage results. Can be multiple if another creature absorbs some damage (like Osty via DieForYou).
 	/// </returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, DamageVar damageVar, CardModel cardSource)
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, DamageVar damageVar, CardModel cardSource, CardPlay? cardPlay)
 	{
-		return await Damage(choiceContext, target, damageVar.BaseValue, damageVar.Props, cardSource);
+		return await Damage(choiceContext, target, damageVar.BaseValue, damageVar.Props, cardSource, cardPlay);
 	}
 
 	/// <summary>
@@ -106,12 +110,15 @@ public static class CreatureCmd
 	/// <param name="amount">Amount of damage it is taking.</param>
 	/// <param name="props">Properties of the damage.</param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
 	/// <returns>
 	/// A set of damage results. Can be multiple if another creature absorbs some damage (like Osty via DieForYou).
 	/// </returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, decimal amount, ValueProp props, CardModel cardSource)
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, decimal amount, ValueProp props, CardModel? cardSource, CardPlay? cardPlay)
 	{
-		return await Damage(choiceContext, new List<Creature> { target }, amount, props, cardSource.Owner.Creature, cardSource);
+		return await Damage(choiceContext, new List<Creature> { target }, amount, props, cardSource?.Owner.Creature, cardSource, cardPlay);
 	}
 
 	/// <summary>
@@ -140,7 +147,7 @@ public static class CreatureCmd
 	/// <returns>A set of damage results.</returns>
 	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<Creature> targets, decimal amount, ValueProp props, Creature dealer)
 	{
-		return await Damage(choiceContext, targets, amount, props, dealer, null);
+		return await Damage(choiceContext, targets, amount, props, dealer, null, null);
 	}
 
 	/// <summary>
@@ -173,7 +180,7 @@ public static class CreatureCmd
 	/// </returns>
 	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, decimal amount, ValueProp props, Creature dealer)
 	{
-		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), amount, props, dealer, null);
+		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), amount, props, dealer, null, null);
 	}
 
 	/// <summary>
@@ -186,12 +193,15 @@ public static class CreatureCmd
 	/// </param>
 	/// <param name="dealer">Creature who dealt the damage. Optional.</param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
 	/// <returns>
 	/// A set of damage results. Can be multiple if another creature absorbs some damage (like Osty via DieForYou).
 	/// </returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, DamageVar damageVar, Creature? dealer, CardModel? cardSource)
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, DamageVar damageVar, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
-		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), damageVar.BaseValue, damageVar.Props, dealer, cardSource);
+		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), damageVar.BaseValue, damageVar.Props, dealer, cardSource, cardPlay);
 	}
 
 	/// <summary>
@@ -203,12 +213,15 @@ public static class CreatureCmd
 	/// <param name="props">Properties of the damage.</param>
 	/// <param name="dealer">Creature who dealt the damage. Optional.</param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
 	/// <returns>
 	/// A set of damage results. Can be multiple if another creature absorbs some damage (like Osty via DieForYou).
 	/// </returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, Creature target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
-		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), amount, props, dealer, cardSource);
+		return await Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target), amount, props, dealer, cardSource, cardPlay);
 	}
 
 	/// <summary>
@@ -221,10 +234,13 @@ public static class CreatureCmd
 	/// </param>
 	/// <param name="dealer">Creature who dealt the damage. Optional.</param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
 	/// <returns>A set of damage results.</returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<Creature> targets, DamageVar damageVar, Creature? dealer, CardModel? cardSource)
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<Creature>? targets, DamageVar damageVar, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
-		return await Damage(choiceContext, targets, damageVar.BaseValue, damageVar.Props, dealer, cardSource);
+		return await Damage(choiceContext, targets, damageVar.BaseValue, damageVar.Props, dealer, cardSource, cardPlay);
 	}
 
 	/// <summary>
@@ -236,15 +252,48 @@ public static class CreatureCmd
 	/// <param name="props">Properties of the damage.</param>
 	/// <param name="dealer">Creature who dealt the damage. Optional.</param>
 	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
+	/// <param name="modifyDamageHookType">
+	/// Amount modifiers to apply. Use <see cref="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.Cap" /> for already-calculated damage to retain
+	/// damage caps without reapplying additive or multiplicative modifiers. Other damage processing is unchanged.
+	/// </param>
 	/// <returns>A set of damage results.</returns>
-	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<Creature> targets, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public static Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<Creature>? targets, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType = ModifyDamageHookType.All)
 	{
+		return Damage(choiceContext, targets?.Select((Creature t) => new DamageTargetData(t)), amount, props, dealer, cardSource, cardPlay, modifyDamageHookType);
+	}
+
+	/// <summary>
+	/// Damage a set of creatures.
+	/// </summary>
+	/// <param name="choiceContext">The context that is signalled in the event of a player choice.</param>
+	/// <param name="targetData">Creatures to damage.</param>
+	/// <param name="amount">Amount of damage they are taking.</param>
+	/// <param name="props">Properties of the damage.</param>
+	/// <param name="dealer">Creature who dealt the damage. Optional.</param>
+	/// <param name="cardSource">Card that dealt the damage. Optional.</param>
+	/// <param name="cardPlay">The object which represents a card play, or null if this damage is not part of card play.
+	/// Note that cardSource is set both when previewing AND when the card is played, but this is only set when the card
+	/// is played.</param>
+	/// <param name="modifyDamageHookType">
+	/// Amount modifiers to apply. Use <see cref="F:MegaCrit.Sts2.Core.Hooks.ModifyDamageHookType.Cap" /> for already-calculated damage to retain
+	/// damage caps without reapplying additive or multiplicative modifiers. Other damage processing is unchanged.
+	/// </param>
+	/// <returns>A set of damage results.</returns>
+	public static async Task<IEnumerable<DamageResult>> Damage(PlayerChoiceContext choiceContext, IEnumerable<DamageTargetData>? targetData, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType = ModifyDamageHookType.All)
+	{
+		if (targetData == null)
+		{
+			return Array.Empty<DamageResult>();
+		}
 		if (dealer != null && dealer.IsDead)
 		{
-			return targets.Select((Creature t) => new DamageResult(t, props)).ToList();
+			return targetData.Select((DamageTargetData t) => new DamageResult(t.target, props)).ToList();
 		}
 		List<DamageResult> results = new List<DamageResult>();
-		List<Creature> targetList = targets.ToList();
+		List<Creature> targetList = targetData.Select((DamageTargetData d) => d.target).ToList();
 		if (targetList.Count == 0)
 		{
 			return results;
@@ -258,18 +307,34 @@ public static class CreatureCmd
 				continue;
 			}
 			IEnumerable<AbstractModel> modifiers;
-			decimal modifiedAmount = Hook.ModifyDamage(runState, combatState, originalTarget, dealer, amount, props, cardSource, ModifyDamageHookType.All, CardPreviewMode.None, out modifiers);
+			decimal modifiedAmount = Hook.ModifyDamage(runState, combatState, originalTarget, dealer, amount, props, cardSource, cardPlay, modifyDamageHookType, CardPreviewMode.None, out modifiers);
 			await Hook.AfterModifyingDamageAmount(runState, combatState, cardSource, modifiers);
 			await Hook.BeforeDamageReceived(choiceContext, runState, combatState, originalTarget, modifiedAmount, props, dealer, cardSource);
 			Creature creature = originalTarget.PetOwner?.Creature ?? originalTarget;
-			decimal blockedDamage = creature.DamageBlockInternal(modifiedAmount, props);
-			decimal unblockedDamage = Hook.ModifyHpLost(runState, combatState, originalTarget, Math.Max(modifiedAmount - blockedDamage, 0m), props, dealer, cardSource, HpLossHookPhase.BeforeOsty, out modifiers);
+			List<DamageResult> damageResults = new List<DamageResult>();
+			Creature preBlockTarget = Hook.ModifyPreBlockDamageTarget(combatState, originalTarget, amount, props, dealer);
+			decimal damageRemaining = modifiedAmount;
+			if (preBlockTarget != null)
+			{
+				decimal amount2 = Hook.ModifyHpLost(runState, combatState, originalTarget, damageRemaining, props, dealer, cardSource, HpLossHookPhase.BeforeWuppy, out modifiers);
+				DamageResult damageResult = preBlockTarget.LoseHpInternal(amount2, props);
+				damageResult.IntendedHpLoss = (int)damageRemaining;
+				damageResult.OriginalTarget = originalTarget;
+				damageResults.Add(damageResult);
+				damageRemaining = damageResult.OverkillDamage;
+			}
+			decimal blockedDamage = creature.DamageBlockInternal(damageRemaining, props);
+			damageRemaining = Math.Max(damageRemaining - blockedDamage, 0m);
+			decimal unblockedDamage = Hook.ModifyHpLost(runState, combatState, originalTarget, damageRemaining, props, dealer, cardSource, HpLossHookPhase.BeforeOsty, out modifiers);
 			await Hook.AfterModifyingHpLostBeforeOsty(runState, combatState, modifiers);
-			Creature unblockedDamageTarget = ((combatState == null) ? originalTarget : Hook.ModifyUnblockedDamageTarget(combatState, originalTarget, unblockedDamage, props, dealer));
+			Creature unblockedDamageTarget = Hook.ModifyUnblockedDamageTarget(combatState, originalTarget, unblockedDamage, props, dealer);
 			unblockedDamage = Hook.ModifyHpLost(runState, combatState, unblockedDamageTarget, unblockedDamage, props, dealer, cardSource, HpLossHookPhase.AfterOsty, out modifiers);
 			await Hook.AfterModifyingHpLostAfterOsty(runState, combatState, modifiers);
 			DamageResult unblockedDamageResult = unblockedDamageTarget.LoseHpInternal(unblockedDamage, props);
-			List<DamageResult> damageResults = new List<DamageResult>(1) { unblockedDamageResult };
+			unblockedDamageResult.IntendedHpLoss = (int)damageRemaining;
+			unblockedDamageResult.OriginalTarget = originalTarget;
+			damageResults.Add(unblockedDamageResult);
+			damageRemaining = unblockedDamageResult.OverkillDamage;
 			bool wasBlockBroken = originalTarget.Block <= 0 && blockedDamage > 0m;
 			bool wasFullyBlocked = !props.HasFlag(ValueProp.Unblockable) && (blockedDamage > 0m || originalTarget.Block > 0) && (int)unblockedDamage == 0;
 			if (originalTarget == unblockedDamageTarget)
@@ -280,31 +345,48 @@ public static class CreatureCmd
 			}
 			else
 			{
-				decimal originalTargetDamage = Hook.ModifyHpLost(runState, combatState, originalTarget, unblockedDamageResult.OverkillDamage, props, dealer, cardSource, HpLossHookPhase.AfterOsty, out modifiers);
+				decimal originalTargetDamage = Hook.ModifyHpLost(runState, combatState, originalTarget, damageRemaining, props, dealer, cardSource, HpLossHookPhase.AfterOsty, out modifiers);
 				await Hook.AfterModifyingHpLostAfterOsty(runState, combatState, modifiers);
-				DamageResult damageResult = ((!(originalTargetDamage > 0m)) ? new DamageResult(originalTarget, props) : originalTarget.LoseHpInternal(originalTargetDamage, props));
-				damageResult.BlockedDamage = (int)blockedDamage;
-				damageResult.WasBlockBroken = wasBlockBroken;
-				damageResult.WasFullyBlocked = wasFullyBlocked;
-				damageResults.Add(damageResult);
+				DamageResult damageResult2 = ((!(originalTargetDamage > 0m)) ? new DamageResult(originalTarget, props) : originalTarget.LoseHpInternal(originalTargetDamage, props));
+				damageResult2.IntendedHpLoss = (int)damageRemaining;
+				damageResult2.BlockedDamage = (int)blockedDamage;
+				damageResult2.WasBlockBroken = wasBlockBroken;
+				damageResult2.WasFullyBlocked = wasFullyBlocked;
+				damageResults.Add(damageResult2);
 			}
 			List<Task> hitTriggers = new List<Task>();
-			foreach (DamageResult item in damageResults)
+			foreach (DamageResult result in damageResults)
 			{
-				int damage = item.UnblockedDamage + item.OverkillDamage;
-				Creature receiver = item.Receiver;
+				int damage = result.UnblockedDamage + result.OverkillDamage;
+				Creature receiver = result.Receiver;
 				if (CombatManager.Instance.IsInProgress && !CombatManager.Instance.IsEnding)
 				{
-					CombatManager.Instance.History.DamageReceived(combatState, receiver, dealer, item, cardSource);
+					CombatManager.Instance.History.DamageReceived(combatState, receiver, dealer, result, cardSource);
 				}
-				if (item.WasFullyBlocked)
+				bool flag = modifiedAmount == 0m && (result.Receiver == unblockedDamageTarget || result.Receiver == preBlockTarget);
+				if (result.IntendedHpLoss > 0 || (result.WasFullyBlocked && result.BlockedDamage > 0) || flag)
+				{
+					DamageTargetData? damageTargetData = targetData.FirstOrDefault((DamageTargetData t) => t.target == result.OriginalTarget);
+					if (damageTargetData.HasValue && damageTargetData.Value.hitVfx != null)
+					{
+						if (damageTargetData.Value.playVfxOnCreatureCenter)
+						{
+							VfxCmd.PlayOnCreatureCenter(result.Receiver, damageTargetData.Value.hitVfx, result.WasTargetKilled);
+						}
+						else
+						{
+							VfxCmd.PlayOnCreature(result.Receiver, damageTargetData.Value.hitVfx, result.WasTargetKilled);
+						}
+					}
+				}
+				if (result.WasFullyBlocked)
 				{
 					continue;
 				}
 				Node vfxContainer = receiver.GetVfxContainer();
-				if (damage > 0 || (modifiedAmount == 0m && item.Receiver == unblockedDamageTarget))
+				if (damage > 0 || flag)
 				{
-					NDamageNumVfx nDamageNumVfx = NDamageNumVfx.Create(receiver, item);
+					NDamageNumVfx nDamageNumVfx = NDamageNumVfx.Create(receiver, result);
 					if (nDamageNumVfx != null)
 					{
 						if (vfxContainer != null)
@@ -331,7 +413,7 @@ public static class CreatureCmd
 					MapPointHistoryEntry mapPointHistoryEntry = receiver.Player?.RunState.CurrentMapPointHistoryEntry;
 					if (mapPointHistoryEntry != null)
 					{
-						mapPointHistoryEntry.GetEntry(receiver.Player.NetId).DamageTaken += item.UnblockedDamage;
+						mapPointHistoryEntry.GetEntry(receiver.Player.NetId).DamageTaken += result.UnblockedDamage;
 					}
 				}
 				await Task.WhenAll(hitTriggers);
@@ -375,7 +457,7 @@ public static class CreatureCmd
 			Creature originalTarget = unblockedDamageResult.Receiver;
 			if (unblockedDamageResult.WasBlockBroken)
 			{
-				await Hook.AfterBlockBroken(originalTarget.CombatState, originalTarget);
+				await Hook.AfterBlockBroken(originalTarget.CombatState, choiceContext, originalTarget, dealer);
 			}
 			if (unblockedDamageResult.UnblockedDamage > 0)
 			{
@@ -406,9 +488,14 @@ public static class CreatureCmd
 				NGame.Instance?.ScreenShake(ShakeStrength.Weak, ShakeDuration.Short);
 			}
 		}
-		await Kill(killedCreatures);
+		await Kill(killedCreatures, cardSource);
 		await Cmd.CustomScaledWait(0.1f, 0.2f);
 		return results;
+	}
+
+	public static async Task Kill(Creature creature, bool force = false)
+	{
+		await Kill(creature, null, force);
 	}
 
 	/// <summary>
@@ -417,13 +504,19 @@ public static class CreatureCmd
 	/// matter who struck the killing blow.
 	/// </summary>
 	/// <param name="creature">Creature to kill.</param>
+	/// <param name="cardSource">Card the caused the creature's death</param>
 	/// <param name="force">
 	/// Whether or not to force the death (blocking death prevention by effects like Fairy in a Bottle).
 	/// Usually false, but true in certain built-in cases like abandoning a run.
 	/// </param>
-	public static async Task Kill(Creature creature, bool force = false)
+	public static async Task Kill(Creature creature, CardModel? cardSource, bool force = false)
 	{
-		await Kill(new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(creature), force);
+		await Kill(new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(creature), cardSource, force);
+	}
+
+	public static async Task Kill(IReadOnlyCollection<Creature> creatures, bool force = false)
+	{
+		await Kill(creatures, null, force);
 	}
 
 	/// <summary>
@@ -432,11 +525,12 @@ public static class CreatureCmd
 	/// no matter who struck the killing blow.
 	/// </summary>
 	/// <param name="creatures">Creatures to kill.</param>
+	/// <param name="cardSource">Card that is killing the creature</param>
 	/// <param name="force">
 	/// Whether or not to force the death (blocking death prevention by effects like Fairy in a Bottle).
 	/// Usually false, but true in certain built-in cases like abandoning a run.
 	/// </param>
-	public static async Task Kill(IReadOnlyCollection<Creature> creatures, bool force = false)
+	public static async Task Kill(IReadOnlyCollection<Creature> creatures, CardModel? cardSource, bool force = false)
 	{
 		if (creatures.Count == 0)
 		{
@@ -445,7 +539,11 @@ public static class CreatureCmd
 		IRunState runState = creatures.FirstOrDefault((Creature c) => c.IsPlayer)?.Player?.RunState;
 		foreach (Creature item in creatures.ToList())
 		{
-			await KillWithoutCheckingWinCondition(item, force);
+			await KillWithoutCheckingWinCondition(item, cardSource, force);
+		}
+		if (!RunManager.Instance.IsInProgress || RunManager.Instance.IsCleaningUp)
+		{
+			return;
 		}
 		if (runState != null && runState.Players.All((Player p) => p.Creature.IsDead))
 		{
@@ -458,8 +556,11 @@ public static class CreatureCmd
 				NRun.Instance.RunMusicController.StopMusic();
 				NDebugAudioManager.Instance?.StopAll();
 				NAudioManager.Instance.PlayMusic("event:/temp/sfx/game_over");
-				SerializableRun serializableRun = RunManager.Instance.OnEnded(isVictory: false);
-				NRun.Instance.ShowGameOverScreen(serializableRun);
+				if (!RunManager.Instance.HasRunEnded)
+				{
+					PostRunProgressUpdateResult result = RunManager.Instance.OnEnded(isVictory: false);
+					NRun.Instance.ShowGameOverScreen(result);
+				}
 			}
 		}
 		else
@@ -486,10 +587,17 @@ public static class CreatureCmd
 	/// Kill the specified creature without checking win condition. For internal use only, when we know we will
 	/// be checking the win condition later.
 	/// </summary>
-	private static async Task KillWithoutCheckingWinCondition(Creature creature, bool force, int recursion = 0)
+	private static async Task KillWithoutCheckingWinCondition(Creature creature, CardModel? cardSource, bool force, int recursion = 0)
 	{
+		CombatId? killCombatId = CombatManager.Instance.CurrentCombatId;
 		if ((creature.CombatState == null && !creature.IsPlayer) || (creature.CombatState != null && !creature.CombatState.IsLiveCombat()))
 		{
+			return;
+		}
+		if (!CombatManager.Instance.IsInProgress && creature.IsPlayer && creature.Player.RunState.Players.Count > 1 && !force)
+		{
+			Log.Error($"Player {creature.Player.NetId} has been killed outside of combat in multiplayer! This should not occur");
+			await Heal(creature, 1m);
 			return;
 		}
 		ICombatState combatState = creature.CombatState;
@@ -516,7 +624,7 @@ public static class CreatureCmd
 					NCombatRoom.Instance?.RemoveCreatureNode(nCreature);
 				}
 			}
-			await Hook.AfterDeath(runState, combatState, creature, wasRemovalPrevented: false, deathAnimLength);
+			await Hook.AfterDeath(runState, combatState, creature, cardSource, wasRemovalPrevented: false, deathAnimLength);
 			List<Creature> teammates = (from t in combatState?.GetTeammatesOf(creature)
 				where t.IsAlive
 				select t).ToList() ?? new List<Creature>();
@@ -539,7 +647,7 @@ public static class CreatureCmd
 			{
 				if (isPrimaryEnemy && teammates.Count != 0 && teammates.All((Creature t) => t.IsSecondaryEnemy))
 				{
-					await Kill(teammates);
+					await Kill(teammates, cardSource);
 				}
 			}
 			else if (creature.IsPlayer)
@@ -551,9 +659,9 @@ public static class CreatureCmd
 					await Kill(player.Osty, force);
 				}
 				player.DeactivateHooks();
-				if (combatState != null && !combatState.Players.All((Player p) => p.Creature.IsDead))
+				if (combatState != null)
 				{
-					await CombatManager.Instance.HandlePlayerDeath(player);
+					await CombatManager.Instance.HandlePlayerDeath(killCombatId, player);
 				}
 			}
 		}
@@ -563,11 +671,11 @@ public static class CreatureCmd
 			{
 				throw new InvalidOperationException("Combat is ending, but something is continually preventing the last creature from being killed!");
 			}
-			await Hook.AfterDeath(runState, combatState, creature, wasRemovalPrevented: true, 0f);
+			await Hook.AfterDeath(runState, combatState, creature, cardSource, wasRemovalPrevented: true, 0f);
 			await Hook.AfterPreventingDeath(runState, combatState, preventer, creature);
 			if (creature.IsDead)
 			{
-				await KillWithoutCheckingWinCondition(creature, force, recursion + 1);
+				await KillWithoutCheckingWinCondition(creature, cardSource, force, recursion + 1);
 			}
 		}
 	}
@@ -575,16 +683,19 @@ public static class CreatureCmd
 	/// <summary>
 	/// Removes creature from combat without killing it and marks it escaped in the combat state.
 	/// Used for things like the EscapeArtist power.
+	/// Escaping happens during the monster's own move and removes every power, while Doom only kills at the end of the
+	/// side's turn. A thief that escapes therefore leaves with the stolen card or gold instead of dying to Doom first.
+	/// Closed as designed for Thieving Hopper and Fat Gremlin: PRG-7268.
 	/// </summary>
-	public static Task Escape(Creature creature, bool removeCreatureNode = true)
+	public static async Task Escape(Creature creature, bool removeCreatureNode = true)
 	{
-		if (creature.IsDead)
+		if (creature.IsDead || creature.CombatState == null || !creature.CombatState.IsLiveCombat())
 		{
-			return Task.CompletedTask;
+			return;
 		}
-		if (creature.CombatState == null || !creature.CombatState.IsLiveCombat())
+		foreach (ImpaledPower item in creature.GetPowerInstances<ImpaledPower>().ToList())
 		{
-			return Task.CompletedTask;
+			await item.DislodgeAllArrows(new BlockingPlayerChoiceContext(), null);
 		}
 		creature.RemoveAllPowersInternalExcept();
 		if (removeCreatureNode)
@@ -593,13 +704,12 @@ public static class CreatureCmd
 			if (nCreature != null)
 			{
 				NCombatRoom.Instance.RemoveCreatureNode(nCreature);
-				nCreature.ToggleIsInteractable(on: false);
+				nCreature.SetIsInteractable(on: false, changeVisibilityImmediately: true);
 				nCreature.Visible = false;
 			}
 		}
 		CombatManager.Instance.RemoveCreature(creature);
 		creature.CombatState?.CreatureEscaped(creature);
-		return Task.CompletedTask;
 	}
 
 	/// <summary>
@@ -620,7 +730,7 @@ public static class CreatureCmd
 	}
 
 	/// <summary>
-	/// Make the specified creature gain the specified amount of block.
+	/// Make this creature gain the specified amount of block.
 	/// </summary>
 	/// <param name="creature">Creature that should gain block.</param>
 	/// <param name="amount">Amount of block they should gain.</param>
@@ -635,6 +745,10 @@ public static class CreatureCmd
 	public static async Task<decimal> GainBlock(Creature creature, decimal amount, ValueProp props, CardPlay? cardPlay, bool fast = false)
 	{
 		if (CombatManager.Instance.IsOverOrEnding)
+		{
+			return default(decimal);
+		}
+		if (creature.IsDead)
 		{
 			return default(decimal);
 		}
@@ -663,16 +777,26 @@ public static class CreatureCmd
 		return modifiedAmount;
 	}
 
-	public static async Task LoseBlock(Creature creature, decimal amount)
+	/// <summary>
+	/// Make this creature lose the specified amount of block.
+	/// </summary>
+	/// <param name="choiceContext">The context that is signalled in the event of a player choice.</param>
+	/// <param name="target">Creature that should lose block.</param>
+	/// <param name="amount">Amount of block they should lose.</param>
+	/// <param name="remover">
+	/// Creature that caused the block loss.
+	/// Null if no creature was involved in the block loss, like if it was removed by a power.
+	/// </param>
+	public static async Task LoseBlock(PlayerChoiceContext choiceContext, Creature target, decimal amount, Creature? remover)
 	{
-		if (!CombatManager.Instance.IsOverOrEnding && !creature.IsDead && !(amount <= 0m))
+		if (!CombatManager.Instance.IsOverOrEnding && !target.IsDead && !(amount <= 0m))
 		{
-			int block = creature.Block;
-			creature.LoseBlockInternal(amount);
-			if (block > 0 && creature.Block <= 0)
+			int block = target.Block;
+			target.LoseBlockInternal(amount);
+			if (block > 0 && target.Block <= 0)
 			{
 				SfxCmd.Play("event:/sfx/block_break");
-				await Hook.AfterBlockBroken(creature.CombatState, creature);
+				await Hook.AfterBlockBroken(target.CombatState, choiceContext, target, remover);
 			}
 		}
 	}
@@ -694,8 +818,8 @@ public static class CreatureCmd
 		{
 			return;
 		}
-		bool isDead = creature.IsDead;
-		decimal num = Math.Min(amount, creature.MaxHp - creature.CurrentHp);
+		bool wasDead = creature.IsDead;
+		decimal amountHealed = Math.Min(amount, creature.MaxHp - creature.CurrentHp);
 		if (creature == null || !(creature.Monster is Osty))
 		{
 			SfxCmd.Play("event:/sfx/heal");
@@ -713,8 +837,16 @@ public static class CreatureCmd
 				{
 					VfxCmd.PlayOnCreatureCenter(creature, "vfx/vfx_cross_heal");
 				}
+				if (creature.IsPlayer)
+				{
+					NCreature creatureNode = creature.GetCreatureNode();
+					if (creatureNode != null && creatureNode.Visuals.IsPlayingIdleAnimation())
+					{
+						await TriggerAnim(creature, "Idle", 0f);
+					}
+				}
 				creature.GetVfxContainer()?.AddChildSafely(NHealNumVfx.Create(creature, amount));
-				if (isDead)
+				if (wasDead)
 				{
 					NCombatRoom.Instance?.GetCreatureNode(creature)?.StartReviveAnim();
 				}
@@ -740,9 +872,9 @@ public static class CreatureCmd
 			}
 		}
 		MapPointHistoryEntry mapPointHistoryEntry = creature.Player?.RunState.CurrentMapPointHistoryEntry;
-		if (mapPointHistoryEntry != null && num > 0m)
+		if (mapPointHistoryEntry != null && amountHealed > 0m)
 		{
-			mapPointHistoryEntry.GetEntry(creature.Player.NetId).HpHealed += (int)num;
+			mapPointHistoryEntry.GetEntry(creature.Player.NetId).HpHealed += (int)amountHealed;
 		}
 		if (CombatManager.Instance.IsInProgress)
 		{
@@ -770,7 +902,7 @@ public static class CreatureCmd
 			{
 				NCombatRoom.Instance?.GetCreatureNode(creature)?.StartReviveAnim();
 			}
-			await Hook.AfterCurrentHpChanged(creature.Player?.RunState ?? creature.CombatState.RunState, creature.CombatState, creature, amount - num);
+			await Hook.AfterCurrentHpChanged(creature.Player?.RunState ?? creature.CombatState?.RunState ?? NullRunState.Instance, creature.CombatState, creature, amount - num);
 		}
 		if (creature.IsDead)
 		{
@@ -804,11 +936,10 @@ public static class CreatureCmd
 	/// <param name="choiceContext">The context that is signalled in the event of a player choice.</param>
 	/// <param name="creature">Creature to remove max HP from.</param>
 	/// <param name="amount">Amount of max HP to remove.</param>
-	/// <param name="isFromCard">
-	/// Whether or not this max HP loss is coming from a card.
-	/// Used to determine whether effects like <see cref="T:MegaCrit.Sts2.Core.Models.Cards.Rupture" /> should trigger.
+	/// <param name="cardSource">
+	/// Card that was the source of the hp loss Used to determine whether effects like <see cref="T:MegaCrit.Sts2.Core.Models.Cards.Rupture" /> should trigger.
 	/// </param>
-	public static async Task LoseMaxHp(PlayerChoiceContext choiceContext, Creature creature, decimal amount, bool isFromCard)
+	public static async Task LoseMaxHp(PlayerChoiceContext choiceContext, Creature creature, decimal amount, CardModel? cardSource)
 	{
 		if (amount < 0m)
 		{
@@ -822,7 +953,7 @@ public static class CreatureCmd
 		}
 		if (newMaxHp < (decimal)creature.CurrentHp)
 		{
-			await Damage(choiceContext, creature, (decimal)creature.CurrentHp - newMaxHp, isFromCard ? (ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move) : (ValueProp.Unblockable | ValueProp.Unpowered), null, null);
+			await Damage(choiceContext, creature, (decimal)creature.CurrentHp - newMaxHp, (cardSource != null) ? (ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move) : (ValueProp.Unblockable | ValueProp.Unpowered), cardSource, null);
 		}
 		await SetMaxHp(creature, Math.Max(1.0m, newMaxHp));
 	}

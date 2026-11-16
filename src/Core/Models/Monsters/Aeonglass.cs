@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Animation;
 using MegaCrit.Sts2.Core.Audio;
+using MegaCrit.Sts2.Core.Bindings.MegaSpine;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Ascension;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -19,6 +21,18 @@ namespace MegaCrit.Sts2.Core.Models.Monsters;
 
 public sealed class Aeonglass : MonsterModel
 {
+	private const string _attackHeavyTrigger = "AttackHeavy";
+
+	private const string _attackDoubleTrigger = "AttackDouble";
+
+	private const string _ebbSfx = "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_ebb";
+
+	private const string _dieSfx = "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_die";
+
+	private const string _lasersSfx = "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_lasers";
+
+	private const string _buffSfx = "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_buff";
+
 	private const string _aeonglassTrackName = "queen_progress";
 
 	private int _additionalStrength;
@@ -31,7 +45,7 @@ public sealed class Aeonglass : MonsterModel
 
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Stone;
 
-	private int EbbDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 32, 26);
+	private int EbbDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 26, 22);
 
 	private int EbbBlock => 33;
 
@@ -41,7 +55,7 @@ public sealed class Aeonglass : MonsterModel
 
 	private int IncreasingIntensityBaseStrength => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 4, 3);
 
-	private int WitherAmount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 2, 1);
+	private int WitherAmount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 2, 1) + (AscensionHelper.IsDread() ? 1 : 0);
 
 	private int AdditionalStrength
 	{
@@ -75,7 +89,7 @@ public sealed class Aeonglass : MonsterModel
 	{
 		await base.AfterAddedToRoom();
 		NRunMusicController.Instance?.UpdateMusicParameter("queen_progress", 1f);
-		foreach (Creature item in base.Creature.CombatState.GetOpponentsOf(base.Creature))
+		foreach (Creature item in base.CombatState.GetOpponentsOf(base.Creature))
 		{
 			WitheringPresencePower witheringPresencePower = (WitheringPresencePower)ModelDb.Power<WitheringPresencePower>().ToMutable();
 			witheringPresencePower.Target = item;
@@ -84,7 +98,7 @@ public sealed class Aeonglass : MonsterModel
 		await PowerCmd.Apply<ArtifactPower>(new ThrowingPlayerChoiceContext(), base.Creature, 3m, base.Creature, null);
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? card, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (creature != base.Creature)
 		{
@@ -111,22 +125,25 @@ public sealed class Aeonglass : MonsterModel
 
 	private async Task EbbMove(IReadOnlyList<Creature> targets)
 	{
-		await DamageCmd.Attack(EbbDamage).FromMonster(this).WithAttackerAnim("Attack", 0.15f)
-			.WithHitFx("vfx/vfx_attack_blunt")
+		await DamageCmd.Attack(EbbDamage).FromMonster(this).WithAttackerAnim("AttackHeavy", 0.3f)
+			.WithAttackerFx(null, "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_ebb")
 			.Execute(null);
 		await CreatureCmd.GainBlock(base.Creature, EbbBlock, ValueProp.Move, null);
 	}
 
 	private async Task EyeLasersMove(IReadOnlyList<Creature> targets)
 	{
-		await DamageCmd.Attack(EyeLasersDamage).FromMonster(this).WithHitCount(EyeLasersRepeat)
-			.WithAttackerAnim("Attack", 0.15f)
-			.WithHitFx("vfx/vfx_attack_blunt")
+		await DamageCmd.Attack(EyeLasersDamage).FromMonster(this).WithAttackerFx(null, "event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_lasers")
+			.WithHitCount(EyeLasersRepeat)
+			.WithAttackerAnim("AttackDouble", 0.4f)
+			.OnlyPlayAnimOnce()
 			.Execute(null);
 	}
 
 	private async Task IncreasingIntensityMove(IReadOnlyList<Creature> targets)
 	{
+		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/aeonglass/aeonglass_buff");
+		await CreatureCmd.TriggerAnim(base.Creature, "Cast", 0.4f);
 		foreach (Creature target in targets)
 		{
 			if (target.Player?.PlayerCombatState == null)
@@ -142,7 +159,8 @@ public sealed class Aeonglass : MonsterModel
 			}
 		}
 		WitherUpgradeCount++;
-		await CardPileCmd.AddToCombatAndPreview<Wither>(targets, PileType.Discard, WitherAmount, null);
+		PileType pileType = (AscensionHelper.IsDread() ? PileType.Draw : PileType.Discard);
+		await CardPileCmd.AddToCombatAndPreview<Wither>(targets, pileType, WitherAmount, null, CardPilePosition.Random);
 		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, IncreasingIntensityTotalStrength, base.Creature, null);
 		AdditionalStrength++;
 	}
@@ -163,5 +181,27 @@ public sealed class Aeonglass : MonsterModel
 		{
 			wither.FakeUpgrade();
 		}
+	}
+
+	public override CreatureAnimator GenerateAnimator(MegaSprite controller)
+	{
+		AnimState animState = new AnimState("idle_loop", isLooping: true);
+		AnimState animState2 = new AnimState("wither");
+		AnimState animState3 = new AnimState("attack_heavy");
+		AnimState animState4 = new AnimState("attack_double");
+		AnimState animState5 = new AnimState("hurt");
+		AnimState state = new AnimState("die");
+		animState2.NextState = animState;
+		animState3.NextState = animState;
+		animState4.NextState = animState;
+		animState5.NextState = animState;
+		CreatureAnimator creatureAnimator = new CreatureAnimator(animState, controller);
+		creatureAnimator.AddAnyState("Idle", animState);
+		creatureAnimator.AddAnyState("Cast", animState2);
+		creatureAnimator.AddAnyState("AttackHeavy", animState3);
+		creatureAnimator.AddAnyState("AttackDouble", animState4);
+		creatureAnimator.AddAnyState("Dead", state);
+		creatureAnimator.AddAnyState("Hit", animState5);
+		return creatureAnimator;
 	}
 }

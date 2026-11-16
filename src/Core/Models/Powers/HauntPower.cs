@@ -24,7 +24,7 @@ public sealed class HauntPower : PowerModel
 			if (hittableEnemies.Count != 0)
 			{
 				Creature item = base.Owner.Player.RunState.Rng.CombatTargets.NextItem(hittableEnemies);
-				await CreatureCmd.Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(item), base.Amount, ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+				await CreatureCmd.Damage(choiceContext, new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(item), base.Amount, ValueProp.Unblockable | ValueProp.Unpowered, null, null, null);
 			}
 		}
 	}

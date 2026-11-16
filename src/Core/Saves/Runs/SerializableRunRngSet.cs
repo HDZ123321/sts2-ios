@@ -11,20 +11,20 @@ public class SerializableRunRngSet : IPacketSerializable
 	[JsonPropertyName("seed")]
 	public string? Seed { get; set; }
 
-	[JsonPropertyName("counters")]
-	public Dictionary<RunRngType, int> Counters { get; set; } = new Dictionary<RunRngType, int>();
+	[JsonPropertyName("rngs")]
+	public Dictionary<RunRngType, SerializableRng> Rngs { get; set; } = new Dictionary<RunRngType, SerializableRng>();
 
 	public void Serialize(PacketWriter writer)
 	{
 		writer.WriteString(Seed);
-		writer.WriteInt(Counters.Count, 8);
+		writer.WriteInt(Rngs.Count, 8);
 		RunRngType[] values = Enum.GetValues<RunRngType>();
 		foreach (RunRngType runRngType in values)
 		{
-			if (Counters.TryGetValue(runRngType, out var value))
+			if (Rngs.TryGetValue(runRngType, out SerializableRng value))
 			{
 				writer.WriteEnum(runRngType);
-				writer.WriteInt(value);
+				writer.Write(value);
 			}
 		}
 	}
@@ -36,8 +36,8 @@ public class SerializableRunRngSet : IPacketSerializable
 		for (int i = 0; i < num; i++)
 		{
 			RunRngType key = reader.ReadEnum<RunRngType>();
-			int value = reader.ReadInt();
-			Counters[key] = value;
+			SerializableRng value = reader.Read<SerializableRng>();
+			Rngs[key] = value;
 		}
 	}
 }

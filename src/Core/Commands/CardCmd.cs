@@ -185,7 +185,8 @@ public static class CardCmd
 		CardPile discardPile = PileType.Discard.GetPile(discardCards[0].Owner);
 		foreach (CardModel card in discardCards)
 		{
-			if (card.IsSlyThisTurn)
+			CardPile? pile = card.Pile;
+			if (pile != null && pile.Type == PileType.Hand && card.IsSlyThisTurn)
 			{
 				slyCards.Add(card);
 			}
@@ -234,15 +235,21 @@ public static class CardCmd
 	/// This should always be false except the specific case in <see cref="T:MegaCrit.Sts2.Core.Combat.CombatManager" />.
 	/// </param>
 	/// <param name="skipVisuals">Skip card pile visuals (tween to/from pile, smoke puff VFX, etc).</param>
-	public static async Task Exhaust(PlayerChoiceContext choiceContext, CardModel card, bool causedByEthereal = false, bool skipVisuals = false)
+	public static async Task<CardPileAddResult?> Exhaust(PlayerChoiceContext choiceContext, CardModel card, bool causedByEthereal = false, bool skipVisuals = false)
 	{
-		if (!CombatManager.Instance.IsOverOrEnding)
+		if (CombatManager.Instance.IsOverOrEnding)
 		{
-			ICombatState combatState = card.CombatState ?? card.Owner.Creature.CombatState;
-			await CardPileCmd.Add(card, PileType.Exhaust, CardPilePosition.Bottom, null, skipVisuals);
-			CombatManager.Instance.History.CardExhausted(combatState, card);
-			await Hook.AfterCardExhausted(combatState, choiceContext, card, causedByEthereal);
+			return null;
 		}
+		if (card.Owner.Creature.IsDead)
+		{
+			return null;
+		}
+		ICombatState combatState = card.CombatState ?? card.Owner.Creature.CombatState;
+		CardPileAddResult result = await CardPileCmd.Add(card, PileType.Exhaust, CardPilePosition.Bottom, null, skipVisuals);
+		CombatManager.Instance.History.CardExhausted(combatState, card);
+		await Hook.AfterCardExhausted(combatState, choiceContext, card, causedByEthereal);
+		return result;
 	}
 
 	/// <summary>
@@ -331,7 +338,7 @@ public static class CardCmd
 	/// <param name="original">Card to transform from.</param>
 	/// <param name="style">How the transformed card is displayed to the player.</param>
 	/// <typeparam name="T">Card type to transform to.</typeparam>
-	/// <returns>The replacement card.</returns>
+	/// <returns>The replacement card, or null if nothing was transformed because combat is ending.</returns>
 	public static async Task<CardPileAddResult?> TransformTo<T>(CardModel original, CardPreviewStyle style = CardPreviewStyle.HorizontalLayout) where T : CardModel
 	{
 		CardModel replacement = original.CardScope.CreateCard<T>(original.Owner);
@@ -344,10 +351,10 @@ public static class CardCmd
 	/// <param name="original">Card to transform from.</param>
 	/// <param name="replacement">Card to transform to.</param>
 	/// <param name="style">How the transformed card is displayed to the player.</param>
-	/// <returns>The replacement card.</returns>
+	/// <returns>The replacement card, or null if nothing was transformed because combat is ending.</returns>
 	public static async Task<CardPileAddResult?> Transform(CardModel original, CardModel replacement, CardPreviewStyle style = CardPreviewStyle.HorizontalLayout)
 	{
-		return (await Transform(new CardTransformation(original, replacement).Yield(), null, style)).FirstOrDefault();
+		return (await Transform(new CardTransformation(original, replacement).Yield(), null, style)).Select((Func<CardPileAddResult, CardPileAddResult?>)((CardPileAddResult r) => r)).FirstOrDefault();
 	}
 
 	private static int PileIndexSort((CardTransformation, CardPile, int, CardModel) value1, (CardTransformation, CardPile, int, CardModel) value2)
@@ -446,64 +453,87 @@ public static class CardCmd
 			}
 			await Hook.AfterCardChangedPiles(runState, combatState, replacement2, pile2.Type, null);
 			pile2.InvokeCardAddFinished();
-			original.AfterTransformedFrom();
-			replacement2.AfterTransformedTo();
+			original.AfterThisWasTransformedInto(replacement2);
+			replacement2.AfterThisWasTransformedFrom(original);
 			results.Add(result);
 		}
-		float num = 0f;
+		List<Task> vfxTasks = new List<Task>();
 		for (int j = 0; j < results.Count; j++)
 		{
 			CardModel original2 = transformationsWithOriginalData[j].Item1.Original;
 			CardModel cardAdded2 = results[j].cardAdded;
 			if (!LocalContext.IsMine(cardAdded2))
 			{
+				CardPile? pile3 = cardAdded2.Pile;
+				if (pile3 != null && pile3.Type == PileType.Play)
+				{
+					NCard nCard = NCard.FindOnTable(original2, PileType.Play);
+					if (nCard != null)
+					{
+						nCard.Model = cardAdded2;
+						nCard.UpdateVisuals(PileType.Play, CardPreviewMode.Normal);
+					}
+				}
 				continue;
 			}
-			if (cardAdded2.Pile.Type == PileType.Hand)
+			PileType type2 = cardAdded2.Pile.Type;
+			if ((type2 == PileType.Hand || type2 == PileType.Play) ? true : false)
 			{
-				if (!TestMode.IsOn)
+				if (TestMode.IsOn)
 				{
-					NCardPlayQueue playQueue = NCombatRoom.Instance.Ui.PlayQueue;
-					NPlayerHand hand = NCombatRoom.Instance.Ui.Hand;
-					NCard nCard = NCard.FindOnTable(original2, PileType.Hand);
-					if (nCard == null)
+					continue;
+				}
+				NCardPlayQueue playQueue = NCombatRoom.Instance.Ui.PlayQueue;
+				NCard nCard2 = NCard.FindOnTable(original2, cardAdded2.Pile.Type);
+				if (nCard2 == null)
+				{
+					throw new InvalidOperationException($"Couldn't get hand node for original card {transformationsArr[j].Original}!");
+				}
+				if (cardAdded2.Pile.Type == PileType.Hand)
+				{
+					if (playQueue.IsAncestorOf(nCard2))
 					{
-						throw new InvalidOperationException($"Couldn't get hand node for original card {transformationsArr[j].Original}!");
+						playQueue.RemoveCardFromQueueForCancellation(nCard2, forceReturnToHand: true);
 					}
-					if (playQueue.IsAncestorOf(nCard))
+					NCombatRoom.Instance.Ui.Hand.TryCancelCardPlay(original2);
+				}
+				NCardTransformShineVfx nCardTransformShineVfx = NCardTransformShineVfx.Create(nCard2, cardAdded2, Array.Empty<RelicModel>());
+				if (nCardTransformShineVfx != null)
+				{
+					if (cardAdded2.Pile.Type == PileType.Hand)
 					{
-						playQueue.RemoveCardFromQueueForCancellation(nCard, forceReturnToHand: true);
+						vfxTasks.Add(nCardTransformShineVfx.PlayAnimationWithoutWaitingForEnd());
+						await Cmd.CustomScaledWait(0.1f, 0.25f);
 					}
-					hand.TryCancelCardPlay(original2);
-					NCardTransformShineVfx nCardTransformShineVfx = NCardTransformShineVfx.Create(nCard, cardAdded2, Array.Empty<RelicModel>());
-					if (nCardTransformShineVfx != null)
+					else
 					{
-						num += nCardTransformShineVfx.GetEffectiveDuration(shortVersion: true);
-						TaskHelper.RunSafely(nCardTransformShineVfx.PlayAnimation(shortVersion: true));
+						await nCardTransformShineVfx.PlayAnimation();
+						await Cmd.CustomScaledWait(0.1f, 0.25f);
 					}
 				}
 			}
 			else if (style != CardPreviewStyle.None && TestMode.IsOff)
 			{
+				NCombatRoom instance = NCombatRoom.Instance;
 				((Node)(style switch
 				{
 					CardPreviewStyle.EventLayout => NRun.Instance?.GlobalUi.EventCardPreviewContainer, 
 					CardPreviewStyle.GridLayout => NRun.Instance?.GlobalUi.GridCardPreviewContainer, 
-					CardPreviewStyle.HorizontalLayout => NCombatRoom.Instance?.Ui.CardPreviewContainer ?? NRun.Instance?.GlobalUi.CardPreviewContainer, 
-					CardPreviewStyle.MessyLayout => NCombatRoom.Instance?.Ui.MessyCardPreviewContainer ?? NRun.Instance?.GlobalUi.MessyCardPreviewContainer, 
+					CardPreviewStyle.HorizontalLayout => (instance?.Ui.CardPreviewContainer != null && cardAdded2.Pile.IsCombatPile) ? instance.Ui.CardPreviewContainer : NRun.Instance?.GlobalUi.CardPreviewContainer, 
+					CardPreviewStyle.MessyLayout => (instance?.Ui.MessyCardPreviewContainer != null && cardAdded2.Pile.IsCombatPile) ? instance.Ui.MessyCardPreviewContainer : NRun.Instance?.GlobalUi.MessyCardPreviewContainer, 
 					_ => throw new ArgumentOutOfRangeException("style", $"Unexpected {"CardPreviewStyle"} {style}!"), 
 				}))?.AddChildSafely(NCardTransformVfx.Create(original2, cardAdded2, results[j].modifyingModels?.OfType<RelicModel>()));
 			}
 		}
-		await Cmd.Wait(num);
-		for (int k = 0; k < results.Count; k++)
+		await Task.WhenAll(vfxTasks);
+		for (int j = 0; j < results.Count; j++)
 		{
-			CardPileAddResult cardPileAddResult = results[k];
+			CardPileAddResult cardPileAddResult = results[j];
 			if (cardPileAddResult.success && cardPileAddResult.cardAdded.Pile.Type.IsCombatPile())
 			{
 				await Hook.AfterCardGeneratedForCombat(cardPileAddResult.cardAdded.CombatState, cardPileAddResult.cardAdded, cardPileAddResult.cardAdded.Owner);
 			}
-			transformationsWithOriginalData[k].Item1.Original.RemoveFromState();
+			transformationsWithOriginalData[j].Item1.Original.RemoveFromState();
 		}
 		return results;
 	}
@@ -702,6 +732,16 @@ public static class CardCmd
 	}
 
 	/// <summary>
+	/// Apply Retain to a card for the current turn only.
+	/// </summary>
+	/// <param name="card">Card to apply single-turn Retain to.</param>
+	public static void ApplySingleTurnRetain(CardModel card)
+	{
+		card.GiveSingleTurnRetain();
+		NCard.FindOnTable(card)?.UpdateVisuals(card.Pile.Type, CardPreviewMode.Normal);
+	}
+
+	/// <summary>
 	/// Creates a set of NCards that spawn in the middle of the screen, then fly to the pile they're in.
 	/// Useful for when you want to preview cards that are being added to a pile.
 	/// </summary>
@@ -840,10 +880,10 @@ public static class CardCmd
 			if (nCardFlyVfx != null && node2 != null)
 			{
 				node2.AddChildSafely(nCardFlyVfx);
-				nCardFlyVfx.SwooshAwayCompletion.Task.ContinueWith(delegate
+				TaskHelper.RunSafely(nCardFlyVfx.SwooshAwayCompletion.Task.ContinueWith(delegate
 				{
 					source.SetResult();
-				});
+				}));
 			}
 			else
 			{

@@ -183,7 +183,7 @@ public sealed class TwoTailedRat : MonsterModel
 			await Cmd.Wait(0.5f);
 			await CreatureCmd.Add<TwoTailedRat>(base.CombatState, nextSlot);
 		}
-		List<TwoTailedRat> list = base.Creature.CombatState.Enemies.Select((Creature c) => c.Monster).OfType<TwoTailedRat>().ToList();
+		List<TwoTailedRat> list = base.CombatState.Enemies.Select((Creature c) => c.Monster).OfType<TwoTailedRat>().ToList();
 		int maxCallForBackupCount = list.Max((TwoTailedRat c) => c.CallForBackupCount + 1);
 		list.ForEach(delegate(TwoTailedRat r)
 		{
@@ -205,7 +205,7 @@ public sealed class TwoTailedRat : MonsterModel
 		{
 			return false;
 		}
-		List<Creature> list = (from c in base.Creature.CombatState.GetTeammatesOf(base.Creature)
+		List<Creature> list = (from c in base.CombatState.GetTeammatesOf(base.Creature)
 			where c != base.Creature
 			select c).ToList();
 		foreach (Creature item in list)

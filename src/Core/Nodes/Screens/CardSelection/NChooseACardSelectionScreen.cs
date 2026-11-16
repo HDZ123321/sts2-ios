@@ -36,7 +36,7 @@ namespace MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 /// TODO: this is very similar to NCardRewardScreen... if we have a 3rd screen set up like this, might be
 /// worth having them inherit from a common class.
 [ScriptPath("res://src/Core/Nodes/Screens/CardSelection/NChooseACardSelectionScreen.cs")]
-public class NChooseACardSelectionScreen : Control, IOverlayScreen, IScreenContext, ICardSelector
+public class NChooseACardSelectionScreen : Control, IOverlayScreen, IScreenContext, ICardSelectionScreen
 {
 	/// <summary>
 	/// Cached StringNames for the methods contained in this class, for fast lookup.
@@ -417,9 +417,9 @@ public class NChooseACardSelectionScreen : Control, IOverlayScreen, IScreenConte
 
 	private void UpdateControllerIcons()
 	{
-		_inspectPrompt.Modulate = (NControllerManager.Instance.IsUsingController ? Colors.White : Colors.Transparent);
-		_inspectPrompt.GetNode<TextureRect>("ControllerIcon").Texture = NInputManager.Instance.GetHotkeyIcon(MegaInput.accept);
-		_inspectPrompt.GetNode<MegaLabel>("Label").SetTextAutoSize(new LocString("gameplay_ui", "TO_INSPECT_PROMPT").GetFormattedText());
+		_inspectPrompt.Modulate = (NControllerManager.Instance.IsUsingDirectionalNavigation ? Colors.White : Colors.Transparent);
+		_inspectPrompt.GetNode<NHotkeyIcon>("%HotkeyIcon").UpdateInput(MegaInput.confirm);
+		_inspectPrompt.GetNode<MegaLabel>("%Label").SetTextAutoSize(new LocString("gameplay_ui", "TO_INSPECT_PROMPT").GetFormattedText());
 	}
 
 	/// <summary>

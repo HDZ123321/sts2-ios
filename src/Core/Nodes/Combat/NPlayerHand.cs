@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.Cards.Holders;
@@ -639,6 +640,20 @@ public class NPlayerHand : Control
 	/// </summary>
 	public NHandCardHolder Add(NCard card, int index = -1)
 	{
+		foreach (NHandCardHolder item in Holders.Concat(_holdersAwaitingQueue))
+		{
+			if (item.CardNode == card)
+			{
+				Log.Error($"Tried to add duplicate card {card.Model} to hand! Holder already exists which has the same node. Ignoring.");
+				return item;
+			}
+			if (item.CardNode?.Model == card.Model)
+			{
+				Log.Error($"Tried to add duplicate card {card.Model} to hand! Holder already exists which has the same backing model. Freeing the new node.");
+				card.QueueFreeSafely();
+				return item;
+			}
+		}
 		Vector2 globalPosition = card.GlobalPosition;
 		NHandCardHolder nHandCardHolder = NHandCardHolder.Create(card, this);
 		AddCardHolder(nHandCardHolder, index);
@@ -890,9 +905,9 @@ public class NPlayerHand : Control
 		}
 		if (flag)
 		{
-			bool flag2 = me == null || !state.Players.Except(new global::_003C_003Ez__ReadOnlySingleElementList<Player>(me)).All(CombatManager.Instance.IsPlayerReadyToEndTurn);
-			bool flag3 = state.CurrentSide == CombatSide.Enemy;
-			if (flag3 || flag2)
+			bool flag2 = me != null && state.Players.Except(new global::_003C_003Ez__ReadOnlySingleElementList<Player>(me)).All(CombatManager.Instance.IsPlayerReadyToEndTurn);
+			bool flag3 = RunManager.Instance.ActionQueueSet.AreAnyPlayerDrivenActionsBeingExecuted(excludeEndOfTurn: true);
+			if (state.CurrentSide == CombatSide.Enemy || !flag2 || flag3)
 			{
 				AnimDisable();
 			}
@@ -971,8 +986,9 @@ public class NPlayerHand : Control
 		}
 		CurrentMode = mode;
 		_currentSelectionFilter = filter;
-		NCombatRoom.Instance.RestrictControllerNavigation(Array.Empty<Control>());
-		NCombatUi ui = NCombatRoom.Instance.Ui;
+		NCombatRoom instance = NCombatRoom.Instance;
+		instance.RestrictControllerNavigation(Array.Empty<Control>());
+		NCombatUi ui = instance.Ui;
 		ui.OnHandSelectModeEntered();
 		EnableControllerNavigation();
 		_prefs = prefs;
@@ -983,6 +999,10 @@ public class NPlayerHand : Control
 		UpdateSelectModeCardVisibility();
 		RefreshSelectModeConfirmButton();
 		IEnumerable<CardModel> result = await _selectionCompletionSource.Task;
+		if (!IsInsideTree())
+		{
+			return result;
+		}
 		tween.Kill();
 		AfterCardsSelected(source);
 		if (wasDisabled)
@@ -1133,7 +1153,7 @@ public class NPlayerHand : Control
 		_holdersAwaitingQueue.Add(holder);
 		holder.Reparent(this);
 		holder.BeginDrag();
-		_currentCardPlay = (NControllerManager.Instance.IsUsingController ? ((NCardPlay)NControllerCardPlay.Create(holder)) : ((NCardPlay)NMouseCardPlay.Create(holder, _selectCardShortcuts[_draggedHolderIndex], startedViaShortcut)));
+		_currentCardPlay = (NControllerManager.Instance.IsUsingDirectionalNavigation ? ((NCardPlay)NControllerCardPlay.Create(holder)) : ((NCardPlay)NMouseCardPlay.Create(holder, _selectCardShortcuts[_draggedHolderIndex], startedViaShortcut)));
 		this.AddChildSafely(_currentCardPlay);
 		_currentCardPlay.Connect(NCardPlay.SignalName.Finished, Callable.From(delegate(bool success)
 		{
@@ -1333,7 +1353,6 @@ public class NPlayerHand : Control
 			_animEnableTween.TweenProperty(this, "modulate", Colors.White, 0.2).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
 			_isDisabled = false;
 			EnableControllerNavigation();
-			DefaultFocusedControl.TryGrabFocus();
 		}
 	}
 
@@ -1388,23 +1407,36 @@ public class NPlayerHand : Control
 		{
 			_currentCardPlay.Holder.FocusMode = FocusModeEnum.All;
 		}
+		Viewport viewport = GetViewport();
+		if (viewport != null && viewport.GuiGetFocusOwner() == CardHolderContainer)
+		{
+			DefaultFocusedControl.TryGrabFocus();
+		}
 	}
 
 	public void DisableControllerNavigation()
 	{
+		bool flag = false;
+		Viewport viewport = GetViewport();
 		foreach (NHandCardHolder holder in Holders)
 		{
+			flag |= viewport != null && viewport.GuiGetFocusOwner() == holder;
 			holder.FocusMode = FocusModeEnum.None;
 		}
 		if (InCardPlay)
 		{
+			flag |= viewport != null && viewport.GuiGetFocusOwner() == _currentCardPlay.Holder;
 			_currentCardPlay.Holder.FocusMode = FocusModeEnum.None;
+		}
+		if (flag)
+		{
+			CardHolderContainer.TryGrabFocus();
 		}
 	}
 
 	public override void _UnhandledInput(InputEvent input)
 	{
-		if (NControllerManager.Instance.IsUsingController || !ActiveScreenContext.Instance.IsCurrent(NCombatRoom.Instance) || CombatManager.Instance.IsOverOrEnding)
+		if (NControllerManager.Instance.InputType == InputType.Controller || !ActiveScreenContext.Instance.IsCurrent(NCombatRoom.Instance) || CombatManager.Instance.IsOverOrEnding)
 		{
 			return;
 		}

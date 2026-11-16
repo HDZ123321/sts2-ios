@@ -15,7 +15,6 @@ namespace MegaCrit.Sts2.Core.Nodes.Screens.Settings;
 /// <summary>
 /// Base class for Paginator controls for Max FPS and Combat Speed in the settings screen.
 /// Use a dropdown if there are a lot of settings.
-/// TODO: Does this need to override NButton for controller support?
 /// </summary>
 [ScriptPath("res://src/Core/Nodes/Screens/Settings/NPaginator.cs")]
 public class NPaginator : Control
@@ -141,6 +140,7 @@ public class NPaginator : Control
 
 	protected void ConnectSignals()
 	{
+		base.LayoutDirection = LayoutDirectionEnum.Ltr;
 		_label = GetNode<MegaLabel>("%Label");
 		_vfxLabel = GetNode<MegaLabel>("%VfxLabel");
 		_selectionReticle = GetNode<NSelectionReticle>("SelectionReticle");
@@ -211,7 +211,7 @@ public class NPaginator : Control
 
 	private void OnFocus()
 	{
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_selectionReticle.OnSelect();
 		}

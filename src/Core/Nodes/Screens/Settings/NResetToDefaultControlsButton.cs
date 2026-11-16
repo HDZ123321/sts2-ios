@@ -47,13 +47,13 @@ public class NResetToDefaultControlsButton : NSettingsButton
 
 	private Control _image;
 
-	private MegaRichTextLabel _label;
+	private MegaLabel _label;
 
 	public override void _Ready()
 	{
 		ConnectSignals();
 		_image = GetNode<Control>("Image");
-		_label = GetNode<MegaRichTextLabel>("Label");
+		_label = GetNode<MegaLabel>("%ResetLabel");
 		_label.SetTextAutoSize(new LocString("settings_ui", "INPUT_SETTINGS.RESET_TO_DEFAULT").GetFormattedText());
 	}
 
@@ -105,7 +105,7 @@ public class NResetToDefaultControlsButton : NSettingsButton
 		}
 		if (name == PropertyName._label)
 		{
-			_label = VariantUtils.ConvertTo<MegaRichTextLabel>(in value);
+			_label = VariantUtils.ConvertTo<MegaLabel>(in value);
 			return true;
 		}
 		return base.SetGodotClassPropertyValue(in name, in value);
@@ -162,7 +162,7 @@ public class NResetToDefaultControlsButton : NSettingsButton
 		}
 		if (info.TryGetProperty(PropertyName._label, out var value2))
 		{
-			_label = value2.As<MegaRichTextLabel>();
+			_label = value2.As<MegaLabel>();
 		}
 	}
 }

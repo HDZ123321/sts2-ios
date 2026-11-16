@@ -68,12 +68,6 @@ public sealed class SpinyToad : MonsterModel
 		return new MonsterMoveStateMachine(list, moveState);
 	}
 
-	public override Task AfterAddedToRoom()
-	{
-		base.AfterAddedToRoom();
-		return Task.CompletedTask;
-	}
-
 	private async Task SpikesMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/spiny_toad/spiny_toad_protrude");

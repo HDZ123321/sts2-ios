@@ -102,11 +102,11 @@ public sealed class TabletOfTruth : EventModel
 	{
 		if (!(hp < (decimal)base.Owner.Creature.MaxHp))
 		{
-			await CreatureCmd.LoseMaxHp(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.Owner.Creature.MaxHp - 1, isFromCard: false);
+			await CreatureCmd.LoseMaxHp(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.Owner.Creature.MaxHp - 1, null);
 			await CreatureCmd.Kill(base.Owner.Creature);
 			return;
 		}
-		await CreatureCmd.LoseMaxHp(new ThrowingPlayerChoiceContext(), base.Owner.Creature, hp, isFromCard: false);
+		await CreatureCmd.LoseMaxHp(new ThrowingPlayerChoiceContext(), base.Owner.Creature, hp, null);
 		List<CardModel> list = PileType.Deck.GetPile(base.Owner).Cards.Where((CardModel c) => c.IsUpgradable).ToList();
 		if (_decipherCount == 4)
 		{

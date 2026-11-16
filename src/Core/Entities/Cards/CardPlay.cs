@@ -1,4 +1,5 @@
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 
 namespace MegaCrit.Sts2.Core.Entities.Cards;
@@ -13,6 +14,13 @@ public class CardPlay
 	/// The card that was played.
 	/// </summary>
 	public required CardModel Card { get; init; }
+
+	/// <summary>
+	/// The player that played the card.
+	/// Note: This may be different from Card.Owner, since some cards (like <see cref="T:MegaCrit.Sts2.Core.Models.Cards.TheBall" />) can change owners
+	/// after being played.
+	/// </summary>
+	public required Player Player { get; init; }
 
 	/// <summary>
 	/// The creature that was targeted by the card.

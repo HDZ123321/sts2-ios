@@ -3,42 +3,43 @@ using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
-using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
-using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
-using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.ValueProps;
 
 namespace MegaCrit.Sts2.Core.Models.Cards;
 
 public sealed class ExpectAFight : CardModel
 {
-	private const string _calculatedEnergyKey = "CalculatedEnergy";
+	public override bool GainsBlock => true;
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[4]
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new EnergyVar(0),
-		new CalculationBaseVar(0m),
-		new CalculationExtraVar(1m),
-		new CalculatedVar("CalculatedEnergy").WithMultiplier((CardModel card, Creature? _) => PileType.Hand.GetPile(card.Owner).Cards.Count((CardModel c) => c.Type == CardType.Attack))
+		new BlockVar(15m, ValueProp.Move),
+		new EnergyVar(1)
 	});
 
-	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(base.EnergyHoverTip);
-
 	public ExpectAFight()
-		: base(2, CardType.Skill, CardRarity.Uncommon, TargetType.Self)
+		: base(3, CardType.Skill, CardRarity.Uncommon, TargetType.Self)
 	{
 	}
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
-		await PlayerCmd.GainEnergy(((CalculatedVar)base.DynamicVars["CalculatedEnergy"]).Calculate(cardPlay.Target), base.Owner);
-		await PowerCmd.Apply<NoEnergyGainPower>(choiceContext, base.Owner.Creature, 1m, base.Owner.Creature, this);
+		await CreatureCmd.GainBlock(base.Owner.Creature, base.DynamicVars.Block, cardPlay);
+		List<CardModel> list = PileType.Hand.GetPile(base.Owner).Cards.Where((CardModel c) => c.Type == CardType.Attack).ToList();
+		foreach (CardModel item in list)
+		{
+			if (!item.EnergyCost.CostsX)
+			{
+				item.EnergyCost.AddUntilPlayed(-base.DynamicVars.Energy.IntValue);
+			}
+		}
 	}
 
 	protected override void OnUpgrade()
 	{
-		base.EnergyCost.UpgradeBy(-1);
+		base.DynamicVars.Block.UpgradeValueBy(5m);
 	}
 }

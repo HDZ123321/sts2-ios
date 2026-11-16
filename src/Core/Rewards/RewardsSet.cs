@@ -85,11 +85,12 @@ public class RewardsSet
 	public RewardsSet WithRewardsFromRoom(AbstractRoom room)
 	{
 		Room = room;
-		if (room.RoomType == RoomType.Boss && Player.RunState.CurrentActIndex >= Player.RunState.Acts.Count - 1)
+		List<Reward> list = new List<Reward>();
+		if (Hook.TryReplaceDefaultRoomRewards(Player.RunState, Player, list, room))
 		{
-			return this;
+			Rewards.AddRange(list);
 		}
-		if (!TryGenerateTutorialRewards(Player, room))
+		else if ((room.RoomType != RoomType.Boss || Player.RunState.CurrentActIndex < Player.RunState.Acts.Count - 1) && !TryGenerateTutorialRewards(Player, room))
 		{
 			Rewards.AddRange(GenerateRewardsFor(Player, room));
 		}
@@ -227,18 +228,18 @@ public class RewardsSet
 					list.Add(new GoldReward((int)Math.Round((float)combatRoom.Encounter.MinGoldReward * combatRoom.GoldProportion), (int)Math.Round((float)combatRoom.Encounter.MaxGoldReward * combatRoom.GoldProportion), player));
 				}
 				RollForPotionAndAddTo(list, player, room.RoomType);
-				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType), 3, player));
+				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType).WithFlags(CardCreationFlags.IsFromCombat), 3, player));
 				break;
 			case RoomType.Elite:
 				list.Add(new GoldReward(combatRoom.Encounter.MinGoldReward, combatRoom.Encounter.MaxGoldReward, player));
 				RollForPotionAndAddTo(list, player, room.RoomType);
-				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType), 3, player));
+				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType).WithFlags(CardCreationFlags.IsFromCombat), 3, player));
 				list.Add(new RelicReward(player));
 				break;
 			case RoomType.Boss:
 				list.Add(new GoldReward(combatRoom.Encounter.MinGoldReward, combatRoom.Encounter.MaxGoldReward, player));
 				RollForPotionAndAddTo(list, player, room.RoomType);
-				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType), 3, player));
+				list.Add(new CardReward(CardCreationOptions.ForRoom(player, room.RoomType).WithFlags(CardCreationFlags.IsFromCombat), 3, player));
 				break;
 			}
 		}
@@ -249,7 +250,7 @@ public class RewardsSet
 	{
 		PotionRewardOdds potionReward = player.PlayerOdds.PotionReward;
 		AscensionManager ascensionManager = RunManager.Instance.AscensionManager;
-		if (potionReward.Roll(player, ascensionManager, roomType))
+		if (potionReward.Roll(player, roomType))
 		{
 			rewards.Add(new PotionReward(player));
 		}
@@ -291,7 +292,7 @@ public class RewardsSet
 					};
 					Rewards.Add(new GoldReward(combatRoom.Encounter.MinGoldReward, combatRoom.Encounter.MaxGoldReward, player));
 					Rewards.Add(new PotionReward(ModelDb.Potion<BlockPotion>().ToMutable(), player));
-					Rewards.Add(new RelicReward(ModelDb.Relic<Vajra>().ToMutable(), player));
+					Rewards.Add(GetTutorialRelicReward<Vajra>(player));
 					Rewards.Add(new CardReward(cardsToOffer2, CardCreationSource.Encounter, player, rerollOptions));
 					return true;
 				}
@@ -304,7 +305,7 @@ public class RewardsSet
 						player.RunState.CreateCard<FlameBarrier>(player)
 					};
 					Rewards.Add(new GoldReward(combatRoom.Encounter.MinGoldReward, combatRoom.Encounter.MaxGoldReward, player));
-					Rewards.Add(new RelicReward(ModelDb.Relic<OrnamentalFan>().ToMutable(), player));
+					Rewards.Add(GetTutorialRelicReward<OrnamentalFan>(player));
 					Rewards.Add(new CardReward(cardsToOffer, CardCreationSource.Encounter, player, rerollOptions));
 					return true;
 				}
@@ -324,6 +325,15 @@ public class RewardsSet
 			}
 		}
 		return false;
+	}
+
+	private static RelicReward GetTutorialRelicReward<T>(Player player) where T : RelicModel
+	{
+		if (player.RelicGrabBag.Contains(ModelDb.Relic<T>()))
+		{
+			return new RelicReward(ModelDb.Relic<T>().ToMutable(), player);
+		}
+		return new RelicReward(player);
 	}
 
 	public static (CardModel[] Cards, PotionModel? Potion)? GetTutorialMonsterRewards(Player player, int index)

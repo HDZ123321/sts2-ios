@@ -25,6 +25,6 @@ public sealed class TrashToTreasure : CardModel
 
 	protected override void OnUpgrade()
 	{
-		AddKeyword(CardKeyword.Innate);
+		base.EnergyCost.UpgradeBy(-1);
 	}
 }

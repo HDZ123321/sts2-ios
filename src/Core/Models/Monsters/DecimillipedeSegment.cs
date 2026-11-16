@@ -225,7 +225,7 @@ public abstract class DecimillipedeSegment : MonsterModel
 		{
 			return;
 		}
-		IEnumerable<Creature> enumerable = from c in base.Creature.CombatState.GetTeammatesOf(base.Creature)
+		IEnumerable<Creature> enumerable = from c in base.CombatState.GetTeammatesOf(base.Creature)
 			where c.Monster is DecimillipedeSegment
 			select c;
 		foreach (Creature item in enumerable)
@@ -238,7 +238,7 @@ public abstract class DecimillipedeSegment : MonsterModel
 		await Cmd.Wait(0.5f);
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (creature != base.Creature)
 		{

@@ -17,24 +17,29 @@ public sealed class EventCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[27]
+		return new CardModel[32]
 		{
+			ModelDb.Card<Abundance>(),
 			ModelDb.Card<Apotheosis>(),
 			ModelDb.Card<Apparition>(),
 			ModelDb.Card<BrightestFlame>(),
 			ModelDb.Card<ByrdSwoop>(),
 			ModelDb.Card<Caltrops>(),
 			ModelDb.Card<Clash>(),
+			ModelDb.Card<DingyDagger>(),
 			ModelDb.Card<Distraction>(),
 			ModelDb.Card<DualWield>(),
 			ModelDb.Card<Enlightenment>(),
 			ModelDb.Card<Entrench>(),
 			ModelDb.Card<Exterminate>(),
 			ModelDb.Card<FeedingFrenzy>(),
+			ModelDb.Card<GodByrd>(),
 			ModelDb.Card<HelloWorld>(),
 			ModelDb.Card<MadScience>(),
 			ModelDb.Card<Maul>(),
 			ModelDb.Card<Metamorphosis>(),
+			ModelDb.Card<MightyShield>(),
+			ModelDb.Card<MightyWeapon>(),
 			ModelDb.Card<NeowsFury>(),
 			ModelDb.Card<Outmaneuver>(),
 			ModelDb.Card<Peck>(),

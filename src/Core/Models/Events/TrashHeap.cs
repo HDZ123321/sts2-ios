@@ -61,7 +61,7 @@ public sealed class TrashHeap : EventModel
 
 	private async Task DiveIn()
 	{
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.HpLoss.IntValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.HpLoss.IntValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null, null);
 		RelicModel relicModel = base.Rng.NextItem(Relics);
 		await RelicCmd.Obtain(relicModel.ToMutable(), base.Owner);
 		SetEventFinished(L10NLookup("TRASH_HEAP.pages.DIVE_IN.description"));

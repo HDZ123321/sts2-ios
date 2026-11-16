@@ -40,6 +40,11 @@ public class NRelicHistory : VBoxContainer
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
+		/// Cached name for the 'OnRelicHolderReleased' method.
+		/// </summary>
+		public static readonly StringName OnRelicHolderReleased = "OnRelicHolderReleased";
+
+		/// <summary>
 		/// Cached name for the 'OnRelicClicked' method.
 		/// </summary>
 		public static readonly StringName OnRelicClicked = "OnRelicClicked";
@@ -119,6 +124,8 @@ public class NRelicHistory : VBoxContainer
 	{
 		_headerLabel = GetNode<MegaRichTextLabel>("Header");
 		_relicsContainer = GetNode<Control>("%RelicsContainer");
+		this.ApplyRtlLayout();
+		_relicsContainer.GetParent<MarginContainer>().ApplyRtlMargins();
 	}
 
 	public void LoadRelics(Player player, IEnumerable<SerializableRelic> relics)
@@ -166,10 +173,7 @@ public class NRelicHistory : VBoxContainer
 			{
 				EmitSignal(SignalName.Unhovered, holder);
 			}));
-			holder.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(delegate
-			{
-				OnRelicClicked(holder.Relic);
-			}));
+			holder.Connect(NClickableControl.SignalName.Released, Callable.From<NRelicBasicHolder>(OnRelicHolderReleased));
 			dictionary[relicModel.Rarity]++;
 		}
 		_relicHeader.Add("totalRelics", list.Count);
@@ -185,6 +189,11 @@ public class NRelicHistory : VBoxContainer
 		stringBuilder2.Append(ref handler);
 		stringBuilder.Append(_relicCategories.GetFormattedText().Trim(','));
 		_headerLabel.Text = stringBuilder.ToString();
+	}
+
+	private void OnRelicHolderReleased(NRelicBasicHolder holder)
+	{
+		OnRelicClicked(holder.Relic);
 	}
 
 	/// <summary>
@@ -209,8 +218,12 @@ public class NRelicHistory : VBoxContainer
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(2);
+		List<MethodInfo> list = new List<MethodInfo>(3);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnRelicHolderReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "holder", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnRelicClicked, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "node", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -228,6 +241,12 @@ public class NRelicHistory : VBoxContainer
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.OnRelicHolderReleased && args.Count == 1)
+		{
+			OnRelicHolderReleased(VariantUtils.ConvertTo<NRelicBasicHolder>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.OnRelicClicked && args.Count == 1)
 		{
 			OnRelicClicked(VariantUtils.ConvertTo<NRelic>(in args[0]));
@@ -242,6 +261,10 @@ public class NRelicHistory : VBoxContainer
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName.OnRelicHolderReleased)
 		{
 			return true;
 		}

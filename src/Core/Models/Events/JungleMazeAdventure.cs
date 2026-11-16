@@ -7,11 +7,13 @@ using Godot;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
 using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace MegaCrit.Sts2.Core.Models.Events;
@@ -34,6 +36,22 @@ public sealed class JungleMazeAdventure : EventModel
 		new DamageVar("SoloHp", 18m, ValueProp.Unblockable | ValueProp.Unpowered),
 		new DynamicVar("JoinForcesGold", 50m)
 	});
+
+	public override bool IsAllowed(IRunState runState)
+	{
+		if (runState.Players.Count == 1)
+		{
+			return true;
+		}
+		foreach (Player player in runState.Players)
+		{
+			if ((decimal)player.Creature.CurrentHp <= base.DynamicVars["SoloHp"].BaseValue)
+			{
+				return false;
+			}
+		}
+		return true;
+	}
 
 	protected override IReadOnlyList<EventOption> GenerateInitialOptions()
 	{

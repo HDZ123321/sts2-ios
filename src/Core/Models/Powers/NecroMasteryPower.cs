@@ -18,7 +18,7 @@ public sealed class NecroMasteryPower : PowerModel
 	{
 		if (!(delta >= 0m) && creature.Monster is Osty && creature.PetOwner == base.Owner.Player)
 		{
-			await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), creature.CombatState.HittableEnemies, -delta * (decimal)base.Amount, ValueProp.Unblockable | ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), creature.CombatState.HittableEnemies, -delta * (decimal)base.Amount, ValueProp.Unblockable | ValueProp.Unpowered, base.Owner);
 		}
 	}
 }

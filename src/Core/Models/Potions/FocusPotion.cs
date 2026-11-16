@@ -17,7 +17,7 @@ public sealed class FocusPotion : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new PowerVar<FocusPower>(2m));
 
@@ -25,6 +25,7 @@ public sealed class FocusPotion : PotionModel
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		await PowerCmd.Apply<FocusPower>(choiceContext, base.Owner.Creature, base.DynamicVars["FocusPower"].BaseValue, base.Owner.Creature, null);
+		PotionModel.AssertValidForTargetedPotion(target);
+		await PowerCmd.Apply<FocusPower>(choiceContext, target, base.DynamicVars["FocusPower"].BaseValue, target, null);
 	}
 }

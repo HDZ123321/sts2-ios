@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Cards;
-using MegaCrit.Sts2.Core.Entities.Intents;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.RestSite;
-using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes;
@@ -15,6 +14,7 @@ using MegaCrit.Sts2.Core.Nodes.Relics;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.CardSelection;
 using MegaCrit.Sts2.Core.Nodes.Screens.GameOverScreen;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.TestSupport;
 
@@ -62,6 +62,7 @@ public static class PreloadManager
 	public static async Task LoadCommonAndMainMenuAssets()
 	{
 		Cache.UnloadMissedCacheAssets();
+		EnsureAtlasesLoaded();
 		await LoadAssetSets("Common", AssetSets.CommonAssets, AssetSets.MainMenuSet);
 	}
 
@@ -81,14 +82,9 @@ public static class PreloadManager
 	{
 		if (!TestMode.IsOn)
 		{
-			long runAtlasStart = Perf.ElapsedMs;
-			AtlasManager.LoadRunAtlases();
-			if (Perf.Enabled)
-			{
-				Log.Info($"[Perf] run atlases: {Perf.ElapsedMs - runAtlasStart}ms", 3);
-			}
 			List<CharacterModel> list = characters.ToList();
 			bool isMultiplayer = RunManager.Instance.NetService.Type.IsMultiplayer();
+			EnsureAtlasesLoaded();
 			AssetSets.RunSet = new HashSet<string>(GetRunAssetPaths(list, isMultiplayer));
 			await (await LoadAssetSets("characters=" + string.Join(',', list.Select((CharacterModel c) => c.Id.Entry)), AssetSets.CommonAssets, AssetSets.RunSet)).WaitForCompletion();
 			GC.Collect();
@@ -99,6 +95,7 @@ public static class PreloadManager
 	{
 		if (!TestMode.IsOn)
 		{
+			EnsureAtlasesLoaded();
 			AssetSets.Act = new HashSet<string>(act.AssetPaths);
 			await (await LoadAssetSets("Act=" + act.Id.Entry, AssetSets.CommonAssets, AssetSets.RunSet, AssetSets.Act)).WaitForCompletion();
 			GC.Collect();
@@ -112,6 +109,10 @@ public static class PreloadManager
 
 	public static async Task LoadRoomCombatAssets(EncounterModel encounter, IRunState runState)
 	{
+		if (!encounter.HaveMonstersBeenGenerated)
+		{
+			throw new InvalidOperationException($"Monsters must be generated before preloading combat assets for encounter {encounter.Id}.");
+		}
 		await LoadRoomAssets("Combat Room", GetCombatAssetPaths(encounter, runState));
 	}
 
@@ -125,7 +126,17 @@ public static class PreloadManager
 
 	public static async Task LoadRoomMerchantAssets()
 	{
-		await LoadRoomAssets("Merchant Room", NMerchantRoom.AssetPaths);
+		await LoadRoomAssets("Standard Merchant Room", NStandardMerchantRoom.AssetPaths);
+	}
+
+	public static async Task LoadRoomBlitzMerchantAssets(BackgroundAssets backgroundAssets, IEnumerable<BlitzMerchantEntry> entries)
+	{
+		List<string> list = new List<string>();
+		list.AddRange(NBlitzMerchantRoom.AssetPaths);
+		list.AddRange(backgroundAssets.AssetPaths);
+		list.AddRange(entries.Select((BlitzMerchantEntry e) => e.IconPath));
+		list.AddRange(entries.Select((BlitzMerchantEntry e) => e.SmallIconPath));
+		await LoadRoomAssets("Blitz Merchant Room", new _003C_003Ez__ReadOnlyList<string>(list));
 	}
 
 	public static async Task LoadRoomRestSite(ActModel actModel, IEnumerable<RestSiteOption> restSiteOptions)
@@ -150,7 +161,7 @@ public static class PreloadManager
 		}
 		HashSet<string> hashSet2 = hashSet;
 		await (await LoadAssetSets(roomName, AssetSets.CommonAssets, AssetSets.RunSet, AssetSets.Act, hashSet2)).WaitForCompletion();
-		CollectIfHeapGrew(roomName);
+		GC.Collect();
 	}
 
 	/// <summary>
@@ -180,50 +191,24 @@ public static class PreloadManager
 	}
 
 	/// <summary>
-	/// How much the managed heap may grow between collections before one is worth its pause.
-	/// A room transition used to force a full blocking collection unconditionally; measuring it
-	/// showed VRAM unchanged afterwards and the heap flat, so the pause bought nothing.
+	/// Loads every atlas on the main thread before a threaded preload session starts.
+	/// Sprite .tres paths (and scenes that reference them) otherwise lazy-load their atlas through
+	/// AtlasResourceLoader on Godot's loader threads, where the nested synchronous loads can
+	/// deadlock the threaded loader. The main menu flow gets this ordering from
+	/// OneTimeInitialization.ExecuteDeferred; flows that skip the menu (scene bootstrapper) do not.
 	/// </summary>
-	private const long _gcGrowthThresholdBytes = 8L * 1024L * 1024L;
-
-	private static long _heapAtLastCollect;
-
-	private static void CollectIfHeapGrew(string roomName)
+	private static void EnsureAtlasesLoaded()
 	{
-		long totalMemory = GC.GetTotalMemory(forceFullCollection: false);
-		long num = totalMemory - _heapAtLastCollect;
-		if (num < _gcGrowthThresholdBytes)
+		if (Enabled && !TestMode.IsOn)
 		{
-			if (Perf.Enabled)
-			{
-				Log.Info($"[Perf] room gc after '{roomName}': skipped, heap grew {num / 1024}KB", 3);
-			}
-			return;
-		}
-		long collectStart = Perf.ElapsedMs;
-		// A blocking full collection here lands right in the middle of the
-		// transition into the room, which is where a hitch is most visible.
-		// On mobile let the collector run on its own thread instead: this call
-		// still triggers the collection, it just does not wait for it.
-		if (Godot.OS.HasFeature("mobile"))
-		{
-			GC.Collect(2, GCCollectionMode.Forced, blocking: false);
-		}
-		else
-		{
-			GC.Collect();
-		}
-		_heapAtLastCollect = GC.GetTotalMemory(forceFullCollection: false);
-		if (Perf.Enabled)
-		{
-			Log.Info($"[Perf] room gc after '{roomName}': {Perf.ElapsedMs - collectStart}ms, heap was {totalMemory / 1048576}MB", 3);
+			AtlasManager.LoadAllAtlases();
 		}
 	}
 
 	private static AssetLoadingSession LoadAssets(IEnumerable<string> assetPaths, string name)
 	{
 		AssetLoadingSession assetLoadingSession = Cache.CreateSession(name, assetPaths);
-		NAssetLoader.Instance.LoadInTheBackground(assetLoadingSession);
+		TaskHelper.RunSafely(NAssetLoader.Instance.LoadInTheBackground(assetLoadingSession));
 		return assetLoadingSession;
 	}
 
@@ -236,7 +221,7 @@ public static class PreloadManager
 		{
 			source2 = source2.Where((CardModel card) => card.MultiplayerConstraint != CardMultiplayerConstraint.MultiplayerOnly);
 		}
-		return new IEnumerable<string>[11]
+		return new IEnumerable<string>[10]
 		{
 			source2.SelectMany((CardModel card) => card.RunAssetPaths),
 			source.SelectMany((CharacterModel c) => c.CardPool.AllCards.SelectMany((CardModel card) => card.RunAssetPaths)),
@@ -250,8 +235,7 @@ public static class PreloadManager
 				select e.IconPath into p
 				where p != EnchantmentModel.MissingIconPath
 				select p,
-			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath),
-			IntentAnimData.AssetPaths
+			ModelDb.AllCardPools.Select((CardPoolModel p) => p.EnergyIconPath)
 		}.SelectMany((IEnumerable<string> s) => s);
 	}
 

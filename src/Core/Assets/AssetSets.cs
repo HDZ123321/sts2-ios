@@ -40,6 +40,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens.StatsScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.Timeline;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Cards;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Rewards;
 
 namespace MegaCrit.Sts2.Core.Assets;
@@ -148,7 +149,6 @@ public static class AssetSets
 			NBlockSparkVfx.AssetPaths,
 			NCardBundle.AssetPaths,
 			NHorizontalLinesVfx.AssetPaths,
-			NExhaustVfx.AssetPaths,
 			NCardFlyPowerVfx.AssetPaths,
 			NCardFlyShuffleVfx.AssetPaths,
 			NCardFlyVfx.AssetPaths,
@@ -173,6 +173,7 @@ public static class AssetSets
 			NPowerUpVfx.AssetPaths,
 			NPreviewCardHolder.AssetPaths,
 			NRelicFlashVfx.AssetPaths,
+			NRelicRareGlow.AssetPaths,
 			NSmokyVignetteVfx.AssetPaths,
 			NStunnedVfx.AssetPaths,
 			NUiFlashVfx.AssetPaths,
@@ -186,12 +187,16 @@ public static class AssetSets
 			PlayerFullscreenHealVfx.AssetPaths,
 			NFireSmokePuffVfx.AssetPaths,
 			NThinSliceVfx.AssetPaths,
-			new string[1] { "res://materials/vfx/hsv.tres" }
+			new global::_003C_003Ez__ReadOnlySingleElementList<string>("res://materials/vfx/hsv.tres")
 		}.SelectMany((IEnumerable<string> s) => s).Concat(CardMaterialPaths));
-		MainMenuSet = new HashSet<string>(new IEnumerable<string>[23]
+		MainMenuSet = new HashSet<string>(new IEnumerable<string>[27]
 		{
 			NCharacterSelectScreen.AssetPaths,
 			NMainMenu.AssetPaths,
+			NSingleplayerSubmenu.AssetPaths,
+			NMultiplayerSubmenu.AssetPaths,
+			NMultiplayerHostSubmenu.AssetPaths,
+			NCompendiumSubmenu.AssetPaths,
 			NAbandonRunConfirmPopup.AssetPaths,
 			NGenericPopup.AssetPaths,
 			NMultiplayerWarningPopup.AssetPaths,

@@ -15,12 +15,13 @@ public sealed class BlessingOfTheForge : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, new Color("e06e58"));
-		foreach (CardModel card in PileType.Hand.GetPile(base.Owner).Cards)
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, new Color("e06e58"));
+		foreach (CardModel card in PileType.Hand.GetPile(target.Player).Cards)
 		{
 			if (card.IsUpgradable)
 			{

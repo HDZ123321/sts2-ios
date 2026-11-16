@@ -377,11 +377,11 @@ public class NEndTurnButton : NButton
 		}
 	}
 
-	private Vector2 ShowPos => NGame.Instance.MapToSafeArea(_showPosRatio);
+	private Vector2 ShowPos => _showPosRatio * _viewport.GetVisibleRect().Size;
 
-	private Vector2 HidePos => NGame.Instance.MapToSafeArea(_hidePosRatio);
+	private Vector2 HidePos => _hidePosRatio * _viewport.GetVisibleRect().Size;
 
-	protected override string[] Hotkeys => new string[1] { MegaInput.accept };
+	protected override string[] Hotkeys => new string[1] { MegaInput.endTurn };
 
 	public override void _Ready()
 	{
@@ -695,7 +695,7 @@ public class NEndTurnButton : NButton
 			_label.Modulate = (me.PlayerCombatState.HasCardsToPlay() ? StsColors.red : Colors.Cyan);
 			_combatUi.Hand.FlashPlayableHolders();
 			LocString locString = new LocString("static_hover_tips", "END_TURN.title");
-			locString.Add("Hotkey", NInputManager.Instance.GetShortcutKey(MegaInput.accept).ToString());
+			locString.Add("Hotkey", NInputManager.Instance.GetCurrentHotkey(MegaInput.endTurn).ToString());
 			HoverTip hoverTip = new HoverTip(locString, new LocString("static_hover_tips", "END_TURN.description"));
 			NHoverTipSet.CreateAndShow(this, hoverTip)?.SetGlobalPosition(base.GlobalPosition + _hoverTipOffset);
 		}

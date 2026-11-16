@@ -58,6 +58,11 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 		public new static readonly StringName _ExitTree = "_ExitTree";
 
 		/// <summary>
+		/// Cached name for the 'OnCellReleased' method.
+		/// </summary>
+		public static readonly StringName OnCellReleased = "OnCellReleased";
+
+		/// <summary>
 		/// Cached name for the 'OnHoverCell' method.
 		/// </summary>
 		public static readonly StringName OnHoverCell = "OnHoverCell";
@@ -265,6 +270,7 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 		_instructionsTitleLabel.SetTextAutoSize(_instructionsTitleLoc.GetFormattedText());
 		_instructionsDescriptionLabel.SetTextAutoSize(_instructionsDescriptionLoc.GetFormattedText());
 		_dialogue = GetNode<NCrystalSphereDialogue>("%Dialogue");
+		_proceedButton.Initialize(_entity.Owner.RunState);
 		Vector2 vector = Vector2.One * -(57 * _entity.GridSize.X) * 0.5f;
 		NCrystalSphereCell[,] array = new NCrystalSphereCell[_entity.GridSize.X, _entity.GridSize.Y];
 		for (int i = 0; i < _entity.GridSize.X; i++)
@@ -295,10 +301,7 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 				{
 					TaskHelper.RunSafely(OnCellClicked(cell));
 				}));
-				cell.Connect(NClickableControl.SignalName.Released, Callable.From<NClickableControl>(delegate
-				{
-					TaskHelper.RunSafely(OnCellClicked(cell));
-				}));
+				cell.Connect(NClickableControl.SignalName.Released, Callable.From<NCrystalSphereCell>(OnCellReleased));
 			}
 		}
 		foreach (CrystalSphereItem item in _entity.Items)
@@ -374,6 +377,11 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 		}
 	}
 
+	private void OnCellReleased(NCrystalSphereCell cell)
+	{
+		TaskHelper.RunSafely(OnCellClicked(cell));
+	}
+
 	private async Task OnCellClicked(NCrystalSphereCell cell)
 	{
 		if (_entity.DivinationCount > 0)
@@ -420,7 +428,7 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 
 	private void OnProceedButtonPressed(NButton _)
 	{
-		TaskHelper.RunSafely(RunManager.Instance.ProceedFromTerminalRewardsScreen());
+		RunManager.Instance.Proceed();
 	}
 
 	public void AfterOverlayOpened()
@@ -463,7 +471,7 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(14);
+		List<MethodInfo> list = new List<MethodInfo>(15);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SetBigDivination, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -475,6 +483,10 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 		}, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnCellReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "cell", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnHoverCell, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "cell", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -527,6 +539,12 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 		if (method == MethodName._ExitTree && args.Count == 0)
 		{
 			_ExitTree();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnCellReleased && args.Count == 1)
+		{
+			OnCellReleased(VariantUtils.ConvertTo<NCrystalSphereCell>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -608,6 +626,10 @@ public class NCrystalSphereScreen : Control, IOverlayScreen, IScreenContext
 			return true;
 		}
 		if (method == MethodName._ExitTree)
+		{
+			return true;
+		}
+		if (method == MethodName.OnCellReleased)
 		{
 			return true;
 		}

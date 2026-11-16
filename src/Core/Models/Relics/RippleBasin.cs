@@ -25,7 +25,7 @@ public sealed class RippleBasin : RelicModel
 
 	public override async Task BeforeSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
 	{
-		if (participants.Contains(base.Owner.Creature) && !CombatManager.Instance.History.CardPlaysFinished.Any((CardPlayFinishedEntry e) => e.HappenedThisTurn(base.Owner.Creature.CombatState) && e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Card.Owner == base.Owner))
+		if (participants.Contains(base.Owner.Creature) && !CombatManager.Instance.History.CardPlaysFinished.Any((CardPlayFinishedEntry e) => e.HappenedThisTurn(base.Owner.Creature.CombatState) && e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Player == base.Owner))
 		{
 			Flash();
 			base.Status = RelicStatus.Normal;

@@ -27,6 +27,6 @@ public sealed class PrecariousShears : RelicModel
 		{
 			await CardPileCmd.RemoveFromDeck(item);
 		}
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null, null);
 	}
 }

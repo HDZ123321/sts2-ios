@@ -9,7 +9,6 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Factories;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
 using MegaCrit.Sts2.Core.TestSupport;
 
@@ -70,7 +69,7 @@ public sealed class MerchantPotionEntry : MerchantEntry
 		}
 	}
 
-	protected override async Task<(bool, int)> OnTryPurchase(MerchantInventory? inventory, bool ignoreCost)
+	protected override async Task<(bool, int)> OnTryPurchaseInternal(MerchantInventory? inventory, bool ignoreCost)
 	{
 		if (Model == null)
 		{
@@ -84,12 +83,10 @@ public sealed class MerchantPotionEntry : MerchantEntry
 		}
 		if (!ignoreCost)
 		{
-			await PlayerCmd.LoseGold(base.Cost, _player, GoldLossType.Spent);
+			await PlayerCmd.LoseGold(Cost, _player, GoldLossType.Spent);
 		}
 		_player.RunState.CurrentMapPointHistoryEntry?.GetEntry(_player.NetId).BoughtPotions.Add(Model.Id);
-		RunManager.Instance.RewardSynchronizer.SyncLocalGoldLost(base.Cost);
-		RunManager.Instance.RewardSynchronizer.SyncLocalObtainedPotion(Model);
-		return (true, (!ignoreCost) ? base.Cost : 0);
+		return (true, (!ignoreCost) ? Cost : 0);
 	}
 
 	protected override void ClearAfterPurchase()

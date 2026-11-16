@@ -100,7 +100,7 @@ public sealed class AbyssalBaths : EventModel
 	private async Task OnImmerse()
 	{
 		await CreatureCmd.GainMaxHp(base.Owner.Creature, base.DynamicVars.MaxHp.BaseValue);
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null, null);
 		base.DynamicVars.Damage.BaseValue += 1m;
 	}
 }

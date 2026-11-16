@@ -14,7 +14,7 @@ public sealed class MinionDiveBomb : CardModel
 {
 	protected override HashSet<CardTag> CanonicalTags => new HashSet<CardTag> { CardTag.Minion };
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DamageVar(13m, ValueProp.Move));
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DamageVar(11m, ValueProp.Move));
 
 	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
 
@@ -26,7 +26,7 @@ public sealed class MinionDiveBomb : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).WithAttackerAnim("Cast", 1f)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).WithAttackerAnim("Cast", 1f)
 			.Targeting(cardPlay.Target)
 			.WithAttackerFx(() => NMinionDiveBombVfx.Create(base.Owner.Creature, cardPlay.Target))
 			.Execute(choiceContext);
@@ -34,6 +34,6 @@ public sealed class MinionDiveBomb : CardModel
 
 	protected override void OnUpgrade()
 	{
-		base.DynamicVars.Damage.UpgradeValueBy(3m);
+		base.DynamicVars.Damage.UpgradeValueBy(2m);
 	}
 }

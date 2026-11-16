@@ -9,9 +9,10 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Models.Singleton;
+using MegaCrit.Sts2.Core.Models.Dread;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Combat;
 
@@ -90,9 +91,15 @@ public class CombatState : ICombatState, ICardScope
 	public IReadOnlyList<BadgeModel> BadgeModels { get; }
 
 	/// <summary>
-	/// The model used to scale various things (block, power application) in multiplayer.
+	/// Singleton models applied for the entire run.
 	/// </summary>
-	public MultiplayerScalingModel? MultiplayerScalingModel { get; private set; }
+	public IReadOnlyList<RunModel> RunModels { get; private set; }
+
+	/// <summary>
+	/// The currently applied dominion, if any.
+	/// Should always be null unless the run's GameMode is Dread.
+	/// </summary>
+	public DominionModel? Dominion { get; private set; }
 
 	/// <summary>
 	/// The round of combat that we're on in this combat.
@@ -149,7 +156,7 @@ public class CombatState : ICombatState, ICardScope
 	/// </summary>
 	public event Action<ICombatState>? CreaturesChanged;
 
-	public CombatState(EncounterModel? encounter = null, IRunState? runState = null, IReadOnlyList<ModifierModel>? modifiers = null, IReadOnlyList<BadgeModel>? badgeModels = null, MultiplayerScalingModel? multiplayerScalingModel = null)
+	public CombatState(EncounterModel? encounter = null, IRunState? runState = null, IReadOnlyList<ModifierModel>? modifiers = null, IReadOnlyList<BadgeModel>? badgeModels = null, IReadOnlyList<RunModel>? runModels = null, DominionModel? dominion = null)
 	{
 		encounter?.AssertMutable();
 		Encounter = encounter;
@@ -158,7 +165,8 @@ public class CombatState : ICombatState, ICardScope
 		RunState = runState ?? NullRunState.Instance;
 		Modifiers = modifiers ?? Array.Empty<ModifierModel>();
 		BadgeModels = badgeModels ?? Array.Empty<BadgeModel>();
-		MultiplayerScalingModel = multiplayerScalingModel;
+		RunModels = runModels ?? Array.Empty<RunModel>();
+		Dominion = dominion;
 	}
 
 	/// <summary>
@@ -241,7 +249,7 @@ public class CombatState : ICombatState, ICardScope
 			creature.ScaleMonsterHpForMultiplayer(Encounter, Players.Count, RunState.CurrentActIndex);
 		}
 		AttachCreature(creature);
-		monster.Rng = new Rng((uint)((RunState.Rng.Seed + RunState.CurrentMapCoord?.col) ?? ((long?)RunState.CurrentMapCoord?.row) ?? (RunState.CurrentActIndex + creature.CombatId.Value)));
+		monster.Rng = new Rng((ulong)((long)RunState.Rng.Seed + (long)(RunState.CurrentMapCoord?.col ?? 0) + (RunState.CurrentMapCoord?.row ?? 0) + RunState.CurrentActIndex + creature.CombatId.Value));
 		_encounter?.OnCreatureSpawned(creature);
 		return creature;
 	}
@@ -301,6 +309,11 @@ public class CombatState : ICombatState, ICardScope
 			creature.CombatState = null;
 		}
 		this.CreaturesChanged?.Invoke(this);
+	}
+
+	public void SetDominion(DominionModel? model)
+	{
+		Dominion = model;
 	}
 
 	public bool ContainsCreature(Creature creature)
@@ -475,9 +488,13 @@ public class CombatState : ICombatState, ICardScope
 		{
 			list.Add(BadgeModels[num]);
 		}
-		if (MultiplayerScalingModel != null)
+		for (int num2 = 0; num2 < RunModels.Count; num2++)
 		{
-			list.Add(MultiplayerScalingModel);
+			list.Add(RunModels[num2]);
+		}
+		if (Dominion != null)
+		{
+			list.Add(Dominion);
 		}
 		foreach (AbstractModel item in list)
 		{
@@ -564,17 +581,21 @@ public class CombatState : ICombatState, ICardScope
 								{
 									if (!(model is MonsterModel monsterModel))
 									{
-										if (!(model is AchievementModel))
+										if (!(model is RunModel))
 										{
-											if (!(model is BadgeModel))
+											if (!(model is DominionModel))
 											{
-												if (!(model is ModifierModel))
+												if (!(model is AchievementModel))
 												{
-													if (model is MultiplayerScalingModel)
+													if (!(model is BadgeModel))
 													{
-														return true;
+														if (model is ModifierModel)
+														{
+															return true;
+														}
+														throw new ArgumentOutOfRangeException("model", model, $"Invalid model type {model.GetType()} ({model})");
 													}
-													throw new ArgumentOutOfRangeException("model", model, $"Invalid model type {model.GetType()} ({model})");
+													return true;
 												}
 												return true;
 											}
@@ -601,6 +622,11 @@ public class CombatState : ICombatState, ICardScope
 
 	private static async Task GodotTimerTask(double timeSec)
 	{
+		if (TestMode.IsOn)
+		{
+			await Task.Delay(TimeSpan.FromSeconds(timeSec));
+			return;
+		}
 		SceneTreeTimer sceneTreeTimer = ((SceneTree)Engine.GetMainLoop()).CreateTimer(timeSec);
 		await sceneTreeTimer.ToSignal(sceneTreeTimer, SceneTreeTimer.SignalName.Timeout);
 	}

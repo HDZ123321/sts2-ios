@@ -35,11 +35,6 @@ public class NOpenProfileScreenButton : NButton
 		public new static readonly StringName _EnterTree = "_EnterTree";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
-		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
-
-		/// <summary>
 		/// Cached name for the '_Notification' method.
 		/// </summary>
 		public new static readonly StringName _Notification = "_Notification";
@@ -68,6 +63,11 @@ public class NOpenProfileScreenButton : NButton
 		/// Cached name for the 'UpdateDescription' method.
 		/// </summary>
 		public static readonly StringName UpdateDescription = "UpdateDescription";
+
+		/// <summary>
+		/// Cached name for the '_ExitTree' method.
+		/// </summary>
+		public new static readonly StringName _ExitTree = "_ExitTree";
 	}
 
 	/// <summary>
@@ -125,9 +125,9 @@ public class NOpenProfileScreenButton : NButton
 	public override void _Ready()
 	{
 		ConnectSignals();
-		_profileIcon = GetNode<NProfileIcon>("ProfileIcon");
-		_title = GetNode<MegaLabel>("Title");
-		_description = GetNode<MegaLabel>("Description");
+		_profileIcon = GetNode<NProfileIcon>("%ProfileIcon");
+		_title = GetNode<MegaLabel>("%Title");
+		_description = GetNode<MegaLabel>("%Description");
 		RefreshLabels();
 		_profileIcon.SetProfileId(SaveManager.Instance.CurrentProfileId);
 		UpdateDescription();
@@ -140,16 +140,6 @@ public class NOpenProfileScreenButton : NButton
 		{
 			NControllerManager.Instance.Connect(NControllerManager.SignalName.MouseDetected, Callable.From(UpdateDescription));
 			NControllerManager.Instance.Connect(NControllerManager.SignalName.ControllerDetected, Callable.From(UpdateDescription));
-		}
-	}
-
-	public override void _ExitTree()
-	{
-		base._ExitTree();
-		if (NControllerManager.Instance != null)
-		{
-			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.ControllerDetected, Callable.From(UpdateDescription));
-			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.MouseDetected, Callable.From(UpdateDescription));
 		}
 	}
 
@@ -177,7 +167,8 @@ public class NOpenProfileScreenButton : NButton
 	{
 		base.OnFocus();
 		_tween?.Kill();
-		base.Scale = Vector2.One * 1.02f;
+		_tween = CreateTween();
+		_tween.TweenProperty(this, "scale", Vector2.One * 1.02f, 0.05).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 	}
 
 	protected override void OnUnfocus()
@@ -185,14 +176,24 @@ public class NOpenProfileScreenButton : NButton
 		base.OnUnfocus();
 		_tween?.Kill();
 		_tween = CreateTween();
-		_tween.TweenProperty(this, "scale", Vector2.One * 1f, 0.3).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
+		_tween.TweenProperty(this, "scale", Vector2.One, 0.3).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 	}
 
 	private void UpdateDescription()
 	{
 		if (NControllerManager.Instance != null)
 		{
-			_description.SetVisible(!NControllerManager.Instance.IsUsingController);
+			_description.SetVisible(!NControllerManager.Instance.IsUsingDirectionalNavigation);
+		}
+	}
+
+	public override void _ExitTree()
+	{
+		base._ExitTree();
+		if (NControllerManager.Instance != null)
+		{
+			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.ControllerDetected, Callable.From(UpdateDescription));
+			NControllerManager.Instance.Disconnect(NControllerManager.SignalName.MouseDetected, Callable.From(UpdateDescription));
 		}
 	}
 
@@ -207,7 +208,6 @@ public class NOpenProfileScreenButton : NButton
 		List<MethodInfo> list = new List<MethodInfo>(9);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -217,6 +217,7 @@ public class NOpenProfileScreenButton : NButton
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnUnfocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateDescription, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
 
@@ -233,12 +234,6 @@ public class NOpenProfileScreenButton : NButton
 		if (method == MethodName._EnterTree && args.Count == 0)
 		{
 			_EnterTree();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName._ExitTree && args.Count == 0)
-		{
-			_ExitTree();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -278,6 +273,12 @@ public class NOpenProfileScreenButton : NButton
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName._ExitTree && args.Count == 0)
+		{
+			_ExitTree();
+			ret = default(godot_variant);
+			return true;
+		}
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
@@ -290,10 +291,6 @@ public class NOpenProfileScreenButton : NButton
 			return true;
 		}
 		if (method == MethodName._EnterTree)
-		{
-			return true;
-		}
-		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}
@@ -318,6 +315,10 @@ public class NOpenProfileScreenButton : NButton
 			return true;
 		}
 		if (method == MethodName.UpdateDescription)
+		{
+			return true;
+		}
+		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}

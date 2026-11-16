@@ -13,7 +13,7 @@ namespace MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 /// </summary>
 public struct LobbyBeginRunMessage : INetMessage, IPacketSerializable
 {
-	public List<LobbyPlayer>? playersInLobby;
+	public List<StartRunLobbyPlayer>? playersInLobby;
 
 	public string seed;
 
@@ -43,7 +43,7 @@ public struct LobbyBeginRunMessage : INetMessage, IPacketSerializable
 
 	public void Deserialize(PacketReader reader)
 	{
-		playersInLobby = reader.ReadList<LobbyPlayer>(3);
+		playersInLobby = reader.ReadList<StartRunLobbyPlayer>(3);
 		seed = reader.ReadString();
 		modifiers = reader.ReadList<SerializableModifier>();
 		act1 = reader.ReadString();

@@ -6,6 +6,7 @@ using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.addons.mega_text;
 
@@ -31,6 +32,11 @@ public class NAncientDialogueHitbox : NButton
 		/// Cached name for the '_Ready' method.
 		/// </summary>
 		public new static readonly StringName _Ready = "_Ready";
+
+		/// <summary>
+		/// Cached name for the 'GetControllerIconNode' method.
+		/// </summary>
+		public new static readonly StringName GetControllerIconNode = "GetControllerIconNode";
 
 		/// <summary>
 		/// Cached name for the 'OnRelease' method.
@@ -101,7 +107,7 @@ public class NAncientDialogueHitbox : NButton
 
 	private bool _isAnimating;
 
-	protected override string[] Hotkeys => new string[1] { MegaInput.accept };
+	protected override string[] Hotkeys => new string[1] { MegaInput.confirm };
 
 	public string? GetHotkey()
 	{
@@ -123,6 +129,11 @@ public class NAncientDialogueHitbox : NButton
 		Tween tween = CreateTween().SetParallel();
 		tween.TweenProperty(_label, "self_modulate:a", 1f, 1.0).SetDelay(0.5);
 		tween.TweenProperty(_arrow, "self_modulate:a", 1f, 1.0).SetDelay(0.5);
+	}
+
+	protected override void GetControllerIconNode()
+	{
+		_hotkeyIcon = GetNodeOrNull<NHotkeyIcon>("%ControllerIcon");
 	}
 
 	protected override void OnRelease()
@@ -159,9 +170,10 @@ public class NAncientDialogueHitbox : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(5);
+		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName.GetHotkey, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.GetControllerIconNode, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnPress, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -180,6 +192,12 @@ public class NAncientDialogueHitbox : NButton
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.GetControllerIconNode && args.Count == 0)
+		{
+			GetControllerIconNode();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -213,6 +231,10 @@ public class NAncientDialogueHitbox : NButton
 			return true;
 		}
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName.GetControllerIconNode)
 		{
 			return true;
 		}

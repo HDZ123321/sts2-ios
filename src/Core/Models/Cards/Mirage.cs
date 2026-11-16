@@ -16,6 +16,8 @@ public sealed class Mirage : CardModel
 {
 	public override bool GainsBlock => true;
 
+	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
+
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
 		new CalculationBaseVar(0m),
@@ -24,8 +26,6 @@ public sealed class Mirage : CardModel
 	});
 
 	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.FromPower<PoisonPower>());
-
-	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
 
 	public Mirage()
 		: base(1, CardType.Skill, CardRarity.Uncommon, TargetType.Self)
@@ -39,6 +39,6 @@ public sealed class Mirage : CardModel
 
 	protected override void OnUpgrade()
 	{
-		base.EnergyCost.UpgradeBy(-1);
+		RemoveKeyword(CardKeyword.Exhaust);
 	}
 }

@@ -84,7 +84,7 @@ public sealed class TestSubject : MonsterModel
 
 	public int ThirdFormHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 313, 300);
 
-	private int EnrageAmount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2);
+	private int EnrageAmount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2) + (AscensionHelper.IsDread() ? 1 : 0);
 
 	private int BiteDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 22, 20);
 
@@ -92,7 +92,17 @@ public sealed class TestSubject : MonsterModel
 
 	private int MultiClawDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 11, 10);
 
-	private int BaseMultiClawCount => 3;
+	private int BaseMultiClawCount
+	{
+		get
+		{
+			if (!AscensionHelper.IsDread())
+			{
+				return 3;
+			}
+			return 4;
+		}
+	}
 
 	private int Phase3LacerateDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 11, 10);
 
@@ -100,7 +110,7 @@ public sealed class TestSubject : MonsterModel
 
 	private int BurningGrowlBurnCount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 5, 3);
 
-	private int BurningGrowlStrengthGain => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2);
+	private int BurningGrowlStrengthGain => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2) + (AscensionHelper.IsDread() ? 3 : 0);
 
 	public override string DeathSfx
 	{
@@ -220,7 +230,7 @@ public sealed class TestSubject : MonsterModel
 		return new MonsterMoveStateMachine(list, moveState);
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (creature != base.Creature)
 		{
@@ -260,22 +270,19 @@ public sealed class TestSubject : MonsterModel
 		await Cmd.Wait(0.8f);
 		base.Creature.GetCreatureNode()?.SetDefaultScaleTo(1f + (float)Respawns * 0.1f, 0.1f);
 		await Cmd.Wait(1.15f);
-		if (base.Creature.CombatState != null)
+		base.Creature.GetPower<AdaptablePower>()?.DoRevive();
+		switch (Respawns)
 		{
-			base.Creature.GetPower<AdaptablePower>()?.DoRevive();
-			switch (Respawns)
-			{
-			case 1:
-				await Revive(SecondFormHp);
-				await PowerCmd.Apply<PainfulStabsPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
-				break;
-			case 2:
-				await Revive(ThirdFormHp);
-				await PowerCmd.Apply<NemesisPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
-				await PowerCmd.Remove<AdaptablePower>(base.Creature);
-				await PowerCmd.Remove<PainfulStabsPower>(base.Creature);
-				break;
-			}
+		case 1:
+			await Revive(SecondFormHp);
+			await PowerCmd.Apply<PainfulStabsPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
+			break;
+		case 2:
+			await Revive(ThirdFormHp);
+			await PowerCmd.Apply<NemesisPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
+			await PowerCmd.Remove<AdaptablePower>(base.Creature);
+			await PowerCmd.Remove<PainfulStabsPower>(base.Creature);
+			break;
 		}
 	}
 

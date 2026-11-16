@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Godot;
 using MegaCrit.Sts2.Core.Animation;
-using MegaCrit.Sts2.Core.Bindings.MegaSpine;
 using MegaCrit.Sts2.Core.Entities.Characters;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models.CardPools;
@@ -75,6 +75,14 @@ public sealed class Silent : CharacterModel
 
 	public override Color RemoteTargetingLineOutline => new Color("004f04FF");
 
+	public override float DreadBgBrightness => 0.6f;
+
+	public override float DreadBgContrast => 1.1f;
+
+	public override Color DreadNameColor => new Color("6CFF52C0");
+
+	protected override List<(AnimState, string)> AnimationStates => base.AnimationStates.Concat<(AnimState, string)>(new global::_003C_003Ez__ReadOnlySingleElementList<(AnimState, string)>((new AnimState("shiv"), "Shiv"))).ToList();
+
 	public override List<string> GetArchitectAttackVfx()
 	{
 		int num = 4;
@@ -90,31 +98,5 @@ public sealed class Silent : CharacterModel
 		num2++;
 		span[num2] = "vfx/vfx_dagger_throw";
 		return list;
-	}
-
-	public override CreatureAnimator GenerateAnimator(MegaSprite controller)
-	{
-		AnimState animState = new AnimState("idle_loop", isLooping: true);
-		AnimState animState2 = new AnimState("cast");
-		AnimState animState3 = new AnimState("attack");
-		AnimState animState4 = new AnimState("hurt");
-		AnimState state = new AnimState("die");
-		AnimState animState5 = new AnimState("shiv");
-		AnimState animState6 = new AnimState("relaxed_loop", isLooping: true);
-		animState2.NextState = animState;
-		animState3.NextState = animState;
-		animState4.NextState = animState;
-		animState5.NextState = animState;
-		animState6.AddBranch("Idle", animState);
-		CreatureAnimator creatureAnimator = new CreatureAnimator(animState, controller);
-		creatureAnimator.AddAnyState("Idle", animState);
-		creatureAnimator.AddAnyState("Dead", state);
-		creatureAnimator.AddAnyState("Hit", animState4);
-		creatureAnimator.AddAnyState("Attack", animState3);
-		creatureAnimator.AddAnyState("Cast", animState2);
-		creatureAnimator.AddAnyState("Shiv", animState5);
-		creatureAnimator.AddAnyState("Relaxed", animState6);
-		creatureAnimator.AddAnyState("PowerUp", animState2);
-		return creatureAnimator;
 	}
 }

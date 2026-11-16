@@ -41,14 +41,14 @@ public class NBezierTrail : Line2D
 	public new class PropertyName : Line2D.PropertyName
 	{
 		/// <summary>
-		/// Cached name for the '_target' field.
-		/// </summary>
-		public static readonly StringName _target = "_target";
-
-		/// <summary>
 		/// Cached name for the '_pointDuration' field.
 		/// </summary>
 		public static readonly StringName _pointDuration = "_pointDuration";
+
+		/// <summary>
+		/// Cached name for the '_target' field.
+		/// </summary>
+		public static readonly StringName _target = "_target";
 	}
 
 	/// <summary>
@@ -58,9 +58,10 @@ public class NBezierTrail : Line2D
 	{
 	}
 
-	private Node2D _target;
-
+	[Export(PropertyHint.None, "")]
 	private float _pointDuration = 0.5f;
+
+	private Node2D _target;
 
 	private readonly List<float> _pointAge = new List<float>();
 
@@ -213,14 +214,14 @@ public class NBezierTrail : Line2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool SetGodotClassPropertyValue(in godot_string_name name, in godot_variant value)
 	{
-		if (name == PropertyName._target)
-		{
-			_target = VariantUtils.ConvertTo<Node2D>(in value);
-			return true;
-		}
 		if (name == PropertyName._pointDuration)
 		{
 			_pointDuration = VariantUtils.ConvertTo<float>(in value);
+			return true;
+		}
+		if (name == PropertyName._target)
+		{
+			_target = VariantUtils.ConvertTo<Node2D>(in value);
 			return true;
 		}
 		return base.SetGodotClassPropertyValue(in name, in value);
@@ -230,14 +231,14 @@ public class NBezierTrail : Line2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
-		if (name == PropertyName._target)
-		{
-			value = VariantUtils.CreateFrom(in _target);
-			return true;
-		}
 		if (name == PropertyName._pointDuration)
 		{
 			value = VariantUtils.CreateFrom(in _pointDuration);
+			return true;
+		}
+		if (name == PropertyName._target)
+		{
+			value = VariantUtils.CreateFrom(in _target);
 			return true;
 		}
 		return base.GetGodotClassPropertyValue(in name, out value);
@@ -252,8 +253,8 @@ public class NBezierTrail : Line2D
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
+		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._pointDuration, PropertyHint.None, "", PropertyUsageFlags.Default | PropertyUsageFlags.ScriptVariable, exported: true));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._target, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._pointDuration, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -262,8 +263,8 @@ public class NBezierTrail : Line2D
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)
 	{
 		base.SaveGodotObjectData(info);
-		info.AddProperty(PropertyName._target, Variant.From(in _target));
 		info.AddProperty(PropertyName._pointDuration, Variant.From(in _pointDuration));
+		info.AddProperty(PropertyName._target, Variant.From(in _target));
 	}
 
 	/// <inheritdoc />
@@ -271,13 +272,13 @@ public class NBezierTrail : Line2D
 	protected override void RestoreGodotObjectData(GodotSerializationInfo info)
 	{
 		base.RestoreGodotObjectData(info);
-		if (info.TryGetProperty(PropertyName._target, out var value))
+		if (info.TryGetProperty(PropertyName._pointDuration, out var value))
 		{
-			_target = value.As<Node2D>();
+			_pointDuration = value.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._pointDuration, out var value2))
+		if (info.TryGetProperty(PropertyName._target, out var value2))
 		{
-			_pointDuration = value2.As<float>();
+			_target = value2.As<Node2D>();
 		}
 	}
 }

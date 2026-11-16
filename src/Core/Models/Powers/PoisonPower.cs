@@ -46,7 +46,7 @@ public sealed class PoisonPower : PowerModel
 		for (int i = 0; i < num2; i++)
 		{
 			decimal damage = base.Amount - i;
-			damage = Hook.ModifyDamage(base.Owner.CombatState.RunState, base.Owner.CombatState, base.Owner, null, damage, ValueProp.Unblockable | ValueProp.Unpowered, null, ModifyDamageHookType.All, CardPreviewMode.None, out IEnumerable<AbstractModel> _);
+			damage = Hook.ModifyDamage(base.Owner.CombatState.RunState, base.Owner.CombatState, base.Owner, null, damage, ValueProp.Unblockable | ValueProp.Unpowered, null, null, ModifyDamageHookType.All, CardPreviewMode.None, out IEnumerable<AbstractModel> _);
 			num += damage;
 		}
 		return (int)num;
@@ -54,10 +54,17 @@ public sealed class PoisonPower : PowerModel
 
 	public override async Task AfterSideTurnStart(CombatSide side, IReadOnlyList<Creature> participants, ICombatState combatState)
 	{
-		if (!participants.Contains(base.Owner))
+		if (participants.Contains(base.Owner))
 		{
-			return;
+			await Trigger();
 		}
+	}
+
+	/// <summary>
+	/// Deals the Poison damage and decrements the stacks, once per <see cref="P:MegaCrit.Sts2.Core.Models.Powers.PoisonPower.TriggerCount" />.
+	/// </summary>
+	public async Task Trigger()
+	{
 		int iterations = TriggerCount;
 		for (int i = 0; i < iterations; i++)
 		{

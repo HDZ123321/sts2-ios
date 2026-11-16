@@ -64,7 +64,7 @@ public class LeaderboardConsoleCmd : AbstractConsoleCmd
 	private async Task UploadRandomScores(string leaderboardName, int count)
 	{
 		ILeaderboardHandle handle = await LeaderboardManager.GetOrCreateLeaderboard(leaderboardName);
-		Rng rng = new Rng(Rng.Chaotic.NextUnsignedInt());
+		Rng rng = new Rng(Rng.Chaotic.NextUnsignedLong());
 		for (int i = 0; i < count; i++)
 		{
 			LeaderboardManager.DebugAddEntry(handle, new LeaderboardEntry

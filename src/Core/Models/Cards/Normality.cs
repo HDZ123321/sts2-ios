@@ -30,7 +30,7 @@ public sealed class Normality : CardModel
 		new CalculatedVar("CalculatedCards").WithMultiplier((CardModel card, Creature? _) => Math.Min(3, ((Normality)card).CardsPlayedThisTurn))
 	});
 
-	private int CardsPlayedThisTurn => CombatManager.Instance.History.CardPlaysStarted.Count((CardPlayStartedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Card.Owner == base.Owner);
+	private int CardsPlayedThisTurn => CombatManager.Instance.History.CardPlaysStarted.Count((CardPlayStartedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Player == base.Owner);
 
 	public Normality()
 		: base(-1, CardType.Curse, CardRarity.Curse, TargetType.None)

@@ -98,7 +98,7 @@ public sealed class TheObscura : MonsterModel
 	{
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/obscura/obscura_buff");
 		await CreatureCmd.TriggerAnim(base.Creature, "Cast", 0.7f);
-		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature.CombatState.GetTeammatesOf(base.Creature), 3m, base.Creature, null);
+		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.CombatState.GetTeammatesOf(base.Creature), 3m, base.Creature, null);
 	}
 
 	private async Task HardeningStrikeMove(IReadOnlyList<Creature> targets)

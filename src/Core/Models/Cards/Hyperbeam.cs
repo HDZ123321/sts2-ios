@@ -19,7 +19,7 @@ public sealed class Hyperbeam : CardModel
 {
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new DamageVar(28m, ValueProp.Move),
+		new DamageVar(24m, ValueProp.Move),
 		new PowerVar<FocusPower>(3m)
 	});
 
@@ -32,7 +32,7 @@ public sealed class Hyperbeam : CardModel
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).TargetingAllOpponents(base.CombatState)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).TargetingAllOpponents(base.CombatState)
 			.WithAttackerAnim("Cast", 0.5f)
 			.BeforeDamage(async delegate
 			{
@@ -53,11 +53,11 @@ public sealed class Hyperbeam : CardModel
 				}
 			})
 			.Execute(choiceContext);
-		await PowerCmd.Apply<FocusPower>(choiceContext, base.Owner.Creature, -base.DynamicVars["FocusPower"].BaseValue, base.Owner.Creature, this);
+		await PowerCmd.Apply<HyperbeamFocusDownPower>(choiceContext, base.Owner.Creature, base.DynamicVars["FocusPower"].BaseValue, base.Owner.Creature, this);
 	}
 
 	protected override void OnUpgrade()
 	{
-		base.DynamicVars.Damage.UpgradeValueBy(8m);
+		base.DynamicVars.Damage.UpgradeValueBy(6m);
 	}
 }

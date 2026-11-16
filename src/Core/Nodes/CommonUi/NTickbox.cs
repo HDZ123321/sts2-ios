@@ -42,6 +42,11 @@ public class NTickbox : NButton
 		public new static readonly StringName OnRelease = "OnRelease";
 
 		/// <summary>
+		/// Cached name for the 'ForceToggleTick' method.
+		/// </summary>
+		public static readonly StringName ForceToggleTick = "ForceToggleTick";
+
+		/// <summary>
 		/// Cached name for the 'OnUntick' method.
 		/// </summary>
 		public static readonly StringName OnUntick = "OnUntick";
@@ -228,6 +233,11 @@ public class NTickbox : NButton
 	protected override void OnRelease()
 	{
 		base.OnRelease();
+		ForceToggleTick();
+	}
+
+	public void ForceToggleTick()
+	{
 		IsTicked = !IsTicked;
 		if (IsTicked)
 		{
@@ -303,10 +313,11 @@ public class NTickbox : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(11);
+		List<MethodInfo> list = new List<MethodInfo>(12);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ConnectSignals, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.ForceToggleTick, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnUntick, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnTick, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -340,6 +351,12 @@ public class NTickbox : NButton
 		if (method == MethodName.OnRelease && args.Count == 0)
 		{
 			OnRelease();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.ForceToggleTick && args.Count == 0)
+		{
+			ForceToggleTick();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -407,6 +424,10 @@ public class NTickbox : NButton
 			return true;
 		}
 		if (method == MethodName.OnRelease)
+		{
+			return true;
+		}
+		if (method == MethodName.ForceToggleTick)
 		{
 			return true;
 		}

@@ -4,7 +4,8 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Bindings.MegaSpine;
-using MegaCrit.Sts2.Core.Nodes.Vfx;
+
+namespace MegaCrit.Sts2.Core.Nodes.Vfx;
 
 [ScriptPath("res://src/Core/Nodes/Vfx/NSoulNexusVfx.cs")]
 public class NSoulNexusVfx : Node

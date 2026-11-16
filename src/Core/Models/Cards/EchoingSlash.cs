@@ -16,18 +16,19 @@ public sealed class EchoingSlash : CardModel
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new DamageVar(10m, ValueProp.Move));
 
 	public EchoingSlash()
-		: base(1, CardType.Attack, CardRarity.Rare, TargetType.AllEnemies)
+		: base(1, CardType.Attack, CardRarity.Uncommon, TargetType.AllEnemies)
 	{
 	}
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		await using AttackContext attackContext = await AttackCommand.CreateContextAsync(base.CombatState, choiceContext, this);
+		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Attack", base.Owner.Character.AttackAnimDelay);
+		await using AttackContext attackContext = await AttackCommand.CreateContextAsync(base.CombatState, choiceContext, cardPlay);
 		int attackCount = 1;
 		while (attackCount > 0)
 		{
 			attackCount--;
-			IEnumerable<DamageResult> enumerable = await CreatureCmd.Damage(choiceContext, base.CombatState.HittableEnemies, base.DynamicVars.Damage, base.Owner.Creature, this);
+			IEnumerable<DamageResult> enumerable = await CreatureCmd.Damage(choiceContext, base.CombatState?.HittableEnemies, base.DynamicVars.Damage, base.Owner.Creature, this, cardPlay);
 			attackContext.AddHit(enumerable);
 			attackCount += enumerable.Count((DamageResult r) => r.WasTargetKilled);
 		}

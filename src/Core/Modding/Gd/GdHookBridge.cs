@@ -283,18 +283,18 @@ public sealed class GdRunHookBridge : AbstractModel
 
 	// ---------------------------------------------------------------- damage
 
-	public override decimal ModifyDamageAdditive(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageAdditive(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		return GdModRuntime.DispatchAdditive("modify_damage_additive", 0m,
 			GdModRuntime.H(target), GdHookArgs.Amount(amount), GdHookArgs.Props(props),
-			GdModRuntime.H(dealer), GdModRuntime.H(cardSource));
+			GdModRuntime.H(dealer), GdModRuntime.H(cardSource), GdModRuntime.H(cardPlay));
 	}
 
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		return GdModRuntime.DispatchMultiplicative("modify_damage_multiplicative", 1m,
 			GdModRuntime.H(target), GdHookArgs.Amount(amount), GdHookArgs.Props(props),
-			GdModRuntime.H(dealer), GdModRuntime.H(cardSource));
+			GdModRuntime.H(dealer), GdModRuntime.H(cardSource), GdModRuntime.H(cardPlay));
 	}
 
 	public override Task AfterDamageReceived(PlayerChoiceContext choiceContext, Creature target, DamageResult result, ValueProp props, Creature? dealer, CardModel? cardSource)
@@ -318,10 +318,10 @@ public sealed class GdRunHookBridge : AbstractModel
 		return GdModRuntime.DispatchBool("should_die", true, GdModRuntime.H(creature));
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		GdModRuntime.DispatchVoid("after_death",
-			GdModRuntime.H(creature), Variant.From(wasRemovalPrevented), Variant.From(deathAnimLength));
+			GdModRuntime.H(creature), GdModRuntime.H(source), Variant.From(wasRemovalPrevented), Variant.From(deathAnimLength));
 		return Task.CompletedTask;
 	}
 

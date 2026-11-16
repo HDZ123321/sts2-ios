@@ -8,9 +8,10 @@ using MegaCrit.Sts2.Core.Entities.Ascension;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
-using MegaCrit.Sts2.Core.Nodes.Rooms;
+using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 
 namespace MegaCrit.Sts2.Core.Models.Monsters;
@@ -68,7 +69,9 @@ public sealed class FatGremlin : MonsterModel
 		LocString line = MonsterModel.L10NMonsterLookup("FAT_GREMLIN.moves.FLEE.banter");
 		TalkCmd.Play(line, base.Creature, VfxColor.Swamp, VfxDuration.Standard);
 		await Cmd.CustomScaledWait(0.75f, 1.25f);
-		NCombatRoom.Instance?.GetCreatureNode(base.Creature)?.ToggleIsInteractable(on: false);
+		NCreature creatureNode = base.Creature.GetCreatureNode();
+		creatureNode?.SetIsInteractable(on: false, changeVisibilityImmediately: false);
+		creatureNode?.AnimateOutStateDisplay();
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/gremlin_merc/fat_gremlin_escape");
 		await CreatureCmd.TriggerAnim(base.Creature, "FleeTrigger", 0f);
 		await Cmd.Wait(1.25f);
@@ -77,14 +80,15 @@ public sealed class FatGremlin : MonsterModel
 
 	public override CreatureAnimator GenerateAnimator(MegaSprite controller)
 	{
-		AnimState animState = new AnimState("awake_loop", isLooping: true);
-		AnimState animState2 = new AnimState("spawn");
-		AnimState state = new AnimState("flee");
-		AnimState nextState = new AnimState("stunned_loop", isLooping: true);
-		AnimState animState3 = new AnimState("wake_up");
-		AnimState animState4 = new AnimState("hurt_stunned");
-		AnimState animState5 = new AnimState("hurt_awake");
-		AnimState state2 = new AnimState("die");
+		string text = ((base.Creature.HasPower<HeistPower>() || !base.CombatState.IsLiveCombat()) ? string.Empty : "_no_bag/");
+		AnimState animState = new AnimState(text + "awake_loop", isLooping: true);
+		AnimState animState2 = new AnimState(text + "spawn");
+		AnimState state = new AnimState(text + "flee");
+		AnimState nextState = new AnimState(text + "stunned_loop", isLooping: true);
+		AnimState animState3 = new AnimState(text + "wake_up");
+		AnimState animState4 = new AnimState(text + "hurt_stunned");
+		AnimState animState5 = new AnimState(text + "hurt_awake");
+		AnimState state2 = new AnimState(text + "die");
 		animState2.NextState = nextState;
 		animState4.NextState = nextState;
 		animState5.NextState = animState;

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
@@ -72,18 +73,32 @@ public sealed class Pendulum : RelicModel
 		}
 	}
 
-	public override async Task AfterPlayerTurnStart(PlayerChoiceContext choiceContext, Player player)
+	public override Task BeforeHandDraw(Player player, PlayerChoiceContext choiceContext, ICombatState combatState)
 	{
-		if (player == base.Owner)
+		if (player != base.Owner)
 		{
-			TurnsSeen = (TurnsSeen + 1) % base.DynamicVars["Turns"].IntValue;
-			base.Status = ((TurnsSeen == base.DynamicVars["Turns"].IntValue - 1) ? RelicStatus.Active : RelicStatus.Normal);
-			if (TurnsSeen == 0)
-			{
-				TaskHelper.RunSafely(DoActivateVisuals());
-				await CardPileCmd.Draw(choiceContext, base.DynamicVars.Cards.BaseValue, base.Owner);
-			}
+			return Task.CompletedTask;
 		}
+		TurnsSeen = (TurnsSeen + 1) % base.DynamicVars["Turns"].IntValue;
+		base.Status = ((TurnsSeen == base.DynamicVars["Turns"].IntValue - 1) ? RelicStatus.Active : RelicStatus.Normal);
+		if (TurnsSeen == 0)
+		{
+			TaskHelper.RunSafely(DoActivateVisuals());
+		}
+		return Task.CompletedTask;
+	}
+
+	public override decimal ModifyHandDraw(Player player, decimal count)
+	{
+		if (player != base.Owner)
+		{
+			return count;
+		}
+		if (TurnsSeen != 0)
+		{
+			return count;
+		}
+		return count + base.DynamicVars.Cards.BaseValue;
 	}
 
 	private async Task DoActivateVisuals()

@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Transport.ENet;
 using MegaCrit.Sts2.Core.Platform;
 
@@ -15,6 +16,8 @@ public class ENetClientConnectionInitializer : IClientConnectionInitializer
 
 	private readonly ushort _port;
 
+	public PlatformType Platform => PlatformType.None;
+
 	public ENetClientConnectionInitializer(ulong netId, string ip, ushort port)
 	{
 		_netId = netId;
@@ -22,14 +25,19 @@ public class ENetClientConnectionInitializer : IClientConnectionInitializer
 		_port = port;
 	}
 
-	public async Task<NetErrorInfo?> Connect(NetClientGameService gameService, CancellationToken cancelToken = default(CancellationToken))
+	public ulong? GetHostId()
 	{
-		if (gameService.IsConnected)
+		return 1uL;
+	}
+
+	public async Task<NetErrorInfo?> Connect(INetClientGameService netService, CancellationToken cancelToken = default(CancellationToken))
+	{
+		if (netService.IsConnected)
 		{
 			throw new InvalidOperationException("NetClientGameService must not be connected when passed to ENetClientConnectionInitializer!");
 		}
-		ENetClient eNetClient = new ENetClient(gameService);
-		gameService.Initialize(eNetClient, PlatformType.None);
+		ENetClient eNetClient = new ENetClient(netService);
+		netService.Initialize(eNetClient, PlatformType.None);
 		return await eNetClient.ConnectToHost(_netId, _ip, _port, cancelToken);
 	}
 }

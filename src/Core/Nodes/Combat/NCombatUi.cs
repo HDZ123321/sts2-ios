@@ -189,6 +189,11 @@ public class NCombatUi : Control
 		public static readonly StringName _combatPilesContainer = "_combatPilesContainer";
 
 		/// <summary>
+		/// Cached name for the '_foolCombatUi' field.
+		/// </summary>
+		public static readonly StringName _foolCombatUi = "_foolCombatUi";
+
+		/// <summary>
 		/// Cached name for the '_playContainerPeekModeTween' field.
 		/// </summary>
 		public static readonly StringName _playContainerPeekModeTween = "_playContainerPeekModeTween";
@@ -211,6 +216,8 @@ public class NCombatUi : Control
 	private NEnergyCounter _energyCounter;
 
 	private NCombatPilesContainer _combatPilesContainer;
+
+	private NFoolCombatUi _foolCombatUi;
 
 	/// <summary>
 	/// When switching into peek mode, we move the play container cards off to the side for better visibility.
@@ -284,6 +291,7 @@ public class NCombatUi : Control
 	{
 		EnergyCounterContainer = GetNode<Control>("%EnergyCounterContainer");
 		_starCounter = GetNode<NStarCounter>("%StarCounter");
+		_foolCombatUi = GetNode<NFoolCombatUi>("%FoolCombatUi");
 		EndTurnButton = GetNode<NEndTurnButton>("%EndTurnButton");
 		PingButton = GetNode<NPingButton>("%PingButton");
 		_combatPilesContainer = GetNode<NCombatPilesContainer>("%CombatPileContainer");
@@ -319,6 +327,7 @@ public class NCombatUi : Control
 		Player me = LocalContext.GetMe(_state);
 		_combatPilesContainer.Initialize(me);
 		_starCounter.Initialize(me);
+		_foolCombatUi.Initialize(me);
 		EndTurnButton.Initialize(state);
 		if (me.Character.ShouldAlwaysShowStarCounter)
 		{
@@ -375,7 +384,7 @@ public class NCombatUi : Control
 	public async Task ProceedWithoutRewards()
 	{
 		await Cmd.Wait(1f, _cts.Token);
-		await RunManager.Instance.ProceedFromTerminalRewardsScreen();
+		await RunManager.Instance.ProceedFromTerminalRewardsScreenAsync();
 	}
 
 	private async Task ShowRewards(CombatRoom room)
@@ -900,6 +909,11 @@ public class NCombatUi : Control
 			_combatPilesContainer = VariantUtils.ConvertTo<NCombatPilesContainer>(in value);
 			return true;
 		}
+		if (name == PropertyName._foolCombatUi)
+		{
+			_foolCombatUi = VariantUtils.ConvertTo<NFoolCombatUi>(in value);
+			return true;
+		}
 		if (name == PropertyName._playContainerPeekModeTween)
 		{
 			_playContainerPeekModeTween = VariantUtils.ConvertTo<Tween>(in value);
@@ -991,6 +1005,11 @@ public class NCombatUi : Control
 			value = VariantUtils.CreateFrom(in _combatPilesContainer);
 			return true;
 		}
+		if (name == PropertyName._foolCombatUi)
+		{
+			value = VariantUtils.CreateFrom(in _foolCombatUi);
+			return true;
+		}
 		if (name == PropertyName._playContainerPeekModeTween)
 		{
 			value = VariantUtils.CreateFrom(in _playContainerPeekModeTween);
@@ -1019,6 +1038,7 @@ public class NCombatUi : Control
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._starCounter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._energyCounter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._combatPilesContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._foolCombatUi, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.DrawPile, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.DiscardPile, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.ExhaustPile, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1048,6 +1068,7 @@ public class NCombatUi : Control
 		info.AddProperty(PropertyName._starCounter, Variant.From(in _starCounter));
 		info.AddProperty(PropertyName._energyCounter, Variant.From(in _energyCounter));
 		info.AddProperty(PropertyName._combatPilesContainer, Variant.From(in _combatPilesContainer));
+		info.AddProperty(PropertyName._foolCombatUi, Variant.From(in _foolCombatUi));
 		info.AddProperty(PropertyName._playContainerPeekModeTween, Variant.From(in _playContainerPeekModeTween));
 		info.AddProperty(PropertyName._originalHandChildIndex, Variant.From(in _originalHandChildIndex));
 	}
@@ -1101,13 +1122,17 @@ public class NCombatUi : Control
 		{
 			_combatPilesContainer = value11.As<NCombatPilesContainer>();
 		}
-		if (info.TryGetProperty(PropertyName._playContainerPeekModeTween, out var value12))
+		if (info.TryGetProperty(PropertyName._foolCombatUi, out var value12))
 		{
-			_playContainerPeekModeTween = value12.As<Tween>();
+			_foolCombatUi = value12.As<NFoolCombatUi>();
 		}
-		if (info.TryGetProperty(PropertyName._originalHandChildIndex, out var value13))
+		if (info.TryGetProperty(PropertyName._playContainerPeekModeTween, out var value13))
 		{
-			_originalHandChildIndex = value13.As<int>();
+			_playContainerPeekModeTween = value13.As<Tween>();
+		}
+		if (info.TryGetProperty(PropertyName._originalHandChildIndex, out var value14))
+		{
+			_originalHandChildIndex = value14.As<int>();
 		}
 	}
 }

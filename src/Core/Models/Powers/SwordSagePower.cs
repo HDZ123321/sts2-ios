@@ -67,17 +67,11 @@ public sealed class SwordSagePower : PowerModel
 		return Task.CompletedTask;
 	}
 
-	private bool TryAddReplays(CardModel card, int amount)
+	private void TryAddReplays(CardModel card, int amount)
 	{
-		if (card.Owner != base.Owner.Player)
+		if (card.Owner == base.Owner.Player && card is SovereignBlade sovereignBlade)
 		{
-			return false;
+			sovereignBlade.BaseReplayCount += amount;
 		}
-		if (!(card is SovereignBlade sovereignBlade))
-		{
-			return false;
-		}
-		sovereignBlade.BaseReplayCount += amount;
-		return true;
 	}
 }

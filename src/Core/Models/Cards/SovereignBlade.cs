@@ -99,7 +99,7 @@ public sealed class SovereignBlade : CardModel
 		new CalculationBaseVar(0m),
 		new CalculationExtraVar(1m),
 		new CalculatedBlockVar(ValueProp.Move).WithMultiplier((CardModel card, Creature? _) => GetOwnerParryAmount(card)),
-		new RepeatVar(1)
+		new HitCountVar(1)
 	});
 
 	private bool HasSeekingEdge
@@ -123,7 +123,7 @@ public sealed class SovereignBlade : CardModel
 	{
 		string animName = ((base.Owner.Character is Regent) ? "sovereignBladeTrigger" : "Cast");
 		float delay = ((base.Owner.Character is Regent) ? 0.25f : base.Owner.Character.CastAnimDelay);
-		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this).WithHitCount(base.DynamicVars.Repeat.IntValue)
+		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay).WithHitCount(base.DynamicVars.HitCount.IntValue)
 			.WithAttackerAnim(animName, delay)
 			.WithAttackerFx(null, "event:/sfx/characters/regent/regent_sovereign_blade");
 		if (HasSeekingEdge)
@@ -181,10 +181,10 @@ public sealed class SovereignBlade : CardModel
 	{
 		base.AfterDowngraded();
 		base.DynamicVars.Damage.BaseValue = CurrentDamage;
-		base.DynamicVars.Repeat.BaseValue = CurrentRepeats;
+		base.DynamicVars.HitCount.BaseValue = CurrentRepeats;
 	}
 
-	public override void AfterTransformedFrom()
+	protected override void AfterThisWasTransformedIntoInternal(CardModel _)
 	{
 		RemoveSovereignBladeNode();
 	}
@@ -214,8 +214,8 @@ public sealed class SovereignBlade : CardModel
 
 	public void SetRepeats(decimal amount)
 	{
-		base.DynamicVars.Repeat.BaseValue = amount;
-		CurrentRepeats = base.DynamicVars.Repeat.BaseValue;
+		base.DynamicVars.HitCount.BaseValue = amount;
+		CurrentRepeats = base.DynamicVars.HitCount.BaseValue;
 	}
 
 	public static NSovereignBladeVfx? GetVfxNode(Player player, CardModel card)

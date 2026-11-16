@@ -14,12 +14,12 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Players;
-using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Map;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.PeerInput;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
@@ -57,9 +57,19 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
+
+		/// <summary>
+		/// Cached name for the 'OnMapChanged' method.
+		/// </summary>
+		public static readonly StringName OnMapChanged = "OnMapChanged";
+
+		/// <summary>
+		/// Cached name for the 'ToCenterAnchoredPosition' method.
+		/// </summary>
+		public static readonly StringName ToCenterAnchoredPosition = "ToCenterAnchoredPosition";
 
 		/// <summary>
 		/// Cached name for the 'GetLineEndpoint' method.
@@ -192,6 +202,11 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		public static readonly StringName OnBackButtonPressed = "OnBackButtonPressed";
 
 		/// <summary>
+		/// Cached name for the 'GetRowScrollPos' method.
+		/// </summary>
+		public static readonly StringName GetRowScrollPos = "GetRowScrollPos";
+
+		/// <summary>
 		/// Cached name for the '_Input' method.
 		/// </summary>
 		public new static readonly StringName _Input = "_Input";
@@ -318,6 +333,11 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		public static readonly StringName _points = "_points";
 
 		/// <summary>
+		/// Cached name for the '_shareButton' field.
+		/// </summary>
+		public static readonly StringName _shareButton = "_shareButton";
+
+		/// <summary>
 		/// Cached name for the '_bossPointNode' field.
 		/// </summary>
 		public static readonly StringName _bossPointNode = "_bossPointNode";
@@ -423,16 +443,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		public static readonly StringName _controllerScrollAmount = "_controllerScrollAmount";
 
 		/// <summary>
-		/// Cached name for the '_distX' field.
-		/// </summary>
-		public static readonly StringName _distX = "_distX";
-
-		/// <summary>
-		/// Cached name for the '_distY' field.
-		/// </summary>
-		public static readonly StringName _distY = "_distY";
-
-		/// <summary>
 		/// Cached name for the '_actAnimTween' field.
 		/// </summary>
 		public static readonly StringName _actAnimTween = "_actAnimTween";
@@ -497,6 +507,8 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 
 	private Control _points;
 
+	private NMapShareButton _shareButton;
+
 	private NBossMapPoint? _bossPointNode;
 
 	private NBossMapPoint? _secondBossPointNode;
@@ -509,7 +521,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 
 	private NBackButton _backButton;
 
-	private TextureRect _drawingToolsHotkeyIcon;
+	private NHotkeyIcon _drawingToolsHotkeyIcon;
 
 	private Control _drawingTools;
 
@@ -523,7 +535,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 
 	private Control _legendItems;
 
-	private TextureRect _legendHotkeyIcon;
+	private NHotkeyIcon _legendHotkeyIcon;
 
 	private Control _backstop;
 
@@ -550,10 +562,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	private const float _totalHeight = 2325f;
 
 	private const float _totalWidth = 1050f;
-
-	private float _distX;
-
-	private float _distY;
 
 	private const float _pointJitterX = 21f;
 
@@ -603,8 +611,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 
 	public bool IsTraveling { get; set; }
 
-	public Dictionary<Player, MapCoord?> PlayerVoteDictionary { get; } = new Dictionary<Player, MapCoord?>();
-
 	public NMapDrawings Drawings { get; private set; }
 
 	public static IEnumerable<string> AssetPaths => NMapDrawings.AssetPaths.Append("res://scenes/ui/map_dot.tscn");
@@ -613,10 +619,18 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	{
 		get
 		{
-			NMapPoint nMapPoint = _mapPointDictionary.Values.FirstOrDefault((NMapPoint n) => n.IsEnabled);
-			if (nMapPoint != null)
+			List<NMapPoint> list = _mapPointDictionary.Values.Where((NMapPoint n) => n.IsEnabled).ToList();
+			if (list.Count > 0)
 			{
-				return nMapPoint;
+				if (_runState.CurrentMapPoint != null)
+				{
+					NMapPoint nMapPoint = list.FirstOrDefault((NMapPoint mp) => _runState.CurrentMapPoint.Children.Contains(mp.Point));
+					if (nMapPoint != null)
+					{
+						return nMapPoint;
+					}
+				}
+				return list.First();
 			}
 			return this;
 		}
@@ -662,11 +676,12 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_backButton = GetNode<NBackButton>("Back");
 		_backButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnBackButtonPressed));
 		_backButton.Disable();
-		_mapLegend = GetNode<Control>("MapLegend");
+		_mapLegend = GetNode<Control>("%MapLegend");
 		_legendItems = GetNode<Control>("MapLegend/LegendItems");
-		_legendHotkeyIcon = GetNode<TextureRect>("MapLegend/LegendHotkeyIcon");
-		_drawingToolsHotkeyIcon = GetNode<TextureRect>("DrawingToolsHotkey");
+		_legendHotkeyIcon = GetNode<NHotkeyIcon>("%LegendHotkeyIcon");
+		_drawingToolsHotkeyIcon = GetNode<NHotkeyIcon>("%DrawingToolsHotkey");
 		_backstop = GetNode<Control>("%Backstop");
+		_shareButton = GetNode<NMapShareButton>("%ShareButton");
 		_drawingTools = GetNode<Control>("%DrawingTools");
 		_mapDrawingButton = GetNode<NMapDrawButton>("%DrawButton");
 		_mapDrawingButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnMapDrawingButtonPressed));
@@ -674,8 +689,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_mapErasingButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnMapErasingButtonPressed));
 		_mapClearButton = GetNode<NMapClearButton>("%ClearButton");
 		_mapClearButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnClearMapDrawingButtonPressed));
+		_shareButton.Initialize(this, _mapContainer, _mapBgContainer);
 		RunManager.Instance.MapSelectionSynchronizer.PlayerVoteChanged += OnPlayerVoteChanged;
 		RunManager.Instance.MapSelectionSynchronizer.PlayerVoteCancelled += OnPlayerVoteCancelled;
+		RunManager.Instance.FlavorSynchronizer.MapPingReceived += PingMapCoord;
 		base.ProcessMode = (ProcessModeEnum)(base.Visible ? 0 : 4);
 		Connect(CanvasItem.SignalName.VisibilityChanged, Callable.From(OnVisibilityChanged));
 		Callable.From(() => NCapstoneContainer.Instance.Connect(NCapstoneContainer.SignalName.Changed, Callable.From(OnCapstoneChanged))).CallDeferred();
@@ -692,10 +709,14 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		UpdateHotkeyDisplay();
 	}
 
-	public override void _ExitTree()
+	public override void _Notification(int what)
 	{
-		RunManager.Instance.MapSelectionSynchronizer.PlayerVoteChanged -= OnPlayerVoteChanged;
-		RunManager.Instance.MapSelectionSynchronizer.PlayerVoteCancelled -= OnPlayerVoteCancelled;
+		if ((long)what == 1)
+		{
+			RunManager.Instance.MapSelectionSynchronizer.PlayerVoteChanged -= OnPlayerVoteChanged;
+			RunManager.Instance.MapSelectionSynchronizer.PlayerVoteCancelled -= OnPlayerVoteCancelled;
+			RunManager.Instance.FlavorSynchronizer.MapPingReceived -= PingMapCoord;
+		}
 	}
 
 	public void Initialize(RunState runState)
@@ -704,6 +725,12 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		Drawings.Initialize(RunManager.Instance.NetService, _runState, RunManager.Instance.InputSynchronizer);
 		_marker.Initialize(LocalContext.GetMe(_runState));
 		_mapBgContainer.Initialize(_runState);
+		RunManager.Instance.MapChanged += OnMapChanged;
+	}
+
+	private void OnMapChanged(bool clearDrawings)
+	{
+		SetMap(_runState.Map, _runState.Rng.Seed, clearDrawings);
 	}
 
 	/// <summary>
@@ -712,7 +739,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	/// <param name="map">The new map to set.</param>
 	/// <param name="seed">The seed to use for the visual jitter on the map node positions.</param>
 	/// <param name="clearDrawings">True if map drawings should be cleared.</param>
-	public void SetMap(ActMap map, uint seed, bool clearDrawings)
+	public void SetMap(ActMap map, ulong seed, bool clearDrawings)
 	{
 		_map = map;
 		_mapPointDictionary.Clear();
@@ -726,31 +753,50 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_hasPlayedAnimation = false;
 		int rowCount = map.GetRowCount();
 		int columnCount = map.GetColumnCount();
-		float num = ((map.SecondBossMapPoint != null) ? 0.9f : 1f);
-		_distY = 2325f / (float)(rowCount - 1) * num;
-		_distX = 1050f / (float)columnCount;
-		Rng rng = new Rng(seed, $"map_jitter_{_runState.CurrentActIndex}");
-		Vector2 vector = new Vector2(-500f, 740f);
-		Vector2 vector2 = new Vector2(_distX, 0f - _distY);
+		List<NMapPoint> list = new List<NMapPoint>();
+		float[] array = new float[rowCount];
 		foreach (MapPoint allMapPoint in map.GetAllMapPoints())
 		{
-			NNormalMapPoint nNormalMapPoint = NNormalMapPoint.Create(allMapPoint, this, _runState);
-			nNormalMapPoint.Position = new Vector2(allMapPoint.coord.col, allMapPoint.coord.row) * vector2 + vector;
-			float x = rng.NextFloat(-21f, 21f);
-			float y = rng.NextFloat(-25f, 25f);
-			nNormalMapPoint.Position += new Vector2(x, y);
-			_mapPointDictionary.Add(allMapPoint.coord, nNormalMapPoint);
-			_points.AddChildSafely(nNormalMapPoint);
-			nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
+			NMapPoint nMapPoint = NNormalMapPoint.Create(allMapPoint, this, _runState);
+			float val = array[allMapPoint.coord.row];
+			val = Math.Max(val, nMapPoint.Size.Y * nMapPoint.Scale.Y);
+			array[allMapPoint.coord.row] = val;
+			list.Add(nMapPoint);
 		}
-		_bossPointNode = NBossMapPoint.Create(map.BossMapPoint, this, _runState);
+		float num = ((map.SecondBossMapPoint != null) ? 0.9f : 1f);
+		float num2 = array.Sum();
+		Vector2 vector = new Vector2(1050f / (float)columnCount, (2325f * num - num2) / (float)(rowCount - 1));
+		Rng rng = new Rng(seed, $"map_jitter_{_runState.CurrentActIndex}");
+		bool flag = map is BlitzActMap;
+		Vector2 vector2 = new Vector2(flag ? 530f : 460f, 1280f);
+		foreach (NMapPoint item in list)
+		{
+			_mapPointDictionary.Add(item.Point.coord, item);
+			_points.AddChildSafely(item);
+			float num3 = vector.Y * (float)item.Point.coord.row + array.Take(item.Point.coord.row).Sum() + item.PivotOffset.Y;
+			item.Position = ToCenterAnchoredPosition(vector2 + (float)item.Point.coord.col * vector.X * Vector2.Right + num3 * Vector2.Up - item.PivotOffset, _points.Size);
+			if (item is NNormalMapPoint)
+			{
+				Vector2 vector3 = new Vector2(21f, 25f * (flag ? 0.5f : 1f));
+				float x = rng.NextFloat(0f - vector3.X, vector3.X);
+				float y = rng.NextFloat(0f - vector3.Y, vector3.Y);
+				item.Position += new Vector2(x, y);
+			}
+			if (item is NNormalMapPoint nNormalMapPoint)
+			{
+				nNormalMapPoint.SetAngle(Rng.Chaotic.NextGaussianFloat(0f, 8f));
+			}
+		}
+		ActModel act = _runState.Act;
+		ActModel act2 = _runState.Act;
+		_bossPointNode = NBossMapPoint.Create(map.BossMapPoint, this, act2.BossEncounter, _runState);
 		_bossPointNode.Position = new Vector2(-200f, -1980f * num);
 		_points.AddChildSafely(_bossPointNode);
 		_mapPointDictionary[map.BossMapPoint.coord] = _bossPointNode;
 		if (map.SecondBossMapPoint != null)
 		{
 			_bossPointNode.Scale = new Vector2(0.75f, 0.75f);
-			_secondBossPointNode = NBossMapPoint.Create(map.SecondBossMapPoint, this, _runState);
+			_secondBossPointNode = NBossMapPoint.Create(map.SecondBossMapPoint, this, act2.SecondBossEncounter, _runState);
 			_secondBossPointNode.Position = new Vector2(-200f, -2280f * num);
 			_secondBossPointNode.Scale = new Vector2(0.75f, 0.75f);
 			_points.AddChildSafely(_secondBossPointNode);
@@ -758,13 +804,13 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		}
 		if (map.StartingMapPoint.PointType == MapPointType.Ancient)
 		{
-			_startingPointNode = NAncientMapPoint.Create(map.StartingMapPoint, this, _runState);
-			_startingPointNode.Position = new Vector2(-80f, (float)map.StartingMapPoint.coord.row * (0f - _distY) + 720f);
+			_startingPointNode = NAncientMapPoint.Create(map.StartingMapPoint, this, act.Ancient, _runState);
+			_startingPointNode.Position = new Vector2(-80f, (float)map.StartingMapPoint.coord.row * (0f - vector.Y) + 720f);
 		}
 		else
 		{
 			_startingPointNode = NNormalMapPoint.Create(map.StartingMapPoint, this, _runState);
-			_startingPointNode.Position = new Vector2(-80f, (float)map.StartingMapPoint.coord.row * (0f - _distY) + 800f);
+			_startingPointNode.Position = new Vector2(-80f, (float)map.StartingMapPoint.coord.row * (0f - vector.Y) + 800f);
 		}
 		_points.AddChildSafely(_startingPointNode);
 		_mapPointDictionary[map.StartingMapPoint.coord] = _startingPointNode;
@@ -781,10 +827,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			{
 				continue;
 			}
-			foreach (TextureRect item in value)
+			foreach (TextureRect item2 in value)
 			{
-				item.Modulate = _runState.Act.MapTraveledColor;
-				item.Scale = _tickTraveledScale;
+				item2.Modulate = _runState.Act.MapTraveledColor;
+				item2.Scale = _tickTraveledScale;
 			}
 		}
 		InitMapVotes();
@@ -792,13 +838,13 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		for (int j = 0; j < map.GetRowCount(); j++)
 		{
 			IEnumerable<MapPoint> pointsInRow = map.GetPointsInRow(j);
-			List<NMapPoint> list = pointsInRow.Select((MapPoint p) => _mapPointDictionary[p.coord]).ToList();
-			for (int num2 = 0; num2 < list.Count; num2++)
+			List<NMapPoint> list2 = pointsInRow.Select((MapPoint p) => _mapPointDictionary[p.coord]).ToList();
+			for (int num4 = 0; num4 < list2.Count; num4++)
 			{
-				list[num2].FocusNeighborLeft = ((num2 > 0) ? list[num2 - 1].GetPath() : list[num2].GetPath());
-				list[num2].FocusNeighborRight = ((num2 < list.Count - 1) ? list[num2 + 1].GetPath() : list[num2].GetPath());
-				list[num2].FocusNeighborTop = list[num2].GetPath();
-				list[num2].FocusNeighborBottom = list[num2].GetPath();
+				list2[num4].FocusNeighborLeft = ((num4 > 0) ? list2[num4 - 1].GetPath() : list2[num4].GetPath());
+				list2[num4].FocusNeighborRight = ((num4 < list2.Count - 1) ? list2[num4 + 1].GetPath() : list2[num4].GetPath());
+				list2[num4].FocusNeighborTop = list2[num4].GetPath();
+				list2[num4].FocusNeighborBottom = list2[num4].GetPath();
 			}
 		}
 		_startingPointNode.FocusNeighborLeft = _startingPointNode.GetPath();
@@ -837,18 +883,25 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			}
 			Vector2 lineEndpoint = GetLineEndpoint(mapPointNode);
 			Vector2 lineEndpoint2 = GetLineEndpoint(value);
-			IReadOnlyList<TextureRect> value2 = CreatePath(lineEndpoint, lineEndpoint2);
+			IReadOnlyList<TextureRect> value2 = CreatePath(lineEndpoint, lineEndpoint2, _pathsContainer, _runState.Act.MapUntraveledColor);
 			_paths.Add((mapPoint.coord, child.coord), value2);
 		}
 	}
 
+	/// <summary>
+	/// Map points are anchored to the center of their container, so a position assigned to one moves by half of any
+	/// later change in the container's size. The layout in SetMap is authored for a 1920x1080 container. This returns
+	/// the position to assign now so the point lands where it would have if the map had been laid out at
+	/// 1920x1080, whatever size the container is when the run starts.
+	/// </summary>
+	private static Vector2 ToCenterAnchoredPosition(Vector2 layoutPosition, Vector2 containerSize)
+	{
+		return layoutPosition + (containerSize - NGame.devResolution) * 0.5f;
+	}
+
 	private Vector2 GetLineEndpoint(NMapPoint point)
 	{
-		if (point is NNormalMapPoint)
-		{
-			return point.Position;
-		}
-		return point.Position + point.Size * 0.5f;
+		return point.Position + point.PivotOffset;
 	}
 
 	private void RecalculateTravelability()
@@ -915,17 +968,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	public void OnMapPointSelectedLocally(NMapPoint point)
 	{
 		Player me = LocalContext.GetMe(_runState);
-		if (!PlayerVoteDictionary.TryGetValue(me, out var value) || value != point.Point.coord)
+		MapVote? vote = RunManager.Instance.MapSelectionSynchronizer.GetVote(me);
+		if (!vote.HasValue || vote.Value.coord != point.Point.coord)
 		{
-			OnPlayerVoteChangedInternal(me, RunManager.Instance.MapSelectionSynchronizer.GetVote(me)?.coord, point.Point.coord);
-			MapLocation source = new MapLocation(_runState.CurrentMapCoord, _runState.CurrentActIndex);
-			MapVote value2 = new MapVote
-			{
-				coord = point.Point.coord,
-				mapGenerationCount = RunManager.Instance.MapSelectionSynchronizer.MapGenerationCount
-			};
-			VoteForMapCoordAction action = new VoteForMapCoordAction(LocalContext.GetMe(_runState), source, value2);
-			RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(action);
+			RunManager.Instance.MapSelectionSynchronizer.OnLocalPlayerVotedFor(point.Point.coord);
 		}
 		else if (_runState.Players.Count > 1)
 		{
@@ -936,23 +982,19 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	private void OnPlayerVoteChanged(Player player, MapVote? oldLocation, MapVote? newLocation)
 	{
 		Log.Info($"Player vote changed for {player.NetId}: {oldLocation}->{newLocation}");
-		if (!LocalContext.IsMe(player))
-		{
-			OnPlayerVoteChangedInternal(player, oldLocation?.coord, newLocation?.coord);
-		}
+		OnPlayerVoteChangedInternal(player, oldLocation?.coord, newLocation?.coord);
 	}
 
-	private void OnPlayerVoteCancelled(Player player)
+	private void OnPlayerVoteCancelled(Player player, MapVote? oldLocation)
 	{
 		Log.Info($"Player vote cancelled for {player.NetId}");
-		OnPlayerVoteChangedInternal(player, PlayerVoteDictionary[player], null);
+		OnPlayerVoteChangedInternal(player, oldLocation?.coord, null);
 	}
 
 	private void OnPlayerVoteChangedInternal(Player player, MapCoord? oldCoord, MapCoord? newCoord)
 	{
 		if (_runState.Players.Count > 1)
 		{
-			PlayerVoteDictionary[player] = newCoord;
 			if (oldCoord.HasValue)
 			{
 				NMapPoint nMapPoint = _mapPointDictionary[oldCoord.Value];
@@ -1020,9 +1062,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		SfxCmd.Play("event:/sfx/ui/map/map_select");
 		node.AddChildSafely(nMapNodeSelectVfx);
 		nMapNodeSelectVfx.Position += node.PivotOffset;
+		node.MoveChildSafely(nMapNodeSelectVfx, node.VoteContainer.GetIndex());
 		IReadOnlyList<MapCoord> visitedMapCoords = _runState.VisitedMapCoords;
 		SfxCmd.Play("event:/sfx/ui/wipe_map");
-		Task fadeOutTask = TaskHelper.RunSafely(NGame.Instance.Transition.RoomFadeOut());
+		Task fadeOutTask = TaskHelper.RunSafely(RunManager.Instance.FadeOut());
 		if (visitedMapCoords.Any())
 		{
 			if (_paths.TryGetValue((visitedMapCoords[visitedMapCoords.Count - 1], node.Point.coord), out IReadOnlyList<TextureRect> value))
@@ -1046,8 +1089,8 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_marker.SetMapPoint(node);
 		await fadeOutTask;
 		await RunManager.Instance.EnterMapCoord(coord);
+		TaskHelper.RunSafely(RunManager.Instance.FadeIn());
 		RefreshAllPointVisuals();
-		PlayerVoteDictionary.Clear();
 		RefreshAllMapPointVotes();
 	}
 
@@ -1074,9 +1117,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	/// <summary>
 	/// Creates a bunch of dots to form a path from start to end
 	/// </summary>
-	/// <param name="start"></param>
-	/// <param name="end"></param>
-	private IReadOnlyList<TextureRect> CreatePath(Vector2 start, Vector2 end)
+	public static IReadOnlyList<TextureRect> CreatePath(Vector2 start, Vector2 end, Control owner, Color modulate)
 	{
 		List<TextureRect> list = new List<TextureRect>();
 		Vector2 vector = (end - start).Normalized();
@@ -1087,13 +1128,12 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			float num4 = (float)i * 22f;
 			TextureRect textureRect = PreloadManager.Cache.GetScene("res://scenes/ui/map_dot.tscn").Instantiate<TextureRect>(PackedScene.GenEditState.Disabled);
-			textureRect.Position = start + vector * num4;
-			textureRect.Position -= new Vector2(base.Size.X * 0.5f - 20f, base.Size.Y * 0.5f - 20f);
+			owner.AddChildSafely(textureRect);
+			textureRect.Position = start + vector * num4 - textureRect.Size * 0.5f;
 			textureRect.Position += new Vector2(Rng.Chaotic.NextFloat(-3f, 3f), Rng.Chaotic.NextFloat(-3f, 3f));
 			textureRect.FlipH = Rng.Chaotic.NextBool();
 			textureRect.Rotation = num + Rng.Chaotic.NextGaussianFloat(0f, 0.1f);
-			textureRect.Modulate = _runState.Act.MapUntraveledColor;
-			_pathsContainer.AddChildSafely(textureRect);
+			textureRect.Modulate = modulate;
 			list.Add(textureRect);
 		}
 		return list;
@@ -1101,7 +1141,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 
 	public override void _Process(double delta)
 	{
-		if (IsVisibleInTree() && (_actAnimTween == null || !_actAnimTween.IsRunning()))
+		if (IsVisibleInTree() && (_actAnimTween == null || !_actAnimTween.IsRunning()) && !_shareButton.IsTakingScreenshot())
 		{
 			UpdateScrollPosition(delta);
 		}
@@ -1111,8 +1151,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	{
 		if (_mapContainer.Position != _targetDragPos)
 		{
+			float a = Mathf.Sign(_mapContainer.Position.Y - _targetDragPos.Y);
 			_mapContainer.Position = _mapContainer.Position.Lerp(_targetDragPos, (float)delta * 15f);
-			if (_mapContainer.Position.DistanceTo(_targetDragPos) < 0.5f)
+			float b = Mathf.Sign(_mapContainer.Position.Y - _targetDragPos.Y);
+			if (Math.Abs(_mapContainer.Position.Y - _targetDragPos.Y) < 0.5f || !Mathf.IsEqualApprox(a, b))
 			{
 				_mapContainer.Position = _targetDragPos;
 			}
@@ -1241,8 +1283,8 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 				_targetDragPos = new Vector2(0f, -600f);
 				return;
 			}
-			int num = _runState.CurrentMapCoord?.row ?? 0;
-			_targetDragPos = new Vector2(0f, -600f + (float)num * _distY);
+			float rowScrollPos = GetRowScrollPos(_runState.CurrentMapCoord?.row ?? 0);
+			_targetDragPos = new Vector2(0f, rowScrollPos);
 		}
 	}
 
@@ -1264,7 +1306,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			value.RefreshVisualsInstantly();
 		}
-		_mapPointDictionary.Values.FirstOrDefault((NMapPoint n) => n.IsEnabled)?.TryGrabFocus();
+		if (IsVisible())
+		{
+			DefaultFocusedControl.TryGrabFocus();
+		}
 	}
 
 	private void PlayStartOfActAnimation()
@@ -1291,7 +1336,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_actAnimTween.TweenProperty(_mapContainer, "position:y", -600f, _mapAnimDuration).SetEase(Tween.EaseType.InOut).SetTrans(Tween.TransitionType.Expo);
 		_actAnimTween.TweenCallback(Callable.From(SetInterruptable)).SetDelay(_mapAnimDuration * 0.25);
 		_targetDragPos = targetDragPos;
-		if (await _actAnimTween.AwaitFinished(this))
+		if (await _actAnimTween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			_actAnimTween = null;
 			InitMapPrompt();
@@ -1408,7 +1453,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			IsOpen = false;
 			base.FocusMode = FocusModeEnum.None;
 			NRun.Instance.GlobalUi.TopBar.Map.StopOscillation();
-			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.accept, OnLegendHotkeyPressed);
+			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.confirm, OnLegendHotkeyPressed);
 			NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.viewExhaustPileAndTabRight, OnDrawingToolsHotkeyPressed);
 			if (RunManager.Instance.IsSingleplayerOrFakeMultiplayer)
 			{
@@ -1441,7 +1486,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		_tween.TweenProperty(_mapLegend, "modulate:a", 0f, 0.15);
 		_tween.TweenProperty(_mapLegend, "position:x", MapLegendX + 120f, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic);
 		_tween.TweenProperty(_drawingTools, "modulate:a", 0f, 0.15);
-		if (await _tween.AwaitFinished(this))
+		if (await _tween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			base.Visible = false;
 			base.ProcessMode = ProcessModeEnum.Disabled;
@@ -1463,8 +1508,8 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		IsOpen = true;
 		base.Visible = true;
 		_backButton.MoveToHidePosition();
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.accept, OnLegendHotkeyPressed);
-		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.viewExhaustPileAndTabRight, OnDrawingToolsHotkeyPressed);
+		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.confirm, OnLegendHotkeyPressed, 0L);
+		NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.viewExhaustPileAndTabRight, OnDrawingToolsHotkeyPressed, 0L);
 		if (_runState.ActFloor > 0)
 		{
 			_backButton.Enable();
@@ -1496,9 +1541,9 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		}
 		else
 		{
-			int num = _runState.CurrentMapCoord?.row ?? 0;
-			_targetDragPos = new Vector2(0f, -600f + (float)num * _distY);
-			_mapContainer.Position = new Vector2(0f, -600f + (float)num * _distY);
+			float rowScrollPos = GetRowScrollPos(_runState.CurrentMapCoord?.row ?? 0);
+			_targetDragPos = new Vector2(0f, rowScrollPos);
+			_mapContainer.Position = new Vector2(0f, rowScrollPos);
 			Control points = _points;
 			modulate = _points.Modulate;
 			modulate.A = 0f;
@@ -1559,6 +1604,39 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	private void OnBackButtonPressed(NButton _)
 	{
 		Close();
+	}
+
+	/// <summary>
+	/// Returns the Y position which _mapContainer should be set to in order to center the map on the specified row.
+	/// </summary>
+	private float GetRowScrollPos(int row)
+	{
+		IEnumerable<MapPoint> source = _map.GetPointsInRow(row);
+		if (!source.Any())
+		{
+			if (_map.StartingMapPoint.coord.row == row)
+			{
+				source = new global::_003C_003Ez__ReadOnlySingleElementList<MapPoint>(_map.StartingMapPoint);
+			}
+			else if (_map.BossMapPoint.coord.row == row)
+			{
+				source = new global::_003C_003Ez__ReadOnlySingleElementList<MapPoint>(_map.BossMapPoint);
+			}
+			else
+			{
+				MapPoint? secondBossMapPoint = _map.SecondBossMapPoint;
+				if (secondBossMapPoint == null || secondBossMapPoint.coord.row != row)
+				{
+					Log.Warn($"Tried to scroll to row {row}, but no points were found in that row. Scrolling to bottom");
+					return -600f;
+				}
+				source = new global::_003C_003Ez__ReadOnlySingleElementList<MapPoint>(_map.SecondBossMapPoint);
+			}
+		}
+		float num = source.Sum((MapPoint p) => _mapPointDictionary[p.coord].Position.Y);
+		float num2 = source.Max((MapPoint p) => _mapPointDictionary[p.coord].Size.Y);
+		float num3 = 150f;
+		return Mathf.Clamp(base.Size.Y * 0.5f - num2 * 0.5f - num / (float)source.Count() + num3, -600f, 1800f);
 	}
 
 	public override void _Input(InputEvent inputEvent)
@@ -1629,7 +1707,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	{
 		Drawings.ClearDrawnLinesLocal();
 		SfxCmd.Play("event:/sfx/ui/map/map_erase");
-		UpdateDrawingButtonStates();
+		_drawingInput?.StopDrawing();
 	}
 
 	public void HighlightPointType(MapPointType pointType)
@@ -1637,22 +1715,25 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		this.PointTypeHighlighted?.Invoke(pointType);
 	}
 
-	public void PingMapCoord(MapCoord coord, Player player)
+	private void PingMapCoord(Player player, MapCoord coord)
 	{
-		if (!_mapPointDictionary.TryGetValue(coord, out NMapPoint value))
+		if (player.RunState.GameMode != GameMode.Blitz)
 		{
-			Log.Error($"Someone tried to ping map coord {coord} that doesn't exist!");
-			return;
+			if (!_mapPointDictionary.TryGetValue(coord, out NMapPoint value))
+			{
+				Log.Error($"Someone tried to ping map coord {coord} that doesn't exist!");
+				return;
+			}
+			NMapPingVfx nMapPingVfx = NMapPingVfx.Create();
+			nMapPingVfx.Modulate = player.Character.MapDrawingColor;
+			value.AddChildSafely(nMapPingVfx);
+			value.MoveChildSafely(nMapPingVfx, 0);
+			nMapPingVfx.Position = Vector2.Zero;
+			nMapPingVfx.Size *= value.Size.X * (1f / 64f);
+			nMapPingVfx.PivotOffset = nMapPingVfx.Size * 0.5f;
+			NRun.Instance.GlobalUi.MultiplayerPlayerContainer.FlashPlayerReady(player);
+			NDebugAudioManager.Instance.Play("map_ping.mp3", 1f, PitchVariance.Medium);
 		}
-		NMapPingVfx nMapPingVfx = NMapPingVfx.Create();
-		nMapPingVfx.Modulate = player.Character.MapDrawingColor;
-		value.AddChildSafely(nMapPingVfx);
-		value.MoveChildSafely(nMapPingVfx, 0);
-		nMapPingVfx.Position = Vector2.Zero;
-		nMapPingVfx.Size *= value.Size.X * (1f / 64f);
-		nMapPingVfx.PivotOffset = nMapPingVfx.Size * 0.5f;
-		NRun.Instance.GlobalUi.MultiplayerPlayerContainer.FlashPlayerReady(player);
-		NDebugAudioManager.Instance.Play("map_ping.mp3", 1f, PitchVariance.Medium);
 	}
 
 	private void OnLegendHotkeyPressed()
@@ -1660,7 +1741,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		List<NMapLegendItem> list = _legendItems.GetChildren().OfType<NMapLegendItem>().ToList();
 		if (list.Any((NMapLegendItem c) => GetViewport().GuiGetFocusOwner() == c))
 		{
-			_mapPointDictionary.Values.FirstOrDefault((NMapPoint n) => n.IsEnabled)?.TryGrabFocus();
+			DefaultFocusedControl.TryGrabFocus();
 			return;
 		}
 		NMapPoint nMapPoint = _mapPointDictionary.Values.LastOrDefault((NMapPoint n) => n.IsEnabled);
@@ -1731,14 +1812,15 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			CombatManager.Instance.Unpause();
 		}
+		RunManager.Instance.MapChanged -= OnMapChanged;
 	}
 
 	private void UpdateHotkeyDisplay()
 	{
-		_legendHotkeyIcon.Visible = NControllerManager.Instance.IsUsingController;
-		_legendHotkeyIcon.Texture = NInputManager.Instance.GetHotkeyIcon(MegaInput.accept);
-		_drawingToolsHotkeyIcon.Visible = NControllerManager.Instance.IsUsingController;
-		_drawingToolsHotkeyIcon.Texture = NInputManager.Instance.GetHotkeyIcon(MegaInput.viewExhaustPileAndTabRight);
+		_legendHotkeyIcon.Visible = NControllerManager.Instance.IsUsingDirectionalNavigation;
+		_legendHotkeyIcon.UpdateInput(MegaInput.confirm);
+		_drawingToolsHotkeyIcon.Visible = NControllerManager.Instance.IsUsingDirectionalNavigation;
+		_drawingToolsHotkeyIcon.UpdateInput(MegaInput.viewExhaustPileAndTabRight);
 	}
 
 	/// <summary>
@@ -1749,9 +1831,21 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(42);
+		List<MethodInfo> list = new List<MethodInfo>(45);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.OnMapChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Bool, "clearDrawings", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.ToCenterAnchoredPosition, new PropertyInfo(Variant.Type.Vector2, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Vector2, "layoutPosition", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
+			new PropertyInfo(Variant.Type.Vector2, "containerSize", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.GetLineEndpoint, new PropertyInfo(Variant.Type.Vector2, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "point", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -1820,6 +1914,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.GetRowScrollPos, new PropertyInfo(Variant.Type.Float, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "row", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName._Input, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "inputEvent", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
@@ -1874,10 +1972,21 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnMapChanged && args.Count == 1)
+		{
+			OnMapChanged(VariantUtils.ConvertTo<bool>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.ToCenterAnchoredPosition && args.Count == 2)
+		{
+			ret = VariantUtils.CreateFrom<Vector2>(ToCenterAnchoredPosition(VariantUtils.ConvertTo<Vector2>(in args[0]), VariantUtils.ConvertTo<Vector2>(in args[1])));
 			return true;
 		}
 		if (method == MethodName.GetLineEndpoint && args.Count == 1)
@@ -2033,6 +2142,11 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.GetRowScrollPos && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<float>(GetRowScrollPos(VariantUtils.ConvertTo<int>(in args[0])));
+			return true;
+		}
 		if (method == MethodName._Input && args.Count == 1)
 		{
 			_Input(VariantUtils.ConvertTo<InputEvent>(in args[0]));
@@ -2116,6 +2230,18 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
+	[EditorBrowsable(EditorBrowsableState.Never)]
+	internal static bool InvokeGodotClassStaticMethod(in godot_string_name method, NativeVariantPtrArgs args, out godot_variant ret)
+	{
+		if (method == MethodName.ToCenterAnchoredPosition && args.Count == 2)
+		{
+			ret = VariantUtils.CreateFrom<Vector2>(ToCenterAnchoredPosition(VariantUtils.ConvertTo<Vector2>(in args[0]), VariantUtils.ConvertTo<Vector2>(in args[1])));
+			return true;
+		}
+		ret = default(godot_variant);
+		return false;
+	}
+
 	/// <inheritdoc />
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool HasGodotClassMethod(in godot_string_name method)
@@ -2124,7 +2250,15 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
+		{
+			return true;
+		}
+		if (method == MethodName.OnMapChanged)
+		{
+			return true;
+		}
+		if (method == MethodName.ToCenterAnchoredPosition)
 		{
 			return true;
 		}
@@ -2232,6 +2366,10 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			return true;
 		}
+		if (method == MethodName.GetRowScrollPos)
+		{
+			return true;
+		}
 		if (method == MethodName._Input)
 		{
 			return true;
@@ -2335,6 +2473,11 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			_points = VariantUtils.ConvertTo<Control>(in value);
 			return true;
 		}
+		if (name == PropertyName._shareButton)
+		{
+			_shareButton = VariantUtils.ConvertTo<NMapShareButton>(in value);
+			return true;
+		}
 		if (name == PropertyName._bossPointNode)
 		{
 			_bossPointNode = VariantUtils.ConvertTo<NBossMapPoint>(in value);
@@ -2367,7 +2510,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		}
 		if (name == PropertyName._drawingToolsHotkeyIcon)
 		{
-			_drawingToolsHotkeyIcon = VariantUtils.ConvertTo<TextureRect>(in value);
+			_drawingToolsHotkeyIcon = VariantUtils.ConvertTo<NHotkeyIcon>(in value);
 			return true;
 		}
 		if (name == PropertyName._drawingTools)
@@ -2402,7 +2545,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		}
 		if (name == PropertyName._legendHotkeyIcon)
 		{
-			_legendHotkeyIcon = VariantUtils.ConvertTo<TextureRect>(in value);
+			_legendHotkeyIcon = VariantUtils.ConvertTo<NHotkeyIcon>(in value);
 			return true;
 		}
 		if (name == PropertyName._backstop)
@@ -2438,16 +2581,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		if (name == PropertyName._controllerScrollAmount)
 		{
 			_controllerScrollAmount = VariantUtils.ConvertTo<float>(in value);
-			return true;
-		}
-		if (name == PropertyName._distX)
-		{
-			_distX = VariantUtils.ConvertTo<float>(in value);
-			return true;
-		}
-		if (name == PropertyName._distY)
-		{
-			_distY = VariantUtils.ConvertTo<float>(in value);
 			return true;
 		}
 		if (name == PropertyName._actAnimTween)
@@ -2540,6 +2673,11 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		if (name == PropertyName._points)
 		{
 			value = VariantUtils.CreateFrom(in _points);
+			return true;
+		}
+		if (name == PropertyName._shareButton)
+		{
+			value = VariantUtils.CreateFrom(in _shareButton);
 			return true;
 		}
 		if (name == PropertyName._bossPointNode)
@@ -2647,16 +2785,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 			value = VariantUtils.CreateFrom(in _controllerScrollAmount);
 			return true;
 		}
-		if (name == PropertyName._distX)
-		{
-			value = VariantUtils.CreateFrom(in _distX);
-			return true;
-		}
-		if (name == PropertyName._distY)
-		{
-			value = VariantUtils.CreateFrom(in _distY);
-			return true;
-		}
 		if (name == PropertyName._actAnimTween)
 		{
 			value = VariantUtils.CreateFrom(in _actAnimTween);
@@ -2715,6 +2843,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._mapContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._pathsContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._points, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._shareButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._bossPointNode, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._secondBossPointNode, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._startingPointNode, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -2738,8 +2867,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName.MapLegendX, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.IsTraveling, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._controllerScrollAmount, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._distX, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._distY, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._actAnimTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._mapScrollAnimTimer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Float, PropertyName._mapAnimStartDelay, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -2766,6 +2893,7 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		info.AddProperty(PropertyName._mapContainer, Variant.From(in _mapContainer));
 		info.AddProperty(PropertyName._pathsContainer, Variant.From(in _pathsContainer));
 		info.AddProperty(PropertyName._points, Variant.From(in _points));
+		info.AddProperty(PropertyName._shareButton, Variant.From(in _shareButton));
 		info.AddProperty(PropertyName._bossPointNode, Variant.From(in _bossPointNode));
 		info.AddProperty(PropertyName._secondBossPointNode, Variant.From(in _secondBossPointNode));
 		info.AddProperty(PropertyName._startingPointNode, Variant.From(in _startingPointNode));
@@ -2787,8 +2915,6 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		info.AddProperty(PropertyName._isDragging, Variant.From(in _isDragging));
 		info.AddProperty(PropertyName._hasPlayedAnimation, Variant.From(in _hasPlayedAnimation));
 		info.AddProperty(PropertyName._controllerScrollAmount, Variant.From(in _controllerScrollAmount));
-		info.AddProperty(PropertyName._distX, Variant.From(in _distX));
-		info.AddProperty(PropertyName._distY, Variant.From(in _distY));
 		info.AddProperty(PropertyName._actAnimTween, Variant.From(in _actAnimTween));
 		info.AddProperty(PropertyName._mapScrollAnimTimer, Variant.From(in _mapScrollAnimTimer));
 		info.AddProperty(PropertyName._canInterruptAnim, Variant.From(in _canInterruptAnim));
@@ -2836,129 +2962,125 @@ public class NMapScreen : Control, IScreenContext, INetCursorPositionTranslator
 		{
 			_points = value8.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._bossPointNode, out var value9))
+		if (info.TryGetProperty(PropertyName._shareButton, out var value9))
 		{
-			_bossPointNode = value9.As<NBossMapPoint>();
+			_shareButton = value9.As<NMapShareButton>();
 		}
-		if (info.TryGetProperty(PropertyName._secondBossPointNode, out var value10))
+		if (info.TryGetProperty(PropertyName._bossPointNode, out var value10))
 		{
-			_secondBossPointNode = value10.As<NBossMapPoint>();
+			_bossPointNode = value10.As<NBossMapPoint>();
 		}
-		if (info.TryGetProperty(PropertyName._startingPointNode, out var value11))
+		if (info.TryGetProperty(PropertyName._secondBossPointNode, out var value11))
 		{
-			_startingPointNode = value11.As<NMapPoint>();
+			_secondBossPointNode = value11.As<NBossMapPoint>();
 		}
-		if (info.TryGetProperty(PropertyName._mapBgContainer, out var value12))
+		if (info.TryGetProperty(PropertyName._startingPointNode, out var value12))
 		{
-			_mapBgContainer = value12.As<NMapBg>();
+			_startingPointNode = value12.As<NMapPoint>();
 		}
-		if (info.TryGetProperty(PropertyName._marker, out var value13))
+		if (info.TryGetProperty(PropertyName._mapBgContainer, out var value13))
 		{
-			_marker = value13.As<NMapMarker>();
+			_mapBgContainer = value13.As<NMapBg>();
 		}
-		if (info.TryGetProperty(PropertyName._backButton, out var value14))
+		if (info.TryGetProperty(PropertyName._marker, out var value14))
 		{
-			_backButton = value14.As<NBackButton>();
+			_marker = value14.As<NMapMarker>();
 		}
-		if (info.TryGetProperty(PropertyName._drawingToolsHotkeyIcon, out var value15))
+		if (info.TryGetProperty(PropertyName._backButton, out var value15))
 		{
-			_drawingToolsHotkeyIcon = value15.As<TextureRect>();
+			_backButton = value15.As<NBackButton>();
 		}
-		if (info.TryGetProperty(PropertyName._drawingTools, out var value16))
+		if (info.TryGetProperty(PropertyName._drawingToolsHotkeyIcon, out var value16))
 		{
-			_drawingTools = value16.As<Control>();
+			_drawingToolsHotkeyIcon = value16.As<NHotkeyIcon>();
 		}
-		if (info.TryGetProperty(PropertyName._mapDrawingButton, out var value17))
+		if (info.TryGetProperty(PropertyName._drawingTools, out var value17))
 		{
-			_mapDrawingButton = value17.As<NMapDrawButton>();
+			_drawingTools = value17.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._mapErasingButton, out var value18))
+		if (info.TryGetProperty(PropertyName._mapDrawingButton, out var value18))
 		{
-			_mapErasingButton = value18.As<NMapEraseButton>();
+			_mapDrawingButton = value18.As<NMapDrawButton>();
 		}
-		if (info.TryGetProperty(PropertyName._mapClearButton, out var value19))
+		if (info.TryGetProperty(PropertyName._mapErasingButton, out var value19))
 		{
-			_mapClearButton = value19.As<NMapClearButton>();
+			_mapErasingButton = value19.As<NMapEraseButton>();
 		}
-		if (info.TryGetProperty(PropertyName._mapLegend, out var value20))
+		if (info.TryGetProperty(PropertyName._mapClearButton, out var value20))
 		{
-			_mapLegend = value20.As<Control>();
+			_mapClearButton = value20.As<NMapClearButton>();
 		}
-		if (info.TryGetProperty(PropertyName._legendItems, out var value21))
+		if (info.TryGetProperty(PropertyName._mapLegend, out var value21))
 		{
-			_legendItems = value21.As<Control>();
+			_mapLegend = value21.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._legendHotkeyIcon, out var value22))
+		if (info.TryGetProperty(PropertyName._legendItems, out var value22))
 		{
-			_legendHotkeyIcon = value22.As<TextureRect>();
+			_legendItems = value22.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._backstop, out var value23))
+		if (info.TryGetProperty(PropertyName._legendHotkeyIcon, out var value23))
 		{
-			_backstop = value23.As<Control>();
+			_legendHotkeyIcon = value23.As<NHotkeyIcon>();
 		}
-		if (info.TryGetProperty(PropertyName._tween, out var value24))
+		if (info.TryGetProperty(PropertyName._backstop, out var value24))
 		{
-			_tween = value24.As<Tween>();
+			_backstop = value24.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._startDragPos, out var value25))
+		if (info.TryGetProperty(PropertyName._tween, out var value25))
 		{
-			_startDragPos = value25.As<Vector2>();
+			_tween = value25.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._targetDragPos, out var value26))
+		if (info.TryGetProperty(PropertyName._startDragPos, out var value26))
 		{
-			_targetDragPos = value26.As<Vector2>();
+			_startDragPos = value26.As<Vector2>();
 		}
-		if (info.TryGetProperty(PropertyName._isDragging, out var value27))
+		if (info.TryGetProperty(PropertyName._targetDragPos, out var value27))
 		{
-			_isDragging = value27.As<bool>();
+			_targetDragPos = value27.As<Vector2>();
 		}
-		if (info.TryGetProperty(PropertyName._hasPlayedAnimation, out var value28))
+		if (info.TryGetProperty(PropertyName._isDragging, out var value28))
 		{
-			_hasPlayedAnimation = value28.As<bool>();
+			_isDragging = value28.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._controllerScrollAmount, out var value29))
+		if (info.TryGetProperty(PropertyName._hasPlayedAnimation, out var value29))
 		{
-			_controllerScrollAmount = value29.As<float>();
+			_hasPlayedAnimation = value29.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._distX, out var value30))
+		if (info.TryGetProperty(PropertyName._controllerScrollAmount, out var value30))
 		{
-			_distX = value30.As<float>();
+			_controllerScrollAmount = value30.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._distY, out var value31))
+		if (info.TryGetProperty(PropertyName._actAnimTween, out var value31))
 		{
-			_distY = value31.As<float>();
+			_actAnimTween = value31.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._actAnimTween, out var value32))
+		if (info.TryGetProperty(PropertyName._mapScrollAnimTimer, out var value32))
 		{
-			_actAnimTween = value32.As<Tween>();
+			_mapScrollAnimTimer = value32.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._mapScrollAnimTimer, out var value33))
+		if (info.TryGetProperty(PropertyName._canInterruptAnim, out var value33))
 		{
-			_mapScrollAnimTimer = value33.As<float>();
+			_canInterruptAnim = value33.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._canInterruptAnim, out var value34))
+		if (info.TryGetProperty(PropertyName._isInputDisabled, out var value34))
 		{
-			_canInterruptAnim = value34.As<bool>();
+			_isInputDisabled = value34.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._isInputDisabled, out var value35))
+		if (info.TryGetProperty(PropertyName._promptTween, out var value35))
 		{
-			_isInputDisabled = value35.As<bool>();
+			_promptTween = value35.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._promptTween, out var value36))
+		if (info.TryGetProperty(PropertyName._drawingInput, out var value36))
 		{
-			_promptTween = value36.As<Tween>();
+			_drawingInput = value36.As<NMapDrawingInput>();
 		}
-		if (info.TryGetProperty(PropertyName._drawingInput, out var value37))
+		if (info.TryGetSignalEventDelegate<OpenedEventHandler>(SignalName.Opened, out var value37))
 		{
-			_drawingInput = value37.As<NMapDrawingInput>();
+			backing_Opened = value37;
 		}
-		if (info.TryGetSignalEventDelegate<OpenedEventHandler>(SignalName.Opened, out var value38))
+		if (info.TryGetSignalEventDelegate<ClosedEventHandler>(SignalName.Closed, out var value38))
 		{
-			backing_Opened = value38;
-		}
-		if (info.TryGetSignalEventDelegate<ClosedEventHandler>(SignalName.Closed, out var value39))
-		{
-			backing_Closed = value39;
+			backing_Closed = value38;
 		}
 	}
 

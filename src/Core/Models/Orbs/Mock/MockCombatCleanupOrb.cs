@@ -13,6 +13,8 @@ namespace MegaCrit.Sts2.Core.Models.Orbs.Mock;
 /// </summary>
 public class MockCombatCleanupOrb : OrbModel
 {
+	public override bool IsMock => true;
+
 	public override decimal PassiveVal => 0m;
 
 	public override decimal EvokeVal => 0m;

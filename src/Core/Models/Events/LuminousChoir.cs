@@ -61,7 +61,7 @@ public sealed class LuminousChoir : EventModel
 	private async Task OfferTribute()
 	{
 		await PlayerCmd.LoseGold(base.DynamicVars.Gold.IntValue, base.Owner, GoldLossType.Spent);
-		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
+		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner, base.Rng).ToMutable();
 		await RelicCmd.Obtain(relic, base.Owner);
 		SetEventFinished(L10NLookup("LUMINOUS_CHOIR.pages.OFFER_TRIBUTE.description"));
 	}

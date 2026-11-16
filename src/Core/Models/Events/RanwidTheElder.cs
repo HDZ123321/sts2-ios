@@ -39,13 +39,13 @@ public sealed class RanwidTheElder : EventModel
 
 	protected override Task BeforeEventStarted(bool isPreFinished)
 	{
-		base.Owner.CanRemovePotions = false;
+		base.Owner.CanUseOrRemovePotions = false;
 		return Task.CompletedTask;
 	}
 
 	protected override void OnEventFinished()
 	{
-		base.Owner.CanRemovePotions = true;
+		base.Owner.CanUseOrRemovePotions = true;
 	}
 
 	public override bool IsAllowed(IRunState runState)
@@ -110,7 +110,7 @@ public sealed class RanwidTheElder : EventModel
 	private async Task GivePotion(PotionModel potion)
 	{
 		await PotionCmd.Discard(potion);
-		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
+		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner, base.Rng).ToMutable();
 		await RelicCmd.Obtain(relic, base.Owner);
 		SetEventFinished(L10NLookup("RANWID_THE_ELDER.pages.POTION.description"));
 	}
@@ -118,7 +118,7 @@ public sealed class RanwidTheElder : EventModel
 	private async Task GiveGold()
 	{
 		await PlayerCmd.LoseGold(base.DynamicVars.Gold.IntValue, base.Owner, GoldLossType.Spent);
-		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
+		RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner, base.Rng).ToMutable();
 		await RelicCmd.Obtain(relic, base.Owner);
 		SetEventFinished(L10NLookup("RANWID_THE_ELDER.pages.GOLD.description"));
 	}
@@ -128,7 +128,7 @@ public sealed class RanwidTheElder : EventModel
 		await RelicCmd.Remove(relic);
 		for (int i = 0; i < 2; i++)
 		{
-			await RelicCmd.Obtain(RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable(), base.Owner);
+			await RelicCmd.Obtain(RelicFactory.PullNextRelicFromFront(base.Owner, base.Rng).ToMutable(), base.Owner);
 		}
 		SetEventFinished(L10NLookup("RANWID_THE_ELDER.pages.RELIC.description"));
 	}

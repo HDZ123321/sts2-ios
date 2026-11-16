@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <Reference Include="Sentry"><HintPath>libs/Sentry.dll</HintPath><Private>true</Private></Reference>
+    <Reference Include="Sentry.Godot"><HintPath>libs/Sentry.Godot.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="Steamworks.NET"><HintPath>libs/Steamworks.NET.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="0Harmony"><HintPath>libs/0Harmony.dll</HintPath><Private>true</Private></Reference>
     <Reference Include="SmartFormat"><HintPath>libs/SmartFormat.dll</HintPath><Private>true</Private></Reference>

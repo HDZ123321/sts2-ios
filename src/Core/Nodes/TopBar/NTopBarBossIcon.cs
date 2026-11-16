@@ -9,6 +9,8 @@ using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Dread;
+using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.HoverTips;
 using MegaCrit.Sts2.Core.Rooms;
@@ -30,14 +32,9 @@ public class NTopBarBossIcon : NClickableControl
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_EnterTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _EnterTree = "_EnterTree";
-
-		/// <summary>
-		/// Cached name for the '_ExitTree' method.
-		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'OnRoomEntered' method.
@@ -128,6 +125,8 @@ public class NTopBarBossIcon : NClickableControl
 
 	private const string _secondBossIconScenePath = "res://scenes/ui/top_bar/second_boss_icon.tscn";
 
+	private readonly List<IHoverTip> _hoverTips = new List<IHoverTip>();
+
 	private IRunState _runState;
 
 	private bool ShouldOnlyShowSecondBossIcon
@@ -146,6 +145,8 @@ public class NTopBarBossIcon : NClickableControl
 	{
 		_bossIcon = GetNode<TextureRect>("Icon");
 		_bossIconOutline = GetNode<TextureRect>("Icon/Outline");
+		RunManager.Instance.ActEntered += OnActEntered;
+		RunManager.Instance.RoomEntered += OnRoomEntered;
 		ConnectSignals();
 	}
 
@@ -155,16 +156,13 @@ public class NTopBarBossIcon : NClickableControl
 		OnActEntered();
 	}
 
-	public override void _EnterTree()
+	public override void _Notification(int what)
 	{
-		RunManager.Instance.ActEntered += OnActEntered;
-		RunManager.Instance.RoomEntered += OnRoomEntered;
-	}
-
-	public override void _ExitTree()
-	{
-		RunManager.Instance.ActEntered -= OnActEntered;
-		RunManager.Instance.RoomEntered -= OnRoomEntered;
+		if ((long)what == 1)
+		{
+			RunManager.Instance.ActEntered -= OnActEntered;
+			RunManager.Instance.RoomEntered -= OnRoomEntered;
+		}
 	}
 
 	private void OnRoomEntered()
@@ -179,6 +177,7 @@ public class NTopBarBossIcon : NClickableControl
 				RefreshBossIcon();
 			}
 			RefreshSecondBossIconColor();
+			NRun.Instance?.GlobalUi.TopBar.UpdateNavigation();
 			if (_runState.CurrentRoom.IsVictoryRoom)
 			{
 				_bossIcon.SetVisible(visible: false);
@@ -228,6 +227,36 @@ public class NTopBarBossIcon : NClickableControl
 			_secondBossIcon?.SetVisible(visible: false);
 			_secondBossIconOutline?.SetVisible(visible: false);
 		}
+		_hoverTips.Clear();
+		EncounterModel bossEncounter = _runState.Act.BossEncounter;
+		bool flag = secondBossEncounter != null && !ShouldOnlyShowSecondBossIcon;
+		if (flag)
+		{
+			_doubleBossHoverTipTitle.Add("BossName1", bossEncounter.Title);
+			_doubleBossHoverTipTitle.Add("BossName2", secondBossEncounter.Title);
+			_doubleBossHoverTipDescription.Add("BossName1", bossEncounter.Title);
+			_doubleBossHoverTipDescription.Add("BossName2", secondBossEncounter.Title);
+			_hoverTips.Add(new HoverTip(_doubleBossHoverTipTitle, _doubleBossHoverTipDescription));
+		}
+		if (_runState.GameMode != GameMode.Dread)
+		{
+			if (!flag)
+			{
+				_bossHoverTipTitle.Add("BossName", ShouldOnlyShowSecondBossIcon ? secondBossEncounter.Title : bossEncounter.Title);
+				_bossHoverTipDescription.Add("BossName", ShouldOnlyShowSecondBossIcon ? secondBossEncounter.Title : bossEncounter.Title);
+				_hoverTips.Add(new HoverTip(_bossHoverTipTitle, _bossHoverTipDescription));
+			}
+			return;
+		}
+		EncounterModel encounterModel2 = secondBossEncounter ?? bossEncounter;
+		DominionModel dominion = encounterModel2.GetDominion();
+		if (dominion != null)
+		{
+			LocString locString = new LocString("ascension", "DREAD.title");
+			locString.Add("BossName", encounterModel2.Title);
+			_hoverTips.Add(new HoverTip(locString, dominion.Description));
+			_hoverTips.AddRange(dominion.ExtraHoverTips);
+		}
 	}
 
 	private void RefreshSecondBossIconColor()
@@ -246,24 +275,7 @@ public class NTopBarBossIcon : NClickableControl
 
 	protected override void OnFocus()
 	{
-		EncounterModel bossEncounter = _runState.Act.BossEncounter;
-		EncounterModel secondBossEncounter = _runState.Act.SecondBossEncounter;
-		HoverTip hoverTip;
-		if (secondBossEncounter != null && !ShouldOnlyShowSecondBossIcon)
-		{
-			_doubleBossHoverTipTitle.Add("BossName1", bossEncounter.Title);
-			_doubleBossHoverTipTitle.Add("BossName2", secondBossEncounter.Title);
-			_doubleBossHoverTipDescription.Add("BossName1", bossEncounter.Title);
-			_doubleBossHoverTipDescription.Add("BossName2", secondBossEncounter.Title);
-			hoverTip = new HoverTip(_doubleBossHoverTipTitle, _doubleBossHoverTipDescription);
-		}
-		else
-		{
-			_bossHoverTipTitle.Add("BossName", ShouldOnlyShowSecondBossIcon ? secondBossEncounter.Title : bossEncounter.Title);
-			_bossHoverTipDescription.Add("BossName", ShouldOnlyShowSecondBossIcon ? secondBossEncounter.Title : bossEncounter.Title);
-			hoverTip = new HoverTip(_bossHoverTipTitle, _bossHoverTipDescription);
-		}
-		NHoverTipSet.CreateAndShow(this, hoverTip)?.SetGlobalPosition(_bossIcon.GlobalPosition + new Vector2(0f, base.Size.Y + 20f));
+		NHoverTipSet.CreateAndShow(this, _hoverTips)?.SetAlignmentBelow(_bossIcon.GlobalPosition + new Vector2(0f, base.Size.Y + 20f));
 	}
 
 	protected override void OnUnfocus()
@@ -279,10 +291,12 @@ public class NTopBarBossIcon : NClickableControl
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(8);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnRoomEntered, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnActEntered, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.RefreshBossIcon, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -302,15 +316,9 @@ public class NTopBarBossIcon : NClickableControl
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._EnterTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_EnterTree();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName._ExitTree && args.Count == 0)
-		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -361,11 +369,7 @@ public class NTopBarBossIcon : NClickableControl
 		{
 			return true;
 		}
-		if (method == MethodName._EnterTree)
-		{
-			return true;
-		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

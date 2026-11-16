@@ -106,6 +106,7 @@ public class NRunModifierTickbox : NTickbox
 	public override void _Ready()
 	{
 		ConnectSignals();
+		this.ApplyRtlLayout();
 		_label = GetNode<MegaRichTextLabel>("%Description");
 		_highlight = GetNode<Control>("Highlight");
 		if (Modifier != null)
@@ -122,7 +123,7 @@ public class NRunModifierTickbox : NTickbox
 	protected override void OnFocus()
 	{
 		base.OnFocus();
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_highlight.Visible = true;
 		}

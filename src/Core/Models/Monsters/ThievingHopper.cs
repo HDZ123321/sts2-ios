@@ -53,18 +53,7 @@ public sealed class ThievingHopper : MonsterModel
 			}
 			return flag2;
 		},
-		delegate(CardModel c)
-		{
-			bool flag = !(c.Enchantment is Imbued);
-			bool flag2 = flag;
-			if (flag2)
-			{
-				CardRarity rarity = c.Rarity;
-				bool flag3 = ((rarity == CardRarity.Basic || rarity == CardRarity.Quest) ? true : false);
-				flag2 = flag3;
-			}
-			return flag2;
-		},
+		(CardModel c) => !(c.Enchantment is Imbued) && c.Rarity == CardRarity.Basic,
 		(CardModel c) => c.Rarity == CardRarity.Ancient || c.Enchantment is Imbued
 	};
 
@@ -191,7 +180,8 @@ public sealed class ThievingHopper : MonsterModel
 			Node2D specialNode = creatureNode.GetSpecialNode<Node2D>("Visuals/SpineBoneNode");
 			if (specialNode != null && creatureNode2 != null)
 			{
-				specialNode.Position = Vector2.Right * (creatureNode2.GlobalPosition.X - creatureNode.GlobalPosition.X);
+				float num = 900f * creatureNode.Visuals.Scale.X;
+				specialNode.GlobalPosition = new Vector2(creatureNode2.GlobalPosition.X + num, specialNode.GlobalPosition.Y);
 			}
 		}
 		await CreatureCmd.TriggerAnim(base.Creature, "Steal", 0.25f);
@@ -204,7 +194,7 @@ public sealed class ThievingHopper : MonsterModel
 				continue;
 			}
 			List<CardModel> list = (from c in CardPile.GetCards(target.Player ?? target.PetOwner, PileType.Draw, PileType.Discard)
-				where c.DeckVersion != null
+				where c.DeckVersion != null && c.Rarity != CardRarity.Quest
 				select c).ToList();
 			IEnumerable<CardModel> enumerable = list;
 			Func<CardModel, bool>[] stealPriorities = _stealPriorities;
@@ -219,7 +209,7 @@ public sealed class ThievingHopper : MonsterModel
 			}
 			if (enumerable.Any())
 			{
-				CardModel cardToSteal = base.RunRng.CombatCardGeneration.NextItem(enumerable);
+				CardModel cardToSteal = base.RunRng.CombatCardSelection.NextItem(enumerable);
 				await CardPileCmd.RemoveFromCombat(cardToSteal);
 				cardsToSteal.Add(cardToSteal);
 			}
@@ -275,7 +265,9 @@ public sealed class ThievingHopper : MonsterModel
 
 	private async Task EscapeMove(IReadOnlyList<Creature> targets)
 	{
-		NCombatRoom.Instance?.GetCreatureNode(base.Creature)?.ToggleIsInteractable(on: false);
+		NCreature creatureNode = base.Creature.GetCreatureNode();
+		creatureNode?.SetIsInteractable(on: false, changeVisibilityImmediately: false);
+		creatureNode?.AnimateOutStateDisplay();
 		SfxCmd.Play(FleeSfx);
 		await CreatureCmd.TriggerAnim(base.Creature, "Flee", 0.85f);
 		if (IsHovering)

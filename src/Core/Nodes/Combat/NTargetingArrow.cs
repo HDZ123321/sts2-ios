@@ -59,6 +59,11 @@ public class NTargetingArrow : Node2D
 		public static readonly StringName StopDrawing = "StopDrawing";
 
 		/// <summary>
+		/// Cached name for the '_ExitTree' method.
+		/// </summary>
+		public new static readonly StringName _ExitTree = "_ExitTree";
+
+		/// <summary>
 		/// Cached name for the 'UpdateDrawingTo' method.
 		/// </summary>
 		public static readonly StringName UpdateDrawingTo = "UpdateDrawingTo";
@@ -261,7 +266,7 @@ public class NTargetingArrow : Node2D
 	public void StartDrawingFrom(Vector2 from, bool usingController)
 	{
 		_followMouse = !usingController;
-		if (!NControllerManager.Instance.IsUsingController)
+		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse)
 		{
 			Input.MouseMode = Input.MouseModeEnum.Hidden;
 		}
@@ -282,7 +287,6 @@ public class NTargetingArrow : Node2D
 	{
 		_followMouse = !usingController;
 		base.ZIndex = control.ZIndex + 1;
-		Input.MouseMode = Input.MouseModeEnum.Hidden;
 		_fromControl = control;
 		if (usingController)
 		{
@@ -291,6 +295,7 @@ public class NTargetingArrow : Node2D
 		}
 		else
 		{
+			Input.MouseMode = Input.MouseModeEnum.Hidden;
 			_currentArrowPos = null;
 		}
 		base.Visible = !NCombatUi.IsDebugHideTargetingUi;
@@ -298,7 +303,7 @@ public class NTargetingArrow : Node2D
 
 	public void StopDrawing()
 	{
-		if (!NControllerManager.Instance.IsUsingController)
+		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse)
 		{
 			Input.MouseMode = Input.MouseModeEnum.Visible;
 		}
@@ -306,6 +311,14 @@ public class NTargetingArrow : Node2D
 		_currentArrowPos = null;
 		base.Visible = false;
 		SetHighlightingOff();
+	}
+
+	public override void _ExitTree()
+	{
+		if (_followMouse)
+		{
+			Input.MouseMode = Input.MouseModeEnum.Visible;
+		}
 	}
 
 	public void UpdateDrawingTo(Vector2 position)
@@ -325,7 +338,7 @@ public class NTargetingArrow : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(10);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Process, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -352,6 +365,7 @@ public class NTargetingArrow : Node2D
 			new PropertyInfo(Variant.Type.Bool, "usingController", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.StopDrawing, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateDrawingTo, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Vector2, "position", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -411,6 +425,12 @@ public class NTargetingArrow : Node2D
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName._ExitTree && args.Count == 0)
+		{
+			_ExitTree();
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.UpdateDrawingTo && args.Count == 1)
 		{
 			UpdateDrawingTo(VariantUtils.ConvertTo<Vector2>(in args[0]));
@@ -453,6 +473,10 @@ public class NTargetingArrow : Node2D
 			return true;
 		}
 		if (method == MethodName.StopDrawing)
+		{
+			return true;
+		}
+		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.CardRewardAlternatives;
@@ -34,13 +35,15 @@ public class CardReward : Reward
 {
 	private readonly PlayerChoiceSynchronizer _synchronizer;
 
+	private readonly CardSelectorStack _selectorStack;
+
 	private readonly List<CardCreationResult> _cards = new List<CardCreationResult>();
 
 	/// <summary>
 	/// This is true if cards were manually set through the constructor, and Options has an empty card pool. The intent
 	/// when this is set to true is that _cards is a static list that should not be re-populated nor changed.
 	/// </summary>
-	private bool _cardsWereManuallySet;
+	private readonly bool _cardsWereManuallySet;
 
 	private bool _hasBeenRerolled;
 
@@ -107,13 +110,15 @@ public class CardReward : Reward
 	/// <param name="cardCount">How many choices to offer (usually 3).</param>
 	/// <param name="player">The player that this reward is for.</param>
 	/// <param name="synchronizer">PlayerChoiceSynchronizer, for injection in tests.</param>
-	public CardReward(CardCreationOptions options, int cardCount, Player player, PlayerChoiceSynchronizer? synchronizer = null)
+	/// <param name="selectorStack">CardSelectorStack, for injection in tests.</param>
+	public CardReward(CardCreationOptions options, int cardCount, Player player, PlayerChoiceSynchronizer? synchronizer = null, CardSelectorStack? selectorStack = null)
 		: base(player)
 	{
 		OptionCount = cardCount;
 		Options = options.WithFlags(CardCreationFlags.IsCardReward);
 		RerollOptions = options.WithFlags(CardCreationFlags.IsCardReward);
 		_synchronizer = synchronizer ?? RunManager.Instance.PlayerChoiceSynchronizer;
+		_selectorStack = selectorStack ?? RunManager.Instance.CardSelectorStack;
 		player.RelicObtained += OnRelicObtained;
 	}
 
@@ -128,15 +133,17 @@ public class CardReward : Reward
 	/// <param name="rerollOptions">If the options are rerolled with <see cref="T:MegaCrit.Sts2.Core.Models.Relics.Driftwood" />, then these options will
 	/// be used to generate a new set of cards.</param>
 	/// <param name="synchronizer">PlayerChoiceSynchronizer, for injection in tests.</param>
-	public CardReward(IEnumerable<CardModel> cardsToOffer, CardCreationSource source, Player player, CardCreationOptions rerollOptions, PlayerChoiceSynchronizer? synchronizer = null)
+	/// <param name="selectorStack">CardSelectorStack, for injection in tests.</param>
+	public CardReward(IEnumerable<CardModel> cardsToOffer, CardCreationSource source, Player player, CardCreationOptions rerollOptions, PlayerChoiceSynchronizer? synchronizer = null, CardSelectorStack? selectorStack = null)
 		: base(player)
 	{
-		Options = new CardCreationOptions(Array.Empty<CardModel>(), source, CardRarityOddsType.Uniform).WithFlags(CardCreationFlags.NoCardPoolModifications | CardCreationFlags.NoCardModelModifications | CardCreationFlags.IsCardReward);
+		Options = new CardCreationOptions(Array.Empty<CardPoolModel>(), source, CardRarityOddsType.Uniform).WithFlags(CardCreationFlags.NoCardPoolModifications | CardCreationFlags.NoCardModelModifications | CardCreationFlags.IsCardReward);
 		RerollOptions = rerollOptions;
 		_cardsWereManuallySet = true;
 		_cards = cardsToOffer.Select((CardModel c) => new CardCreationResult(c)).ToList();
 		OptionCount = _cards.Count;
 		_synchronizer = synchronizer ?? RunManager.Instance.PlayerChoiceSynchronizer;
+		_selectorStack = selectorStack ?? RunManager.Instance.CardSelectorStack;
 	}
 
 	/// <summary>
@@ -172,11 +179,11 @@ public class CardReward : Reward
 		}
 		if (relic.TryModifyCardRewardOptions(base.Player, _cards, Options))
 		{
-			relic.AfterModifyingRewards();
+			TaskHelper.RunSafely(relic.AfterModifyingRewards());
 		}
 		if (relic.TryModifyCardRewardOptionsLate(base.Player, _cards, Options))
 		{
-			relic.AfterModifyingRewards();
+			TaskHelper.RunSafely(relic.AfterModifyingRewards());
 		}
 	}
 
@@ -204,14 +211,13 @@ public class CardReward : Reward
 				}
 				else
 				{
-					CardRewardSelection? selection = CardSelectCmd.Selector?.GetSelectedCardReward(_cards, cardRewardOption);
+					CardRewardSelection? selection = _selectorStack.GetSelector(base.Player)?.GetSelectedCardReward(_cards, cardRewardOption);
 					if (!selection.HasValue)
 					{
 						throw new InvalidOperationException("Card selector unset during test!");
 					}
 					if (selection.Value.alternative != null)
 					{
-						obtainedCard = null;
 						num = _cards.Count + cardRewardOption.FirstIndex((CardRewardAlternative r) => r == selection.Value.alternative);
 					}
 					else
@@ -335,8 +341,7 @@ public class CardReward : Reward
 	{
 		if (Options.CardPools.Count <= 0)
 		{
-			string text = ((Options.CustomCardPool == null) ? "NULL" : string.Join(",", Options.CustomCardPool));
-			throw new NotImplementedException("Tried to serialize a CardReward without any card pools! This is not currently supported. Custom card pool is: " + text);
+			throw new NotImplementedException("Tried to serialize a CardReward without any card pools! This is not currently supported.");
 		}
 		if (Options.CardPoolFilter != null)
 		{

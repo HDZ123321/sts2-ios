@@ -350,11 +350,16 @@ public sealed class NDeckTransformSelectScreen : NCardGridSelectionScreen
 
 	private void OnControllerStateUpdated()
 	{
-		_viewUpgrades.Visible = !NControllerManager.Instance.IsUsingController;
-		if (NControllerManager.Instance.IsUsingController)
+		_viewUpgrades.Visible = !NControllerManager.Instance.IsUsingDirectionalNavigation;
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_viewUpgrades.IsTicked = false;
 			ToggleShowUpgrades(_viewUpgrades);
+			_viewUpgrades.Disable();
+		}
+		else
+		{
+			_viewUpgrades.Enable();
 		}
 	}
 

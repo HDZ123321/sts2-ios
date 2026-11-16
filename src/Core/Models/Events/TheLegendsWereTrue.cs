@@ -48,7 +48,7 @@ public sealed class TheLegendsWereTrue : EventModel
 
 	private async Task SlowlyFindAnExit()
 	{
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.Damage, null, null, null);
 		IEnumerable<PotionModel> items = base.Owner.Character.PotionPool.GetUnlockedPotions(base.Owner.UnlockState).Concat(ModelDb.PotionPool<SharedPotionPool>().GetUnlockedPotions(base.Owner.UnlockState));
 		PotionModel potionModel = base.Owner.PlayerRng.Rewards.NextItem(items);
 		if (potionModel != null)

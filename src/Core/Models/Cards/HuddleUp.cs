@@ -29,7 +29,7 @@ public sealed class HuddleUp : CardModel
 			select c;
 		foreach (Creature item in enumerable)
 		{
-			await CardPileCmd.Draw(choiceContext, base.DynamicVars.Cards.BaseValue, item.Player);
+			await CardPileCmd.DrawWithoutBlockingOnOtherPlayers(choiceContext, base.DynamicVars.Cards.BaseValue, item.Player, this);
 		}
 	}
 

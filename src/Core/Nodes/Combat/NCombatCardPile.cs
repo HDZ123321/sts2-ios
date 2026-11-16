@@ -303,7 +303,7 @@ public abstract class NCombatCardPile : NButton
 			Key? key = null;
 			if (text != null)
 			{
-				key = NInputManager.Instance.GetShortcutKey(text);
+				key = NInputManager.Instance.GetCurrentHotkey(text);
 			}
 			if (key.HasValue)
 			{

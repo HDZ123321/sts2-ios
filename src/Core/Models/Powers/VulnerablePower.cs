@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
@@ -24,7 +25,7 @@ public sealed class VulnerablePower : PowerModel
 	/// <summary>
 	/// Multiplies damage received by 1.5x.
 	/// </summary>
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (target != base.Owner)
 		{
@@ -42,16 +43,16 @@ public sealed class VulnerablePower : PowerModel
 			{
 				num = paperPhrog.ModifyVulnerableMultiplier(target, num, props, dealer, cardSource);
 			}
-			CrueltyPower power = dealer.GetPower<CrueltyPower>();
-			if (power != null)
+			CrueltyPower crueltyPower = dealer.GetPower<CrueltyPower>() ?? dealer.PetOwner?.Creature.GetPower<CrueltyPower>();
+			if (crueltyPower != null)
 			{
-				num = power.ModifyVulnerableMultiplier(target, num, props, dealer, cardSource);
+				num = crueltyPower.ModifyVulnerableMultiplier(target, num, props, dealer, cardSource);
 			}
 		}
-		DebilitatePower power2 = target.GetPower<DebilitatePower>();
-		if (power2 != null)
+		DebilitatePower power = target.GetPower<DebilitatePower>();
+		if (power != null)
 		{
-			num = power2.ModifyVulnerableMultiplier(target, num, props, dealer, cardSource);
+			num = power.ModifyVulnerableMultiplier(target, num, props, dealer, cardSource);
 		}
 		return num;
 	}

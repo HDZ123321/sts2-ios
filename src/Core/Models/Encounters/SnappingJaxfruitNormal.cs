@@ -9,7 +9,11 @@ public sealed class SnappingJaxfruitNormal : EncounterModel
 {
 	public override RoomType RoomType => RoomType.Monster;
 
-	public override IEnumerable<EncounterTag> Tags => new global::_003C_003Ez__ReadOnlySingleElementList<EncounterTag>(EncounterTag.Mushroom);
+	public override IEnumerable<EncounterTag> Tags => new global::_003C_003Ez__ReadOnlyArray<EncounterTag>(new EncounterTag[2]
+	{
+		EncounterTag.Mushroom,
+		EncounterTag.Jaxfruit
+	});
 
 	public override IEnumerable<MonsterModel> AllPossibleMonsters => new global::_003C_003Ez__ReadOnlyArray<MonsterModel>(new MonsterModel[2]
 	{

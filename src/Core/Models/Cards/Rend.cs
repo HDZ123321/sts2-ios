@@ -16,20 +16,20 @@ public sealed class Rend : CardModel
 {
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
-		new CalculationBaseVar(15m),
+		new CalculationBaseVar(10m),
 		new ExtraDamageVar(5m),
 		new CalculatedDamageVar(ValueProp.Move).WithMultiplier((CardModel card, Creature? target) => target?.Powers.Count(ShouldCountPower) ?? 0)
 	});
 
 	public Rend()
-		: base(2, CardType.Attack, CardRarity.Rare, TargetType.AnyEnemy)
+		: base(1, CardType.Attack, CardRarity.Rare, TargetType.AnyEnemy)
 	{
 	}
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
-		await DamageCmd.Attack(base.DynamicVars.CalculatedDamage).FromCard(this).Targeting(cardPlay.Target)
+		await DamageCmd.Attack(base.DynamicVars.CalculatedDamage).FromCard(this, cardPlay).Targeting(cardPlay.Target)
 			.WithHitFx("vfx/vfx_attack_blunt", null, "blunt_attack.mp3")
 			.Execute(choiceContext);
 	}
@@ -37,7 +37,7 @@ public sealed class Rend : CardModel
 	protected override void OnUpgrade()
 	{
 		base.DynamicVars.ExtraDamage.UpgradeValueBy(3m);
-		base.DynamicVars.CalculationBase.UpgradeValueBy(3m);
+		base.DynamicVars.CalculationBase.UpgradeValueBy(2m);
 	}
 
 	private static bool ShouldCountPower(PowerModel power)

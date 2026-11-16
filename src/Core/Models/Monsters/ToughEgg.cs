@@ -158,7 +158,7 @@ public sealed class ToughEgg : MonsterModel
 		await PowerCmd.Remove<HatchPower>(base.Creature);
 		_hatched = true;
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/tough_egg/tough_egg_hatch");
-		List<PowerModel> list = base.Creature.Powers.Where((PowerModel p) => !(p is MinionPower)).ToList();
+		List<PowerModel> list = base.Creature.Powers.Where((PowerModel p) => !(p is MinionPower) && !(p is ImpaledPower)).ToList();
 		foreach (PowerModel item in list)
 		{
 			await PowerCmd.Remove(item);
@@ -169,7 +169,7 @@ public sealed class ToughEgg : MonsterModel
 	private async Task Hatch()
 	{
 		await CreatureCmd.TriggerAnim(base.Creature, "Hatch", 0.5f);
-		decimal amount = MegaCrit.Sts2.Core.Entities.Creatures.Creature.ScaleHpForMultiplayer(base.RunRng.Niche.NextInt(HatchlingMinHp, HatchlingMaxHp), base.CombatState.Encounter, base.Creature.CombatState.Players.Count, base.Creature.CombatState.Players[0].RunState.CurrentActIndex);
+		decimal amount = MegaCrit.Sts2.Core.Entities.Creatures.Creature.ScaleHpForMultiplayer(base.RunRng.Niche.NextInt(HatchlingMinHp, HatchlingMaxHp + 1), base.CombatState.Encounter, base.CombatState.Players.Count, base.CombatState.RunState.CurrentActIndex);
 		await CreatureCmd.SetMaxAndCurrentHp(base.Creature, amount);
 	}
 

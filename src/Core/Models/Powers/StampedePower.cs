@@ -25,7 +25,7 @@ public sealed class StampedePower : PowerModel
 		for (int i = 0; i < base.Amount; i++)
 		{
 			List<CardModel> items = hand.Cards.Where((CardModel c) => c.Type == CardType.Attack && !c.Keywords.Contains(CardKeyword.Unplayable)).ToList();
-			CardModel cardModel = base.Owner.Player.RunState.Rng.Shuffle.NextItem(items);
+			CardModel cardModel = base.Owner.Player.RunState.Rng.CombatCardSelection.NextItem(items);
 			if (cardModel != null)
 			{
 				await CardCmd.AutoPlay(choiceContext, cardModel, null);

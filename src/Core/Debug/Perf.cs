@@ -67,6 +67,15 @@ public static class Perf
 
 	private const int HitchPhaseSlots = 3;
 
+	/// <summary>
+	/// The same accounting as <see cref="HitchMsByPhase" /> but scoped to one sequence (a map point,
+	/// a battle entry) instead of a report window, so the ledger line can say what the entry cost
+	/// without the reader having to line it up against the 30-second frame report.
+	/// </summary>
+	private static readonly Dictionary<string, double> SequenceHitchMs = new Dictionary<string, double>();
+
+	private static double _sequenceMaxMs;
+
 	private static int _gc0;
 
 	private static int _gc1;
@@ -203,9 +212,13 @@ public static class Perf
 		{
 			builder.Append(' ').Append(phase).Append('=').Append(milliseconds).Append("ms");
 		}
+		builder.Append(" max=").Append(_sequenceMaxMs.ToString("F1")).Append("ms");
+		AppendHitchPhases(builder, SequenceHitchMs);
 		Log.Info(builder.ToString(), 3);
 		Mirror(builder.ToString());
 		_phaseTimings.Clear();
+		SequenceHitchMs.Clear();
+		_sequenceMaxMs = 0.0;
 	}
 
 	/// <summary>The label a hitch in the current frame would be reported under.</summary>
@@ -219,6 +232,8 @@ public static class Perf
 	public static void StartSequence()
 	{
 		_phaseTimings.Clear();
+		SequenceHitchMs.Clear();
+		_sequenceMaxMs = 0.0;
 		_phaseStart = 0L;
 	}
 
@@ -304,13 +319,18 @@ public static class Perf
 	/// </summary>
 	private static void AppendHitchPhases(StringBuilder builder)
 	{
-		if (HitchMsByPhase.Count == 0)
+		AppendHitchPhases(builder, HitchMsByPhase);
+	}
+
+	private static void AppendHitchPhases(StringBuilder builder, Dictionary<string, double> source)
+	{
+		if (source.Count == 0)
 		{
 			return;
 		}
 		builder.Append(" hitchby=");
 		bool first = true;
-		foreach (KeyValuePair<string, double> entry in HitchMsByPhase.OrderByDescending((KeyValuePair<string, double> p) => p.Value).Take(HitchPhaseSlots))
+		foreach (KeyValuePair<string, double> entry in source.OrderByDescending((KeyValuePair<string, double> p) => p.Value).Take(HitchPhaseSlots))
 		{
 			if (!first)
 			{
@@ -392,7 +412,13 @@ public static class Perf
 			_hitches++;
 			HitchMsByPhase.TryGetValue(_phase, out double spent);
 			HitchMsByPhase[_phase] = spent + num2;
+			SequenceHitchMs.TryGetValue(_phase, out double sequenceSpent);
+			SequenceHitchMs[_phase] = sequenceSpent + num2;
 			LogHitch(num2);
+		}
+		if (num2 > _sequenceMaxMs)
+		{
+			_sequenceMaxMs = num2;
 		}
 		if (_frames < ReportFrames)
 		{

@@ -28,6 +28,6 @@ public sealed class FirePotion : PotionModel
 		PotionModel.AssertValidForTargetedPotion(target);
 		DamageVar damage = base.DynamicVars.Damage;
 		NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(NGroundFireVfx.Create(target));
-		await CreatureCmd.Damage(choiceContext, target, damage.BaseValue, damage.Props, base.Owner.Creature, null);
+		await CreatureCmd.Damage(choiceContext, target, damage.BaseValue, damage.Props, base.Owner.Creature, null, null);
 	}
 }

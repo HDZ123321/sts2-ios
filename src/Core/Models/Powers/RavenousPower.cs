@@ -21,7 +21,7 @@ public sealed class RavenousPower : PowerModel
 		HoverTipFactory.Static(StaticHoverTip.Stun)
 	});
 
-	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature target, bool wasRemovalPrevented, float deathAnimLength)
+	public override async Task AfterDeath(PlayerChoiceContext choiceContext, Creature target, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (!wasRemovalPrevented && target != base.Owner && target.Side == base.Owner.Side && !base.Owner.IsDead)
 		{

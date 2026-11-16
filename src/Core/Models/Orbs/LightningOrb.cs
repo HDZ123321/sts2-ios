@@ -26,21 +26,21 @@ public class LightningOrb : OrbModel
 
 	public override async Task BeforeTurnEndOrbTrigger(PlayerChoiceContext choiceContext)
 	{
-		await Passive(choiceContext, null);
+		await TriggerPassive(choiceContext, null);
 	}
 
 	public override async Task Passive(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		Trigger();
-		await ApplyLightningDamage(PassiveVal, target, choiceContext);
+		ActivatePassive();
+		await ApplyLightningDamage(PassiveVal, target, choiceContext, isEvoke: false);
 	}
 
 	public override async Task<IEnumerable<Creature>> Evoke(PlayerChoiceContext playerChoiceContext)
 	{
-		return await ApplyLightningDamage(EvokeVal, null, playerChoiceContext);
+		return await ApplyLightningDamage(EvokeVal, null, playerChoiceContext, isEvoke: true);
 	}
 
-	private async Task<IEnumerable<Creature>> ApplyLightningDamage(decimal value, Creature? target, PlayerChoiceContext choiceContext)
+	private async Task<IEnumerable<Creature>> ApplyLightningDamage(decimal value, Creature? target, PlayerChoiceContext choiceContext, bool isEvoke)
 	{
 		List<Creature> list = (from e in base.CombatState.GetOpponentsOf(base.Owner.Creature)
 			where e.IsHittable
@@ -50,6 +50,10 @@ public class LightningOrb : OrbModel
 			return Array.Empty<Creature>();
 		}
 		IReadOnlyList<Creature> targets = ((target == null) ? new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(base.Owner.RunState.Rng.CombatTargets.NextItem(list)) : new global::_003C_003Ez__ReadOnlySingleElementList<Creature>(target));
+		if (isEvoke)
+		{
+			ActivateEvoke(targets.ToArray());
+		}
 		foreach (Creature item in targets)
 		{
 			VfxCmd.PlayOnCreature(item, "vfx/vfx_attack_lightning");

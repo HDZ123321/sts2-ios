@@ -66,9 +66,9 @@ public class NMapDrawings : Control
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'UpdateCurrentLinePositionLocal' method.
@@ -162,6 +162,11 @@ public class NMapDrawings : Control
 	public new class PropertyName : Control.PropertyName
 	{
 		/// <summary>
+		/// Cached name for the '_initialized' field.
+		/// </summary>
+		public static readonly StringName _initialized = "_initialized";
+
+		/// <summary>
 		/// Cached name for the '_lineDrawScene' field.
 		/// </summary>
 		public static readonly StringName _lineDrawScene = "_lineDrawScene";
@@ -227,6 +232,8 @@ public class NMapDrawings : Control
 
 	private PeerInputSynchronizer _inputSynchronizer;
 
+	private bool _initialized;
+
 	private PackedScene _lineDrawScene;
 
 	private PackedScene _lineEraseScene;
@@ -265,18 +272,22 @@ public class NMapDrawings : Control
 		_netService = netService;
 		_playerCollection = playerCollection;
 		_inputSynchronizer = inputSynchronizer;
+		_initialized = true;
 		_netService.RegisterMessageHandler<MapDrawingMessage>(HandleDrawingMessage);
 		_netService.RegisterMessageHandler<ClearMapDrawingsMessage>(HandleClearMapDrawingsMessage);
 		_netService.RegisterMessageHandler<MapDrawingModeChangedMessage>(HandleMapDrawingModeChangedMessage);
 		inputSynchronizer.ScreenChanged += OnPlayerScreenChanged;
 	}
 
-	public override void _ExitTree()
+	public override void _Notification(int what)
 	{
-		_netService.UnregisterMessageHandler<MapDrawingMessage>(HandleDrawingMessage);
-		_netService.UnregisterMessageHandler<ClearMapDrawingsMessage>(HandleClearMapDrawingsMessage);
-		_netService.UnregisterMessageHandler<MapDrawingModeChangedMessage>(HandleMapDrawingModeChangedMessage);
-		_inputSynchronizer.ScreenChanged -= OnPlayerScreenChanged;
+		if ((long)what == 1 && _initialized)
+		{
+			_netService.UnregisterMessageHandler<MapDrawingMessage>(HandleDrawingMessage);
+			_netService.UnregisterMessageHandler<ClearMapDrawingsMessage>(HandleClearMapDrawingsMessage);
+			_netService.UnregisterMessageHandler<MapDrawingModeChangedMessage>(HandleMapDrawingModeChangedMessage);
+			_inputSynchronizer.ScreenChanged -= OnPlayerScreenChanged;
+		}
 	}
 
 	/// <summary>
@@ -334,7 +345,6 @@ public class NMapDrawings : Control
 	public void ClearDrawnLinesLocal()
 	{
 		ClearAllLinesForPlayer(GetDrawingStateForPlayer(_netService.NetId));
-		UpdateLocalCursor();
 		_netService.SendMessage(default(ClearMapDrawingsMessage));
 	}
 
@@ -547,10 +557,7 @@ public class NMapDrawings : Control
 	{
 		foreach (DrawingState drawingState in _drawingStates)
 		{
-			foreach (Line2D item in drawingState.drawViewport.GetChildren().OfType<Line2D>())
-			{
-				item.QueueFreeSafely();
-			}
+			ClearAllLinesForPlayer(drawingState);
 		}
 	}
 
@@ -607,11 +614,14 @@ public class NMapDrawings : Control
 
 	private void ClearAllLinesForPlayer(DrawingState state)
 	{
+		if (state.IsDrawing)
+		{
+			StopDrawingLine(state);
+		}
 		foreach (Line2D item in state.drawViewport.GetChildren().OfType<Line2D>())
 		{
 			item.QueueFreeSafely();
 		}
-		SetDrawingMode(state, DrawingMode.None);
 	}
 
 	/// <summary>
@@ -721,7 +731,10 @@ public class NMapDrawings : Control
 	{
 		List<MethodInfo> list = new List<MethodInfo>(19);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.UpdateCurrentLinePositionLocal, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Vector2, "position", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -780,9 +793,9 @@ public class NMapDrawings : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -893,7 +906,7 @@ public class NMapDrawings : Control
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}
@@ -972,6 +985,11 @@ public class NMapDrawings : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool SetGodotClassPropertyValue(in godot_string_name name, in godot_variant value)
 	{
+		if (name == PropertyName._initialized)
+		{
+			_initialized = VariantUtils.ConvertTo<bool>(in value);
+			return true;
+		}
 		if (name == PropertyName._lineDrawScene)
 		{
 			_lineDrawScene = VariantUtils.ConvertTo<PackedScene>(in value);
@@ -1009,6 +1027,11 @@ public class NMapDrawings : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
+		if (name == PropertyName._initialized)
+		{
+			value = VariantUtils.CreateFrom(in _initialized);
+			return true;
+		}
 		if (name == PropertyName._lineDrawScene)
 		{
 			value = VariantUtils.CreateFrom(in _lineDrawScene);
@@ -1051,6 +1074,7 @@ public class NMapDrawings : Control
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
+		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._initialized, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._lineDrawScene, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._lineEraseScene, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._cursorManager, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1065,6 +1089,7 @@ public class NMapDrawings : Control
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)
 	{
 		base.SaveGodotObjectData(info);
+		info.AddProperty(PropertyName._initialized, Variant.From(in _initialized));
 		info.AddProperty(PropertyName._lineDrawScene, Variant.From(in _lineDrawScene));
 		info.AddProperty(PropertyName._lineEraseScene, Variant.From(in _lineEraseScene));
 		info.AddProperty(PropertyName._cursorManager, Variant.From(in _cursorManager));
@@ -1078,29 +1103,33 @@ public class NMapDrawings : Control
 	protected override void RestoreGodotObjectData(GodotSerializationInfo info)
 	{
 		base.RestoreGodotObjectData(info);
-		if (info.TryGetProperty(PropertyName._lineDrawScene, out var value))
+		if (info.TryGetProperty(PropertyName._initialized, out var value))
 		{
-			_lineDrawScene = value.As<PackedScene>();
+			_initialized = value.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._lineEraseScene, out var value2))
+		if (info.TryGetProperty(PropertyName._lineDrawScene, out var value2))
 		{
-			_lineEraseScene = value2.As<PackedScene>();
+			_lineDrawScene = value2.As<PackedScene>();
 		}
-		if (info.TryGetProperty(PropertyName._cursorManager, out var value3))
+		if (info.TryGetProperty(PropertyName._lineEraseScene, out var value3))
 		{
-			_cursorManager = value3.As<NCursorManager>();
+			_lineEraseScene = value3.As<PackedScene>();
 		}
-		if (info.TryGetProperty(PropertyName._eraserMaterial, out var value4))
+		if (info.TryGetProperty(PropertyName._cursorManager, out var value4))
 		{
-			_eraserMaterial = value4.As<Material>();
+			_cursorManager = value4.As<NCursorManager>();
 		}
-		if (info.TryGetProperty(PropertyName._defaultSize, out var value5))
+		if (info.TryGetProperty(PropertyName._eraserMaterial, out var value5))
 		{
-			_defaultSize = value5.As<Vector2>();
+			_eraserMaterial = value5.As<Material>();
 		}
-		if (info.TryGetProperty(PropertyName._lastMessageMsec, out var value6))
+		if (info.TryGetProperty(PropertyName._defaultSize, out var value6))
 		{
-			_lastMessageMsec = value6.As<ulong>();
+			_defaultSize = value6.As<Vector2>();
+		}
+		if (info.TryGetProperty(PropertyName._lastMessageMsec, out var value7))
+		{
+			_lastMessageMsec = value7.As<ulong>();
 		}
 	}
 }

@@ -48,7 +48,7 @@ public sealed class SunkenStatue : EventModel
 	private async Task DiveIntoWater()
 	{
 		await PlayerCmd.GainGold(base.DynamicVars.Gold.BaseValue, base.Owner);
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars["HpLoss"].BaseValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars["HpLoss"].BaseValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null, null);
 		SetEventFinished(L10NLookup("SUNKEN_STATUE.pages.DIVE_INTO_WATER.description"));
 	}
 }

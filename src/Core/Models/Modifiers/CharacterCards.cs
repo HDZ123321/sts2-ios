@@ -30,6 +30,8 @@ public class CharacterCards : ModifierModel
 		}
 	}
 
+	private CardPoolModel CharacterCardPool => ModelDb.GetById<CharacterModel>(CharacterModel).CardPool;
+
 	public override IEnumerable<CardModel> ModifyMerchantCardPool(Player player, IEnumerable<CardModel> options)
 	{
 		CardPoolModel cardPool = player.Character.CardPool;
@@ -38,7 +40,7 @@ public class CharacterCards : ModifierModel
 		{
 			return array;
 		}
-		return array.Concat(ModelDb.GetById<CharacterModel>(CharacterModel).CardPool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint));
+		return array.Concat(CharacterCardPool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint));
 	}
 
 	public override CardCreationOptions ModifyCardRewardCreationOptions(Player player, CardCreationOptions options)
@@ -51,7 +53,7 @@ public class CharacterCards : ModifierModel
 		{
 			return options;
 		}
-		return options.WithCustomPool(options.GetPossibleCards(player).Concat(ModelDb.GetById<CharacterModel>(CharacterModel).CardPool.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint)));
+		return options.WithCardPools(options.CardPools.Union(new global::_003C_003Ez__ReadOnlySingleElementList<CardPoolModel>(CharacterCardPool)));
 	}
 
 	public override bool IsEquivalent(ModifierModel other)

@@ -17,7 +17,7 @@ public sealed class PaperCutsPower : PowerModel
 	{
 		if (dealer == base.Owner && target.IsPlayer && props.IsPoweredAttack() && result.UnblockedDamage > 0)
 		{
-			await CreatureCmd.LoseMaxHp(choiceContext, target, base.Amount, isFromCard: false);
+			await CreatureCmd.LoseMaxHp(choiceContext, target, base.Amount, null);
 		}
 	}
 }

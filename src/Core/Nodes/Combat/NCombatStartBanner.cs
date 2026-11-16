@@ -6,7 +6,6 @@ using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Audio.Debug;
-using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -85,7 +84,6 @@ public class NCombatStartBanner : Control
 
 	public override void _Ready()
 	{
-		Perf.PhaseForThisFrame(this, "combat.banner");
 		_colorRect = GetNode<ColorRect>("ColorRect");
 		_colorRect.Modulate = Colors.Transparent;
 		_label = GetNode<MegaLabel>("Label");
@@ -108,7 +106,7 @@ public class NCombatStartBanner : Control
 			.From(Vector2.One * 2f);
 		tween.TweenProperty(_label, "modulate:a", 0f, 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
 			.SetDelay(1.2999999523162842);
-		if (await tween.AwaitFinished(this))
+		if (await tween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			GetParent().AddChildSafely(NPlayerTurnBanner.Create(1));
 			tween = CreateTween();

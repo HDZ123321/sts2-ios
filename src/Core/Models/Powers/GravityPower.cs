@@ -47,7 +47,7 @@ public sealed class GravityPower : PowerModel
 		GetInternalData<Data>().amountsForPlayedCards.Remove(cardPlay.Card, out var value);
 		if (value > 0)
 		{
-			await CreatureCmd.Damage(choiceContext, base.Owner.CombatState.HittableEnemies, value, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner.CombatState.HittableEnemies, value, ValueProp.Unpowered, base.Owner);
 		}
 	}
 

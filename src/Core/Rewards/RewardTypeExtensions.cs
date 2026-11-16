@@ -12,6 +12,7 @@ public static class RewardTypeExtensions
 			RewardType.Card => CardReward.AssetPaths, 
 			RewardType.Gold => GoldReward.AssetPaths, 
 			RewardType.RemoveCard => CardRemovalReward.AssetPaths, 
+			RewardType.UpgradeCard => CardUpgradeReward.AssetPaths, 
 			RewardType.SpecialCard => SpecialCardReward.AssetPaths, 
 			_ => Array.Empty<string>(), 
 		};

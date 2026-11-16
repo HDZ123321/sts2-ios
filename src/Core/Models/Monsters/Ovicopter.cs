@@ -43,7 +43,7 @@ public sealed class Ovicopter : MonsterModel
 
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Slime;
 
-	private bool CanLay => base.Creature.CombatState.GetTeammatesOf(base.Creature).Count((Creature c) => c.IsAlive) <= 3;
+	private bool CanLay => base.CombatState.GetTeammatesOf(base.Creature).Count((Creature c) => c.IsAlive) <= 3;
 
 	public override async Task AfterAddedToRoom()
 	{

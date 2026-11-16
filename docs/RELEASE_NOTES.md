@@ -15,7 +15,7 @@
 | 最低系统 | iOS 14.0（灵动岛要 16.1+） |
 | 架构 | arm64 真机（模拟器不支持） |
 | 签名 | **未签名**，需要自己签 |
-| 游戏版本 | 0.107.1 |
+| 游戏版本 | 0.113.1 |
 | 源码 commit | `{{COMMIT}}` |
 | 构建 | GitHub Actions run `{{RUN}}`（macos-14） |
 | 下载 | {{DOWNLOAD_URL}} |
@@ -51,7 +51,20 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完；`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）。
 
-## 这一版（v24）：账本从「点地图点」开始算
+## 这一版（v25）：一行账本就说完一句话
+
+`combat entry` 那一行现在自带两个尾巴：
+
+```
+[Perf] combat entry total=1290ms max=64.0ms hitchby=combat.creatures:96ms spine.ready:41ms map.travel=142ms map.arrive=28ms combat.generate=3ms ...
+```
+
+- `max=` 这段里的最慢一帧
+- `hitchby=` 这段里所有超阈值帧的时间归属（前 3 名）
+
+以前「这次进战最卡的那一下落在哪」，得把账本行和 30 秒窗口的帧报表两行对起来看；现在一行说完。这也让 `combat_perf.txt` 里只要留账本行就够了，不用整天开着全程记录。
+
+## 上一版（v24）：账本从「点地图点」开始算
 
 上一版的账本从 `combat.generate` 起算，但玩家感受到的卡顿往往从**点击地图点**就开始了——镜头平移那半秒到一秒里，如果资产还在加载，那段时间根本没有任何标签背着它。
 

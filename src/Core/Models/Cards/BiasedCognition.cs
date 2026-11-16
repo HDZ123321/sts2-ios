@@ -15,7 +15,7 @@ public sealed class BiasedCognition : CardModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
-		new PowerVar<FocusPower>(4m),
+		new PowerVar<FocusPower>(5m),
 		new PowerVar<BiasedCognitionPower>(1m)
 	});
 

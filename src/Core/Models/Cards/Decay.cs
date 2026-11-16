@@ -25,6 +25,6 @@ public sealed class Decay : CardModel
 
 	protected override async Task OnTurnEndInHand(PlayerChoiceContext choiceContext)
 	{
-		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this);
+		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this, null);
 	}
 }

@@ -19,9 +19,10 @@ public sealed class QuestCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[3]
+		return new CardModel[4]
 		{
 			ModelDb.Card<ByrdonisEgg>(),
+			ModelDb.Card<Dowsing>(),
 			ModelDb.Card<LanternKey>(),
 			ModelDb.Card<SpoilsMap>()
 		};

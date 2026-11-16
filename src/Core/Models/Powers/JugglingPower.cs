@@ -16,6 +16,8 @@ public sealed class JugglingPower : PowerModel
 	private class Data
 	{
 		public int attacksPlayedThisTurn;
+
+		public CardModel? cardToClone;
 	}
 
 	public override PowerType Type => PowerType.Buff;
@@ -29,19 +31,34 @@ public sealed class JugglingPower : PowerModel
 
 	public override Task AfterApplied(Creature? applier, CardModel? cardSource)
 	{
-		GetInternalData<Data>().attacksPlayedThisTurn = CombatManager.Instance.History.CardPlaysStarted.Count((CardPlayStartedEntry e) => e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Card.Owner.Creature == base.Owner && e.HappenedThisTurn(base.CombatState));
+		GetInternalData<Data>().attacksPlayedThisTurn = CombatManager.Instance.History.CardPlaysStarted.Count((CardPlayStartedEntry e) => e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Player == base.Owner.Player && e.HappenedThisTurn(base.CombatState));
+		return Task.CompletedTask;
+	}
+
+	public override Task BeforeCardPlayed(CardPlay cardPlay)
+	{
+		if (cardPlay.Card.Owner != base.Owner.Player)
+		{
+			return Task.CompletedTask;
+		}
+		if (cardPlay.Card.Type != CardType.Attack)
+		{
+			return Task.CompletedTask;
+		}
+		GetInternalData<Data>().attacksPlayedThisTurn++;
+		if (GetInternalData<Data>().attacksPlayedThisTurn == 3)
+		{
+			GetInternalData<Data>().cardToClone = cardPlay.Card;
+		}
 		return Task.CompletedTask;
 	}
 
 	public override async Task AfterCardPlayed(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		if (cardPlay.Card.Owner != base.Owner.Player || cardPlay.Card.Type != CardType.Attack)
+		CardModel cardToClone = GetInternalData<Data>().cardToClone;
+		if (cardToClone == cardPlay.Card)
 		{
-			return;
-		}
-		GetInternalData<Data>().attacksPlayedThisTurn++;
-		if (GetInternalData<Data>().attacksPlayedThisTurn == 3)
-		{
+			GetInternalData<Data>().cardToClone = null;
 			Flash();
 			for (int i = 0; i < base.Amount; i++)
 			{

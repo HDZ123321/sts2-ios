@@ -44,7 +44,7 @@ public class CrystalSphereCardReward : CrystalSphereItem
 		_owner = owner;
 	}
 
-	public override Reward? ToReward(Player owner, Rng rng)
+	public override Reward ToReward(Player owner, Rng rng)
 	{
 		CardCreationOptions options = new CardCreationOptions(new global::_003C_003Ez__ReadOnlySingleElementList<CardPoolModel>(owner.Character.CardPool), CardCreationSource.Other, CardRarityOddsType.Uniform, (CardModel c) => c.Rarity == _rarity).WithRngOverride(rng);
 		return new CardReward(options, 3, owner);

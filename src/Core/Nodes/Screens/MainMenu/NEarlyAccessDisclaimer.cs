@@ -106,7 +106,7 @@ public class NEarlyAccessDisclaimer : Control, IScreenContext
 
 	private void UpdateEaDisclaimerDescription()
 	{
-		string textAutoSize = ((!NControllerManager.Instance.IsUsingController) ? new LocString("main_menu_ui", "EARLY_ACCESS_DISCLAIMER.description_mkb").GetFormattedText() : new LocString("main_menu_ui", "EARLY_ACCESS_DISCLAIMER.description_controller").GetFormattedText());
+		string textAutoSize = ((!NControllerManager.Instance.IsUsingDirectionalNavigation) ? new LocString("main_menu_ui", "EARLY_ACCESS_DISCLAIMER.description_mkb").GetFormattedText() : new LocString("main_menu_ui", "EARLY_ACCESS_DISCLAIMER.description_controller").GetFormattedText());
 		GetNode<MegaRichTextLabel>("%Description").SetTextAutoSize(textAutoSize);
 	}
 

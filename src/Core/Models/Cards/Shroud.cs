@@ -18,7 +18,7 @@ public sealed class Shroud : CardModel
 		HoverTipFactory.Static(StaticHoverTip.Block)
 	});
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new BlockVar(2m, ValueProp.Unpowered));
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new BlockVar(3m, ValueProp.Unpowered));
 
 	public Shroud()
 		: base(1, CardType.Power, CardRarity.Uncommon, TargetType.Self)

@@ -169,7 +169,7 @@ public class NConfirmButton : NButton
 
 	private Viewport _viewport;
 
-	private string[] _hotkeys = new string[1] { MegaInput.accept };
+	private string[] _hotkeys = new string[1] { MegaInput.confirm };
 
 	private static readonly Vector2 _hoverScale = new Vector2(1.05f, 1.05f);
 
@@ -219,7 +219,7 @@ public class NConfirmButton : NButton
 
 	private void OnWindowChange()
 	{
-		_showPos = NGame.Instance.SafeAreaEnd - _posOffset;
+		_showPos = NGame.Instance.Size - _posOffset;
 		_hidePos = _showPos + _hideOffset;
 		base.Position = (_isEnabled ? _showPos : _hidePos);
 	}

@@ -7,6 +7,8 @@ public class AscendersBane : CardModel
 {
 	public override bool CanBeGeneratedByModifiers => false;
 
+	public override bool CanBeGeneratedInCombat => false;
+
 	public override int MaxUpgradeLevel => 0;
 
 	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlyArray<CardKeyword>(new CardKeyword[3]

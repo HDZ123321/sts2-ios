@@ -19,7 +19,7 @@ public class CardRewardAlternative
 
 	public LocString Title => new LocString("card_reward_ui", "OPTION_" + OptionId.ToUpperInvariant() + ".name");
 
-	public string Hotkey { get; }
+	public string[] Hotkeys { get; }
 
 	/// <summary>
 	/// Action to perform when the alternative option is selected.
@@ -41,7 +41,11 @@ public class CardRewardAlternative
 		OptionId = optionId;
 		OnSelect = onSelect;
 		AfterSelected = afterSelected;
-		Hotkey = ((afterSelected == PostAlternateCardRewardAction.EndSelectionAndDoNotCompleteReward) ? MegaInput.cancel : MegaInput.viewExhaustPileAndTabRight);
+		Hotkeys = ((afterSelected != PostAlternateCardRewardAction.EndSelectionAndDoNotCompleteReward) ? new string[1] { MegaInput.viewExhaustPileAndTabRight } : new string[2]
+		{
+			MegaInput.cancel,
+			MegaInput.pauseAndBack
+		});
 	}
 
 	/// <summary>

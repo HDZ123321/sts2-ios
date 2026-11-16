@@ -56,19 +56,20 @@ public sealed class TwigSlimeM : MonsterModel
 	{
 		if (TestMode.IsOff)
 		{
-			Vector2? vector = null;
+			NCreature nCreature = null;
 			foreach (Creature target in targets)
 			{
 				NCreature creatureNode = target.GetCreatureNode();
-				if (creatureNode != null && (!vector.HasValue || vector.Value.X > creatureNode.GlobalPosition.X))
+				if (creatureNode != null && (nCreature == null || nCreature.GlobalPosition.X > creatureNode.GlobalPosition.X))
 				{
-					vector = creatureNode.VfxSpawnPosition;
+					nCreature = creatureNode;
 				}
 			}
-			Node2D node2D = base.Creature.GetCreatureNode()?.GetSpecialNode<Node2D>("Visuals/SpitTarget");
-			if (node2D != null && vector.HasValue)
+			NCreature creatureNode2 = base.Creature.GetCreatureNode();
+			Node2D node2D = creatureNode2?.GetSpecialNode<Node2D>("Visuals/SpitTarget");
+			if (creatureNode2 != null && node2D != null && nCreature != null)
 			{
-				node2D.GlobalPosition = vector.Value;
+				node2D.GlobalPosition = new Vector2(nCreature.GlobalPosition.X, node2D.GlobalPosition.Y);
 			}
 		}
 		SfxCmd.Play(CastSfx);

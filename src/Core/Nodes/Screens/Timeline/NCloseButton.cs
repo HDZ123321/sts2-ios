@@ -5,6 +5,7 @@ using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
+using MegaCrit.Sts2.addons.mega_text;
 
 namespace MegaCrit.Sts2.Core.Nodes.Screens.Timeline;
 
@@ -20,6 +21,11 @@ public class NCloseButton : NButton
 		/// Cached name for the '_Ready' method.
 		/// </summary>
 		public new static readonly StringName _Ready = "_Ready";
+
+		/// <summary>
+		/// Cached name for the 'SetLabel' method.
+		/// </summary>
+		public static readonly StringName SetLabel = "SetLabel";
 
 		/// <summary>
 		/// Cached name for the 'OnFocus' method.
@@ -66,6 +72,11 @@ public class NCloseButton : NButton
 		/// Cached name for the '_tween' field.
 		/// </summary>
 		public static readonly StringName _tween = "_tween";
+
+		/// <summary>
+		/// Cached name for the '_closeLabel' field.
+		/// </summary>
+		public static readonly StringName _closeLabel = "_closeLabel";
 	}
 
 	/// <summary>
@@ -76,6 +87,8 @@ public class NCloseButton : NButton
 	}
 
 	private Tween? _tween;
+
+	private MegaLabel _closeLabel;
 
 	protected override string ClickedSfx => "event:/sfx/ui/timeline/ui_timeline_close_epoch";
 
@@ -90,6 +103,12 @@ public class NCloseButton : NButton
 	public override void _Ready()
 	{
 		ConnectSignals();
+		_closeLabel = GetNode<MegaLabel>("%CloseLabel");
+	}
+
+	public void SetLabel(string text)
+	{
+		_closeLabel.SetTextAutoSize(text);
 	}
 
 	protected override void OnFocus()
@@ -134,8 +153,12 @@ public class NCloseButton : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(5);
+		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.SetLabel, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.String, "text", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnUnfocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnPress, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -150,6 +173,12 @@ public class NCloseButton : NButton
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.SetLabel && args.Count == 1)
+		{
+			SetLabel(VariantUtils.ConvertTo<string>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -188,6 +217,10 @@ public class NCloseButton : NButton
 		{
 			return true;
 		}
+		if (method == MethodName.SetLabel)
+		{
+			return true;
+		}
 		if (method == MethodName.OnFocus)
 		{
 			return true;
@@ -214,6 +247,11 @@ public class NCloseButton : NButton
 		if (name == PropertyName._tween)
 		{
 			_tween = VariantUtils.ConvertTo<Tween>(in value);
+			return true;
+		}
+		if (name == PropertyName._closeLabel)
+		{
+			_closeLabel = VariantUtils.ConvertTo<MegaLabel>(in value);
 			return true;
 		}
 		return base.SetGodotClassPropertyValue(in name, in value);
@@ -246,6 +284,11 @@ public class NCloseButton : NButton
 			value = VariantUtils.CreateFrom(in _tween);
 			return true;
 		}
+		if (name == PropertyName._closeLabel)
+		{
+			value = VariantUtils.CreateFrom(in _closeLabel);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -262,6 +305,7 @@ public class NCloseButton : NButton
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._tween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.PackedStringArray, PropertyName.Hotkeys, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.String, PropertyName.ControllerIconHotkey, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._closeLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -271,6 +315,7 @@ public class NCloseButton : NButton
 	{
 		base.SaveGodotObjectData(info);
 		info.AddProperty(PropertyName._tween, Variant.From(in _tween));
+		info.AddProperty(PropertyName._closeLabel, Variant.From(in _closeLabel));
 	}
 
 	/// <inheritdoc />
@@ -281,6 +326,10 @@ public class NCloseButton : NButton
 		if (info.TryGetProperty(PropertyName._tween, out var value))
 		{
 			_tween = value.As<Tween>();
+		}
+		if (info.TryGetProperty(PropertyName._closeLabel, out var value2))
+		{
+			_closeLabel = value2.As<MegaLabel>();
 		}
 	}
 }

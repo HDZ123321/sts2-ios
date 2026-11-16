@@ -34,7 +34,7 @@ public class VoteForMapCoordAction : GameAction
 
 	public override ulong OwnerId => _player.NetId;
 
-	public override GameActionType ActionType => GameActionType.NonCombat;
+	public override GameActionType ActionType => GameActionType.Any;
 
 	public VoteForMapCoordAction(Player player, MapLocation source, MapVote? destination)
 	{

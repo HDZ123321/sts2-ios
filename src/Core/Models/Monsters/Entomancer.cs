@@ -20,7 +20,7 @@ public sealed class Entomancer : MonsterModel
 
 	private const string _attackRangedSfx = "event:/sfx/enemy/enemy_attacks/entomancer/entomancer_attack_ranged";
 
-	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 155, 145);
+	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 165, 145);
 
 	public override int MaxInitialHp => MinInitialHp;
 
@@ -56,16 +56,14 @@ public sealed class Entomancer : MonsterModel
 	{
 		SfxCmd.Play(CastSfx);
 		await CreatureCmd.TriggerAnim(base.Creature, "Cast", 0.5f);
-		PersonalHivePower personalHivePower = base.Creature.Powers.OfType<PersonalHivePower>().First();
-		if (personalHivePower.Amount < 3)
-		{
-			await PowerCmd.Apply<PersonalHivePower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
-			await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
-		}
-		else
+		PersonalHivePower personalHivePower = base.Creature.Powers.OfType<PersonalHivePower>().FirstOrDefault();
+		if (personalHivePower == null || personalHivePower.Amount >= 3)
 		{
 			await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, 2m, base.Creature, null);
+			return;
 		}
+		await PowerCmd.Apply<PersonalHivePower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
+		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
 	}
 
 	private async Task BeesMove(IReadOnlyList<Creature> targets)

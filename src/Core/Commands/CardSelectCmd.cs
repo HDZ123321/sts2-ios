@@ -29,154 +29,6 @@ namespace MegaCrit.Sts2.Core.Commands;
 
 public static class CardSelectCmd
 {
-	private sealed class StackedSelectorScope : IDisposable
-	{
-		private readonly MegaCrit.Sts2.Core.TestSupport.ICardSelector _selector;
-
-		private bool _disposed;
-
-		public StackedSelectorScope(MegaCrit.Sts2.Core.TestSupport.ICardSelector selector)
-		{
-			_selector = selector;
-		}
-
-		public void Dispose()
-		{
-			if (!_disposed)
-			{
-				_disposed = true;
-				if (_selectorStack.Count > 0 && _selectorStack.Peek() == _selector)
-				{
-					_selectorStack.Pop();
-				}
-			}
-		}
-	}
-
-	/// <summary>
-	/// Used by <see cref="M:MegaCrit.Sts2.Core.Commands.CardSelectCmd.SuspendSelectorForTest" /> to conform to the normal interface when there's no card selector.
-	/// </summary>
-	private sealed class NoOpScope : IDisposable
-	{
-		public void Dispose()
-		{
-		}
-	}
-
-	/// <summary>
-	/// Used by <see cref="M:MegaCrit.Sts2.Core.Commands.CardSelectCmd.SuspendSelectorForTest" /> to temporarily suspend the current card selector so it can be
-	/// restored later.
-	/// </summary>
-	private sealed class RestoreSelectorScope : IDisposable
-	{
-		private readonly MegaCrit.Sts2.Core.TestSupport.ICardSelector _saved;
-
-		private bool _disposed;
-
-		public RestoreSelectorScope(MegaCrit.Sts2.Core.TestSupport.ICardSelector saved)
-		{
-			_saved = saved;
-		}
-
-		public void Dispose()
-		{
-			if (!_disposed)
-			{
-				_disposed = true;
-				_selectorStack.Push(_saved);
-			}
-		}
-	}
-
-	private sealed class SelectorScope : IDisposable
-	{
-		private bool _disposed;
-
-		public void Dispose()
-		{
-			if (!_disposed)
-			{
-				_disposed = true;
-				_selectorStack.Clear();
-			}
-		}
-	}
-
-	private static readonly Stack<MegaCrit.Sts2.Core.TestSupport.ICardSelector> _selectorStack = new Stack<MegaCrit.Sts2.Core.TestSupport.ICardSelector>();
-
-	/// <summary>
-	/// The currently active automated card selector.
-	/// Used by tests, AutoSlay, and gameplay effects that auto-play cards (e.g., WhisperingEarring).
-	/// When set, card selection UI is bypassed and cards are selected automatically.
-	/// Returns the top of the stack, or null if empty.
-	/// </summary>
-	public static MegaCrit.Sts2.Core.TestSupport.ICardSelector? Selector
-	{
-		get
-		{
-			if (_selectorStack.Count <= 0)
-			{
-				return null;
-			}
-			return _selectorStack.Peek();
-		}
-	}
-
-	/// <summary>
-	/// Clears all active selectors. Call this during run cleanup to prevent selectors
-	/// leaked by stuck async tasks (e.g., WhisperingEarring mid-auto-play when a run ends)
-	/// from affecting subsequent runs.
-	/// </summary>
-	public static void Reset()
-	{
-		if (!TestMode.IsOn && _selectorStack.Count > 0)
-		{
-			Log.Warn($"CardSelectCmd.Reset: clearing {_selectorStack.Count} leaked selector(s) from the stack.");
-			_selectorStack.Clear();
-		}
-	}
-
-	/// <summary>
-	/// Sets the automated card selector for the duration of the returned scope.
-	/// Disposing the scope clears all selectors.
-	/// Throws if a selector is already active (use PushSelector for stacking behavior).
-	/// </summary>
-	public static IDisposable UseSelector(MegaCrit.Sts2.Core.TestSupport.ICardSelector selector)
-	{
-		if (_selectorStack.Count > 0)
-		{
-			throw new InvalidOperationException("A card selector is already active.");
-		}
-		_selectorStack.Push(selector);
-		return new SelectorScope();
-	}
-
-	/// <summary>
-	/// Pushes a new selector onto the stack. When disposed, the previous selector is restored.
-	/// Use this when you need temporary selector behavior (e.g., WhisperingEarring's auto-play).
-	/// </summary>
-	public static IDisposable PushSelector(MegaCrit.Sts2.Core.TestSupport.ICardSelector selector)
-	{
-		_selectorStack.Push(selector);
-		return new StackedSelectorScope(selector);
-	}
-
-	/// <summary>
-	/// TEST ONLY!
-	/// Temporarily pops the top of the selector stack so tests can exercise the network-synchronized card-selection
-	/// branches that are otherwise bypassed when a selector is active.
-	/// Returns a no-op scope if the stack is already empty.
-	/// </summary>
-	public static IDisposable SuspendSelectorForTest()
-	{
-		if (_selectorStack.Count == 0)
-		{
-			return new NoOpScope();
-		}
-		MegaCrit.Sts2.Core.TestSupport.ICardSelector saved = _selectorStack.Pop();
-		return new RestoreSelectorScope(saved);
-	}
-
 	private static bool ShouldSelectLocalCard(Player player)
 	{
 		if (LocalContext.IsMe(player))
@@ -224,30 +76,40 @@ public static class CardSelectCmd
 			ReportSoftlock();
 			return null;
 		}
+		UndoEndTurnIfNecessary(player);
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
 		CardModel result;
-		if (Selector != null)
+		if (selector != null)
 		{
-			result = (await Selector.GetSelectedCards(cards, 0, 1)).FirstOrDefault();
+			result = (await selector.GetSelectedCards(cards, 0, 1)).FirstOrDefault();
 		}
 		else
 		{
 			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.None);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.None);
 			if (ShouldSelectLocalCard(player))
 			{
-				NPlayerHand.Instance?.CancelAllCardPlay();
-				NChooseACardSelectionScreen nChooseACardSelectionScreen = NChooseACardSelectionScreen.ShowScreen(cards, canSkip);
-				if (LocalContext.IsMe(player))
+				ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+				if (localSelector != null)
 				{
-					foreach (CardModel card in cards)
-					{
-						SaveManager.Instance.MarkCardAsSeen(card);
-					}
+					result = (await localSelector.GetSelectedCards(cards, 0, 1)).FirstOrDefault();
 				}
-				result = (await nChooseACardSelectionScreen.CardsSelected()).FirstOrDefault();
-				int value = cards.IndexOf(result);
-				PlayerChoiceResult result2 = PlayerChoiceResult.FromIndex(value);
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, result2);
+				else
+				{
+					NPlayerHand.Instance?.CancelAllCardPlay();
+					NChooseACardSelectionScreen nChooseACardSelectionScreen = NChooseACardSelectionScreen.ShowScreen(cards, canSkip);
+					if (LocalContext.IsMe(player))
+					{
+						foreach (CardModel card in cards)
+						{
+							SaveManager.Instance.MarkCardAsSeen(card);
+						}
+					}
+					result = (await nChooseACardSelectionScreen.CardsSelected()).FirstOrDefault();
+					int value = cards.IndexOf(result);
+					PlayerChoiceResult result2 = PlayerChoiceResult.FromIndex(value);
+					RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, result2);
+				}
 			}
 			else
 			{
@@ -278,38 +140,53 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
+		UndoEndTurnIfNecessary(player);
 		if (cards.Count == 0)
 		{
 			ReportSoftlock();
 			return Array.Empty<CardModel>();
+		}
+		uint? choiceId = null;
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
+		if (selector == null)
+		{
+			choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.None);
 		}
 		List<CardModel> result;
 		if (!prefs.RequireManualConfirmation && cards.Count <= prefs.MinSelect)
 		{
 			result = cards.Select((CardCreationResult c) => c.Card).ToList();
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
 			IEnumerable<CardModel> options = cards.Select((CardCreationResult c) => c.Card);
-			result = (await Selector.GetSelectedCards(options, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			result = (await selector.GetSelectedCards(options, prefs.MinSelect, prefs.MaxSelect)).ToList();
 		}
-		else
+		else if (ShouldSelectLocalCard(player))
 		{
-			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.None);
-			if (ShouldSelectLocalCard(player))
+			ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+			if (localSelector != null)
+			{
+				IEnumerable<CardModel> options2 = cards.Select((CardCreationResult c) => c.Card);
+				result = (await localSelector.GetSelectedCards(options2, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			}
+			else
 			{
 				NSimpleCardSelectScreen nSimpleCardSelectScreen = NSimpleCardSelectScreen.Create(cards, prefs);
 				NOverlayStack.Instance.Push(nSimpleCardSelectScreen);
 				result = (await nSimpleCardSelectScreen.CardsSelected()).ToList();
 				List<int> indexes = result.Select((CardModel c) => cards.FindIndex((CardCreationResult r) => r.Card == c)).ToList();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromIndexes(indexes));
+				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId.Value, PlayerChoiceResult.FromIndexes(indexes));
 			}
-			else
-			{
-				result = (from i in (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId)).AsIndexes()
-					select cards[i].Card).ToList();
-			}
+		}
+		else
+		{
+			result = (from i in (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId.Value)).AsIndexes()
+				select cards[i].Card).ToList();
+		}
+		if (choiceId.HasValue)
+		{
 			await context.SignalPlayerChoiceEnded();
 		}
 		LogChoice(player, result);
@@ -334,38 +211,52 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
+		UndoEndTurnIfNecessary(player);
 		List<CardModel> cards = cardsIn.ToList();
-		if (cards.Count == 0)
+		uint? choiceId = null;
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
+		if (selector == null)
 		{
-			return Array.Empty<CardModel>();
+			choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.None);
 		}
 		List<CardModel> result;
-		if (!prefs.RequireManualConfirmation && cards.Count <= prefs.MinSelect)
+		if (cards.Count == 0)
+		{
+			result = new List<CardModel>();
+		}
+		else if (!prefs.RequireManualConfirmation && cards.Count <= prefs.MinSelect)
 		{
 			result = cards.ToList();
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			result = (await Selector.GetSelectedCards(cards, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			result = (await selector.GetSelectedCards(cards, prefs.MinSelect, prefs.MaxSelect)).ToList();
 		}
-		else
+		else if (ShouldSelectLocalCard(player))
 		{
-			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.None);
-			if (ShouldSelectLocalCard(player))
+			ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+			if (localSelector != null)
+			{
+				result = (await localSelector.GetSelectedCards(cards, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			}
+			else
 			{
 				NPlayerHand.Instance?.CancelAllCardPlay();
 				NSimpleCardSelectScreen nSimpleCardSelectScreen = NSimpleCardSelectScreen.Create(cards, prefs);
 				NOverlayStack.Instance.Push(nSimpleCardSelectScreen);
 				result = (await nSimpleCardSelectScreen.CardsSelected()).ToList();
 				List<int> indexes = result.Select((CardModel c) => cards.IndexOf(c)).ToList();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromIndexes(indexes));
+				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId.Value, PlayerChoiceResult.FromIndexes(indexes));
 			}
-			else
-			{
-				result = (from i in (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId)).AsIndexes()
-					select cards[i]).ToList();
-			}
+		}
+		else
+		{
+			result = (from i in (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId.Value)).AsIndexes()
+				select cards[i]).ToList();
+		}
+		if (choiceId.HasValue)
+		{
 			await context.SignalPlayerChoiceEnded();
 		}
 		LogChoice(player, result);
@@ -377,9 +268,13 @@ public static class CardSelectCmd
 		return await FromCombatPile(context, pile, player, prefs, (CardModel _) => true);
 	}
 
-	public static async Task<IEnumerable<CardModel>> FromCombatPile(PlayerChoiceContext context, CardPile pile, Player player, CardSelectorPrefs prefs, Func<CardModel, bool> filter)
+	public static async Task<IEnumerable<CardModel>> FromCombatPile(PlayerChoiceContext context, CardPile pile, Player player, CardSelectorPrefs prefs, Func<CardModel, bool>? filter)
 	{
 		if (CombatManager.Instance.IsEnding)
+		{
+			return Array.Empty<CardModel>();
+		}
+		if (player.Creature.IsDead)
 		{
 			return Array.Empty<CardModel>();
 		}
@@ -387,43 +282,73 @@ public static class CardSelectCmd
 		{
 			throw new InvalidOperationException("Cannot perform on a non combat pile");
 		}
-		int num = pile.Cards.Where(filter).Count();
-		if (num == 0)
+		UndoEndTurnIfNecessary(player);
+		uint? choiceId = null;
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
+		if (selector == null)
 		{
-			return Array.Empty<CardModel>();
+			choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.None);
 		}
-		IEnumerable<CardModel> result;
-		if (!prefs.RequireManualConfirmation && num <= prefs.MinSelect)
+		IReadOnlyList<CardModel> readOnlyList;
+		if (filter == null)
 		{
-			result = pile.Cards.Where(filter).ToList();
-		}
-		else if (Selector != null)
-		{
-			List<CardModel> list = pile.Cards.Where(filter).ToList();
-			if (pile.Type == PileType.Draw)
-			{
-				list = (from c in list
-					orderby c.Rarity, c.Id
-					select c).ToList();
-			}
-			result = (await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			readOnlyList = pile.Cards;
 		}
 		else
 		{
-			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.None);
-			if (ShouldSelectLocalCard(player))
+			IReadOnlyList<CardModel> readOnlyList2 = pile.Cards.Where(filter).ToList();
+			readOnlyList = readOnlyList2;
+		}
+		IEnumerable<CardModel> enumerable = readOnlyList;
+		int num = enumerable.Count();
+		IEnumerable<CardModel> result;
+		if (num == 0)
+		{
+			result = Array.Empty<CardModel>();
+		}
+		else if (!prefs.RequireManualConfirmation && num <= prefs.MinSelect)
+		{
+			result = enumerable;
+		}
+		else if (selector != null)
+		{
+			if (pile.Type == PileType.Draw)
+			{
+				enumerable = from x in enumerable
+					orderby x.Rarity, x
+					select x;
+			}
+			result = (await selector.GetSelectedCards(enumerable, prefs.MinSelect, prefs.MaxSelect)).ToList();
+		}
+		else if (ShouldSelectLocalCard(player))
+		{
+			ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+			if (localSelector != null)
+			{
+				if (pile.Type == PileType.Draw)
+				{
+					enumerable = from x in enumerable
+						orderby x.Rarity, x
+						select x;
+				}
+				result = (await localSelector.GetSelectedCards(enumerable, prefs.MinSelect, prefs.MaxSelect)).ToList();
+			}
+			else
 			{
 				NPlayerHand.Instance?.CancelAllCardPlay();
 				NCombatPileCardSelectScreen nCombatPileCardSelectScreen = NCombatPileCardSelectScreen.Create(pile, prefs, filter);
 				NOverlayStack.Instance.Push(nCombatPileCardSelectScreen);
 				result = (await nCombatPileCardSelectScreen.CardsSelected()).ToList();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableCombatCards(result));
+				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId.Value, PlayerChoiceResult.FromMutableCombatCards(result));
 			}
-			else
-			{
-				result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId)).AsCombatCards();
-			}
+		}
+		else
+		{
+			result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId.Value)).AsCombatCards();
+		}
+		if (choiceId.HasValue)
+		{
 			await context.SignalPlayerChoiceEnded();
 		}
 		LogChoice(player, result);
@@ -444,23 +369,32 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
 		IEnumerable<CardModel> enumerable;
 		if (list.Count <= prefs.MinSelect && !prefs.RequireManualConfirmation)
 		{
 			enumerable = list;
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			enumerable = await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+			enumerable = await selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 		}
 		else
 		{
 			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
 			if (ShouldSelectLocalCard(player))
 			{
-				NDeckUpgradeSelectScreen nDeckUpgradeSelectScreen = NDeckUpgradeSelectScreen.ShowScreen(list, prefs, player.RunState);
-				enumerable = await nDeckUpgradeSelectScreen.CardsSelected();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+				if (localSelector != null)
+				{
+					enumerable = await localSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+				}
+				else
+				{
+					NDeckUpgradeSelectScreen nDeckUpgradeSelectScreen = NDeckUpgradeSelectScreen.ShowScreen(list, prefs, player.RunState);
+					enumerable = await nDeckUpgradeSelectScreen.CardsSelected();
+					RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				}
 			}
 			else
 			{
@@ -489,27 +423,36 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
 		IEnumerable<CardModel> enumerable;
 		if (list.Count <= prefs.MinSelect && !prefs.RequireManualConfirmation)
 		{
 			enumerable = list;
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			enumerable = await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+			enumerable = await selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 		}
 		else
 		{
 			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
 			if (ShouldSelectLocalCard(player))
 			{
-				if (cardToTransformation == null)
+				ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+				if (localSelector != null)
 				{
-					cardToTransformation = (CardModel c) => new CardTransformation(c);
+					enumerable = await localSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 				}
-				NDeckTransformSelectScreen nDeckTransformSelectScreen = NDeckTransformSelectScreen.ShowScreen(list, cardToTransformation, prefs);
-				enumerable = await nDeckTransformSelectScreen.CardsSelected();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				else
+				{
+					if (cardToTransformation == null)
+					{
+						cardToTransformation = (CardModel c) => new CardTransformation(c);
+					}
+					NDeckTransformSelectScreen nDeckTransformSelectScreen = NDeckTransformSelectScreen.ShowScreen(list, cardToTransformation, prefs);
+					enumerable = await nDeckTransformSelectScreen.CardsSelected();
+					RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				}
 			}
 			else
 			{
@@ -572,14 +515,15 @@ public static class CardSelectCmd
 			Dictionary<CardModel, int> indexMap = PileType.Deck.GetPile(owner).Cards.Select((CardModel card, int index) => new { card, index }).ToDictionary(x => x.card, x => x.index);
 			list = cards.OrderBy((CardModel c) => indexMap[c]).ToList();
 		}
+		ICardSelector cardSelector = ((cards.Count > 0) ? RunManager.Instance.CardSelectorStack.GetSelector(cards[0].Owner) : null);
 		IEnumerable<CardModel> enumerable;
 		if (cards.Count <= prefs.MinSelect)
 		{
 			enumerable = cards;
 		}
-		else if (Selector != null)
+		else if (cardSelector != null)
 		{
-			enumerable = await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+			enumerable = await cardSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 		}
 		else
 		{
@@ -591,9 +535,17 @@ public static class CardSelectCmd
 			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
 			if (ShouldSelectLocalCard(player))
 			{
-				NDeckEnchantSelectScreen nDeckEnchantSelectScreen = NDeckEnchantSelectScreen.ShowScreen(list, enchantment, amount, prefs);
-				enumerable = await nDeckEnchantSelectScreen.CardsSelected();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+				if (localSelector != null)
+				{
+					enumerable = await localSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+				}
+				else
+				{
+					NDeckEnchantSelectScreen nDeckEnchantSelectScreen = NDeckEnchantSelectScreen.ShowScreen(list, enchantment, amount, prefs);
+					enumerable = await nDeckEnchantSelectScreen.CardsSelected();
+					RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				}
 			}
 			else
 			{
@@ -649,24 +601,33 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
 		IEnumerable<CardModel> enumerable;
 		if (!prefs.RequireManualConfirmation && list.Count <= prefs.MinSelect)
 		{
 			enumerable = list;
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			enumerable = await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+			enumerable = await selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 		}
 		else
 		{
 			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
 			if (ShouldSelectLocalCard(player))
 			{
-				NDeckCardSelectScreen nDeckCardSelectScreen = NDeckCardSelectScreen.Create(list, prefs);
-				NOverlayStack.Instance.Push(nDeckCardSelectScreen);
-				enumerable = await nDeckCardSelectScreen.CardsSelected();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+				if (localSelector != null)
+				{
+					enumerable = await localSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+				}
+				else
+				{
+					NDeckCardSelectScreen nDeckCardSelectScreen = NDeckCardSelectScreen.Create(list, prefs);
+					NOverlayStack.Instance.Push(nDeckCardSelectScreen);
+					enumerable = await nDeckCardSelectScreen.CardsSelected();
+					RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableDeckCards(enumerable));
+				}
 			}
 			else
 			{
@@ -695,9 +656,17 @@ public static class CardSelectCmd
 		{
 			return Array.Empty<CardModel>();
 		}
-		if (ShouldSelectLocalCard(player))
+		if (player.Creature.IsDead)
 		{
-			NPlayerHand.Instance?.CancelAllCardPlay();
+			return Array.Empty<CardModel>();
+		}
+		UndoEndTurnIfNecessary(player);
+		uint? choiceId = null;
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
+		if (selector == null)
+		{
+			choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.CancelPlayCardActions);
 		}
 		List<CardModel> list = PileType.Hand.GetPile(player).Cards.Where(filter ?? ((Func<CardModel, bool>)((CardModel _) => true))).ToList();
 		IEnumerable<CardModel> result;
@@ -709,23 +678,29 @@ public static class CardSelectCmd
 		{
 			result = list;
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			result = await Selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
+			result = await selector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 		}
-		else
+		else if (ShouldSelectLocalCard(player))
 		{
-			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.CancelPlayCardActions);
-			if (ShouldSelectLocalCard(player))
+			ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+			if (localSelector != null)
 			{
-				result = await NCombatRoom.Instance.Ui.Hand.SelectCards(prefs, filter, source);
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableCombatCards(result));
+				result = await localSelector.GetSelectedCards(list, prefs.MinSelect, prefs.MaxSelect);
 			}
 			else
 			{
-				result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId)).AsCombatCards();
+				result = await NCombatRoom.Instance.Ui.Hand.SelectCards(prefs, filter, source);
+				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId.Value, PlayerChoiceResult.FromMutableCombatCards(result));
 			}
+		}
+		else
+		{
+			result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId.Value)).AsCombatCards();
+		}
+		if (choiceId.HasValue)
+		{
 			await context.SignalPlayerChoiceEnded();
 		}
 		LogChoice(player, result);
@@ -774,9 +749,13 @@ public static class CardSelectCmd
 		{
 			return null;
 		}
-		if (ShouldSelectLocalCard(player))
+		UndoEndTurnIfNecessary(player);
+		uint? choiceId = null;
+		ICardSelector selector = RunManager.Instance.CardSelectorStack.GetSelector(player);
+		if (selector == null)
 		{
-			NPlayerHand.Instance?.CancelAllCardPlay();
+			choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
+			await context.SignalPlayerChoiceBegun(player, PlayerChoiceOptions.CancelPlayCardActions);
 		}
 		List<CardModel> list = PileType.Hand.GetPile(player).Cards.Where((CardModel c) => c.IsUpgradable).ToList();
 		CardModel result;
@@ -784,23 +763,29 @@ public static class CardSelectCmd
 		{
 			result = list.FirstOrDefault();
 		}
-		else if (Selector != null)
+		else if (selector != null)
 		{
-			result = (await Selector.GetSelectedCards(list, 1, 1)).FirstOrDefault();
+			result = (await selector.GetSelectedCards(list, 1, 1)).FirstOrDefault();
 		}
-		else
+		else if (ShouldSelectLocalCard(player))
 		{
-			uint choiceId = RunManager.Instance.PlayerChoiceSynchronizer.ReserveChoiceId(player);
-			await context.SignalPlayerChoiceBegun(PlayerChoiceOptions.CancelPlayCardActions);
-			if (ShouldSelectLocalCard(player))
+			ICardSelector localSelector = RunManager.Instance.CardSelectorStack.LocalSelector;
+			if (localSelector != null)
 			{
-				result = (await NCombatRoom.Instance.Ui.Hand.SelectCards(new CardSelectorPrefs(new LocString("gameplay_ui", "CHOOSE_CARD_UPGRADE_HEADER"), 1), (CardModel c) => c.IsUpgradable, source, NPlayerHand.Mode.UpgradeSelect)).FirstOrDefault();
-				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromMutableCombatCard(result));
+				result = (await localSelector.GetSelectedCards(list, 1, 1)).FirstOrDefault();
 			}
 			else
 			{
-				result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId)).AsCombatCards().FirstOrDefault();
+				result = (await NCombatRoom.Instance.Ui.Hand.SelectCards(new CardSelectorPrefs(new LocString("gameplay_ui", "CHOOSE_CARD_UPGRADE_HEADER"), 1), (CardModel c) => c.IsUpgradable, source, NPlayerHand.Mode.UpgradeSelect)).FirstOrDefault();
+				RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId.Value, PlayerChoiceResult.FromMutableCombatCard(result));
 			}
+		}
+		else
+		{
+			result = (await RunManager.Instance.PlayerChoiceSynchronizer.WaitForRemoteChoice(player, choiceId.Value)).AsCombatCards().FirstOrDefault();
+		}
+		if (choiceId.HasValue)
+		{
 			await context.SignalPlayerChoiceEnded();
 		}
 		LogChoice(player, new global::_003C_003Ez__ReadOnlySingleElementList<CardModel>(result));
@@ -812,8 +797,9 @@ public static class CardSelectCmd
 	/// </summary>
 	/// <param name="player">Player choosing the bundle.</param>
 	/// <param name="bundles">Bundles for them to choose from.</param>
+	/// <param name="canSkip">If you can skip the card bundle choice</param>
 	/// <returns>Chosen bundle.</returns>
-	public static async Task<IEnumerable<CardModel>> FromChooseABundleScreen(Player player, IReadOnlyList<IReadOnlyList<CardModel>> bundles)
+	public static async Task<IEnumerable<CardModel>> FromChooseABundleScreen(Player player, IReadOnlyList<IReadOnlyList<CardModel>> bundles, bool canSkip = false)
 	{
 		if (CombatManager.Instance.IsEnding)
 		{
@@ -832,7 +818,7 @@ public static class CardSelectCmd
 		}
 		else if (ShouldSelectLocalCard(player))
 		{
-			NChooseABundleSelectionScreen nChooseABundleSelectionScreen = NChooseABundleSelectionScreen.ShowScreen(bundles);
+			NChooseABundleSelectionScreen nChooseABundleSelectionScreen = NChooseABundleSelectionScreen.ShowScreen(bundles, canSkip);
 			readOnlyList = (await nChooseABundleSelectionScreen.CardsSelected()).FirstOrDefault() ?? Array.Empty<CardModel>();
 			RunManager.Instance.PlayerChoiceSynchronizer.SyncLocalChoice(player, choiceId, PlayerChoiceResult.FromIndex(bundles.IndexOf<IReadOnlyList<CardModel>>(readOnlyList)));
 		}
@@ -860,5 +846,24 @@ public static class CardSelectCmd
 		string value = string.Join(",", from c in cards.OfType<CardModel>()
 			select c.Id.Entry);
 		Log.Info($"Player {player.NetId} chose cards [{value}]");
+	}
+
+	/// <summary>
+	/// Undoes the end of player turn if it is the player turn, and they have already ended their turn.
+	///
+	/// Typically, player choices only occur during GameActions initiated by the choosing player. Since EndTurnAction is
+	/// itself a GameAction, the player may only end their turn after all player choices they have initiated are
+	/// completed.
+	///
+	/// The problem comes when the player themselves have not initiated the player choice. If another player initiates a
+	/// choice on a player that has already ended their turn, we should un-end the choosing player's turn and force them
+	/// to end their turn again.
+	/// </summary>
+	private static void UndoEndTurnIfNecessary(Player player)
+	{
+		if (CombatManager.Instance.IsPlayerReadyToEndTurn(player) && player.Creature.CombatState != null && player.Creature.CombatState.CurrentSide == CombatSide.Player)
+		{
+			CombatManager.Instance.TryUndoReadyToEndTurn(player);
+		}
 	}
 }

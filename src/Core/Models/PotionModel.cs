@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -94,6 +95,10 @@ public abstract class PotionModel : AbstractModel
 		}
 	}
 
+	public string LargeImagePath => ImageHelper.GetImagePath("potions/large/" + base.Id.Entry.ToLowerInvariant() + ".png");
+
+	public Texture2D LargeImage => ResourceLoader.Load<Texture2D>(ResourceLoader.Exists(LargeImagePath) ? LargeImagePath : ImageHelper.GetImagePath("potions/missing_potion.png"), null, ResourceLoader.CacheMode.Reuse);
+
 	public abstract PotionRarity Rarity { get; }
 
 	public abstract PotionUsage Usage { get; }
@@ -176,6 +181,11 @@ public abstract class PotionModel : AbstractModel
 	public IEnumerable<IHoverTip> HoverTips => new IHoverTip[1] { HoverTip }.Concat(ExtraHoverTips);
 
 	public virtual IEnumerable<IHoverTip> ExtraHoverTips => Array.Empty<IHoverTip>();
+
+	/// <summary>
+	/// HoverTip for the Fugitive's Arrows. Include in ExtraHoverTips when this potion mentions Arrows.
+	/// </summary>
+	protected IHoverTip ArrowHoverTip => HoverTipFactory.ForArrow(base.IsMutable ? _owner : null);
 
 	public PotionModel CanonicalInstance
 	{
@@ -321,24 +331,30 @@ public abstract class PotionModel : AbstractModel
 			NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(child);
 			await Cmd.Wait(0.5f);
 		}
-		CombatManager.Instance.BeginCardOrPotionEffect(Owner);
+		CombatId? effectCombatId = CombatManager.Instance.BeginCardOrPotionEffect(Owner);
 		try
 		{
-			await OnUse(choiceContext, target);
+			BranchingPlayerChoiceContext branchingPlayerChoiceContext = new BranchingPlayerChoiceContext(this, LocalContext.NetId.Value, choiceContext);
+			branchingPlayerChoiceContext.PushModel(this);
+			Task task = OnUse(branchingPlayerChoiceContext, target);
+			await branchingPlayerChoiceContext.AssignTaskAndWaitForPauseOrCompletion(task);
 		}
 		finally
 		{
-			CombatManager.Instance.EndCardOrPotionEffect(Owner);
+			await CombatManager.Instance.EndCardOrPotionEffect(effectCombatId, Owner);
 		}
-		InvokeExecutionFinished();
-		if (combatState != null && CombatManager.Instance.IsInProgress)
+		if (!Owner.Creature.IsDead)
 		{
-			CombatManager.Instance.History.PotionUsed(combatState, this, target);
+			InvokeExecutionFinished();
+			if (combatState != null && CombatManager.Instance.IsCurrentLiveCombat(effectCombatId))
+			{
+				CombatManager.Instance.History.PotionUsed(combatState, this, target);
+			}
+			await Hook.AfterPotionUsed(Owner.RunState, combatState, this, target);
+			Owner.RunState.CurrentMapPointHistoryEntry?.GetEntry(Owner.NetId).PotionUsed.Add(base.Id);
+			await CombatManager.Instance.CheckForEmptyHand(effectCombatId, choiceContext, Owner);
+			choiceContext.PopModel(this);
 		}
-		await Hook.AfterPotionUsed(Owner.RunState, combatState, this, target);
-		Owner.RunState.CurrentMapPointHistoryEntry?.GetEntry(Owner.NetId).PotionUsed.Add(base.Id);
-		await CombatManager.Instance.CheckForEmptyHand(choiceContext, Owner);
-		choiceContext.PopModel(this);
 	}
 
 	public void AfterUsageCanceled()

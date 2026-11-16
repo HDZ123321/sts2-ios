@@ -22,6 +22,8 @@ public class MerchantDialogueSet
 
 	private readonly List<LocString> _purchaseFailureForbiddenLines = new List<LocString>();
 
+	private readonly List<LocString> _blitzFinishedLines = new List<LocString>();
+
 	/// <summary>
 	/// Lines for when the player enters the merchant room.
 	/// </summary>
@@ -43,6 +45,11 @@ public class MerchantDialogueSet
 	/// </summary>
 	public IReadOnlyList<LocString> OpenInventoryLines => _openInventoryLines;
 
+	/// <summary>
+	/// Lines for Blitz, when the player has no more options remaining.
+	/// </summary>
+	public IReadOnlyList<LocString> BlitzFinishedLines => _blitzFinishedLines;
+
 	public static MerchantDialogueSet CreateFromLocStrings(IEnumerable<LocString> locStrings)
 	{
 		MerchantDialogueSet merchantDialogueSet = new MerchantDialogueSet();
@@ -59,6 +66,7 @@ public class MerchantDialogueSet
 				"purchaseFailureGold" => merchantDialogueSet._purchaseFailureGoldLines, 
 				"purchaseFailureSpace" => merchantDialogueSet._purchaseFailureSpaceLines, 
 				"purchaseFailureForbidden" => merchantDialogueSet._purchaseFailureForbiddenLines, 
+				"blitzFinishedLines" => merchantDialogueSet._blitzFinishedLines, 
 				_ => throw new InvalidOperationException("Unexpected merchant dialogue key: " + text), 
 			}).Add(locString);
 		}

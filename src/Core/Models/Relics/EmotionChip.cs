@@ -51,7 +51,7 @@ public sealed class EmotionChip : RelicModel
 		Flash();
 		foreach (OrbModel orb in base.Owner.PlayerCombatState.OrbQueue.Orbs)
 		{
-			await OrbCmd.Passive(choiceContext, orb, null);
+			await OrbCmd.Passive(choiceContext, orb, null, countAffectedByHooks: true);
 			await Cmd.Wait(0.25f);
 		}
 	}

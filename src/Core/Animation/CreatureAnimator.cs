@@ -46,10 +46,10 @@ public class CreatureAnimator
 			return;
 		}
 		MegaAnimationState animationState = _spineController.GetAnimationState();
-		MegaTrackEntry current = animationState.GetCurrent(0);
-		if (current != null)
+		using MegaTrackEntry megaTrackEntry = animationState.GetCurrent(0);
+		if (megaTrackEntry != null)
 		{
-			current.SetTrackTime(Rng.Chaotic.NextFloat(current.GetAnimationEnd()));
+			megaTrackEntry.SetTrackTime(Rng.Chaotic.NextFloat(megaTrackEntry.GetAnimationEnd()));
 			animationState.Update(0f);
 			MegaSkeleton skeleton = _spineController.GetSkeleton();
 			if (skeleton != null)
@@ -84,6 +84,10 @@ public class CreatureAnimator
 
 	private void SetNextState(AnimState state)
 	{
+		if (_currentState.BoundsContainer != null)
+		{
+			this.BoundsUpdated?.Invoke(_currentState.BoundsContainer);
+		}
 		_currentState = state;
 		if (!_spineController.HasAnimation(_currentState.Id))
 		{
@@ -95,24 +99,29 @@ public class CreatureAnimator
 		animationState.SetAnimation(_currentState.Id, _currentState.IsLooping);
 		if (_currentState.IsLooping)
 		{
-			MegaTrackEntry current = animationState.GetCurrent(0);
-			if (current != null)
+			using MegaTrackEntry megaTrackEntry = animationState.GetCurrent(0);
+			if (megaTrackEntry != null)
 			{
-				OffsetLoopingAnimation(current);
+				OffsetLoopingAnimation(megaTrackEntry);
 			}
 		}
 		if (state.BoundsContainer != null)
 		{
 			this.BoundsUpdated?.Invoke(state.BoundsContainer);
 		}
-		if (state.NextState != null)
+		AnimState nextState = _currentState.GetNextState();
+		if (nextState != null)
 		{
-			AddNextState(state.NextState);
+			AddNextState(nextState);
 		}
 	}
 
-	private void AddNextState(AnimState state)
+	private void AddNextState(AnimState? state)
 	{
+		if (state == null)
+		{
+			return;
+		}
 		if (!_spineController.HasAnimation(state.Id))
 		{
 			string value = (_spineController.BoundObject as Node)?.Name.ToString() ?? "unknown";
@@ -120,14 +129,19 @@ public class CreatureAnimator
 			return;
 		}
 		MegaAnimationState animationState = _spineController.GetAnimationState();
-		MegaTrackEntry track = animationState.AddAnimation(state.Id, 0f, state.IsLooping);
 		if (state.IsLooping)
 		{
+			using MegaTrackEntry track = animationState.AddAnimationTracked(state.Id, 0f, state.IsLooping);
 			OffsetLoopingAnimation(track);
 		}
-		if (state.NextState != null)
+		else
 		{
-			AddNextState(state.NextState);
+			animationState.AddAnimation(state.Id, 0f, state.IsLooping);
+		}
+		AnimState nextState = state.GetNextState();
+		if (nextState != null)
+		{
+			AddNextState(nextState);
 		}
 	}
 
@@ -152,9 +166,10 @@ public class CreatureAnimator
 		{
 			_currentState.MarkHasLooped();
 		}
-		if (_currentState.NextState != null)
+		AnimState nextState = _currentState.GetNextState();
+		if (nextState != null)
 		{
-			_currentState = _currentState.NextState;
+			_currentState = nextState;
 		}
 	}
 

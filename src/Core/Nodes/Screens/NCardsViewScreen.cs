@@ -41,6 +41,11 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		public static readonly StringName ConnectSignals = "ConnectSignals";
 
 		/// <summary>
+		/// Cached name for the 'OnInspectVisibilityChanged' method.
+		/// </summary>
+		public static readonly StringName OnInspectVisibilityChanged = "OnInspectVisibilityChanged";
+
+		/// <summary>
 		/// Cached name for the 'OnInspectCardHidden' method.
 		/// </summary>
 		public static readonly StringName OnInspectCardHidden = "OnInspectCardHidden";
@@ -120,6 +125,11 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		/// Cached name for the '_bottomLabel' field.
 		/// </summary>
 		public static readonly StringName _bottomLabel = "_bottomLabel";
+
+		/// <summary>
+		/// Cached name for the '_inspectCardScreen' field.
+		/// </summary>
+		public static readonly StringName _inspectCardScreen = "_inspectCardScreen";
 	}
 
 	/// <summary>
@@ -140,6 +150,8 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 	private RichTextLabel _bottomLabel;
 
 	protected List<CardModel> _cards;
+
+	private NInspectCardScreen? _inspectCardScreen;
 
 	protected LocString _infoText;
 
@@ -184,13 +196,22 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		List<CardModel> list = _grid.CurrentlyDisplayedCards.ToList();
 		NInspectCardScreen inspectCardScreen = NGame.Instance.GetInspectCardScreen();
 		inspectCardScreen.Open(list, list.IndexOf(cardModel), _grid.IsShowingUpgrades);
-		inspectCardScreen.Connect(CanvasItem.SignalName.VisibilityChanged, Callable.From(delegate
+		Callable callable = Callable.From(OnInspectVisibilityChanged);
+		if (inspectCardScreen.IsConnected(CanvasItem.SignalName.VisibilityChanged, callable))
 		{
-			if (!inspectCardScreen.Visible)
-			{
-				OnInspectCardHidden();
-			}
-		}), 4u);
+			inspectCardScreen.Disconnect(CanvasItem.SignalName.VisibilityChanged, callable);
+		}
+		_inspectCardScreen = inspectCardScreen;
+		inspectCardScreen.Connect(CanvasItem.SignalName.VisibilityChanged, callable, 4u);
+	}
+
+	private void OnInspectVisibilityChanged()
+	{
+		NInspectCardScreen inspectCardScreen = _inspectCardScreen;
+		if (inspectCardScreen != null && !inspectCardScreen.Visible)
+		{
+			OnInspectCardHidden();
+		}
 	}
 
 	protected virtual void OnInspectCardHidden()
@@ -221,8 +242,8 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 
 	private void OnControllerStateUpdated()
 	{
-		_showUpgrades.Visible = !NControllerManager.Instance.IsUsingController;
-		if (NControllerManager.Instance.IsUsingController)
+		_showUpgrades.Visible = !NControllerManager.Instance.IsUsingDirectionalNavigation;
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_showUpgrades.IsTicked = false;
 			ToggleShowUpgrades(_showUpgrades);
@@ -237,9 +258,10 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(8);
+		List<MethodInfo> list = new List<MethodInfo>(9);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ConnectSignals, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.OnInspectVisibilityChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnInspectCardHidden, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ToggleShowUpgrades, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -268,6 +290,12 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		if (method == MethodName.ConnectSignals && args.Count == 0)
 		{
 			ConnectSignals();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.OnInspectVisibilityChanged && args.Count == 0)
+		{
+			OnInspectVisibilityChanged();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -319,6 +347,10 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 			return true;
 		}
 		if (method == MethodName.ConnectSignals)
+		{
+			return true;
+		}
+		if (method == MethodName.OnInspectVisibilityChanged)
 		{
 			return true;
 		}
@@ -378,6 +410,11 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 			_bottomLabel = VariantUtils.ConvertTo<RichTextLabel>(in value);
 			return true;
 		}
+		if (name == PropertyName._inspectCardScreen)
+		{
+			_inspectCardScreen = VariantUtils.ConvertTo<NInspectCardScreen>(in value);
+			return true;
+		}
 		return base.SetGodotClassPropertyValue(in name, in value);
 	}
 
@@ -433,6 +470,11 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 			value = VariantUtils.CreateFrom(in _bottomLabel);
 			return true;
 		}
+		if (name == PropertyName._inspectCardScreen)
+		{
+			value = VariantUtils.CreateFrom(in _inspectCardScreen);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -450,6 +492,7 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._backButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._showUpgrades, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._bottomLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._inspectCardScreen, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Int, PropertyName.ScreenType, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.DefaultFocusedControl, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.FocusedControlFromTopBar, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -467,6 +510,7 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		info.AddProperty(PropertyName._backButton, Variant.From(in _backButton));
 		info.AddProperty(PropertyName._showUpgrades, Variant.From(in _showUpgrades));
 		info.AddProperty(PropertyName._bottomLabel, Variant.From(in _bottomLabel));
+		info.AddProperty(PropertyName._inspectCardScreen, Variant.From(in _inspectCardScreen));
 	}
 
 	/// <inheritdoc />
@@ -493,6 +537,10 @@ public abstract class NCardsViewScreen : Control, ICapstoneScreen, IScreenContex
 		if (info.TryGetProperty(PropertyName._bottomLabel, out var value5))
 		{
 			_bottomLabel = value5.As<RichTextLabel>();
+		}
+		if (info.TryGetProperty(PropertyName._inspectCardScreen, out var value6))
+		{
+			_inspectCardScreen = value6.As<NInspectCardScreen>();
 		}
 	}
 }

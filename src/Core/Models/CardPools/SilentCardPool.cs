@@ -23,7 +23,7 @@ public sealed class SilentCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[88]
+		return new CardModel[91]
 		{
 			ModelDb.Card<Abrasive>(),
 			ModelDb.Card<Accelerant>(),
@@ -37,6 +37,7 @@ public sealed class SilentCardPool : CardPoolModel
 			ModelDb.Card<Backstab>(),
 			ModelDb.Card<BladeOfInk>(),
 			ModelDb.Card<BladeDance>(),
+			ModelDb.Card<BladeSymphony>(),
 			ModelDb.Card<Blur>(),
 			ModelDb.Card<BouncingFlask>(),
 			ModelDb.Card<BubbleBubble>(),
@@ -45,6 +46,7 @@ public sealed class SilentCardPool : CardPoolModel
 			ModelDb.Card<CalculatedGamble>(),
 			ModelDb.Card<CloakAndDagger>(),
 			ModelDb.Card<CorrosiveWave>(),
+			ModelDb.Card<Concoct>(),
 			ModelDb.Card<DaggerSpray>(),
 			ModelDb.Card<DaggerThrow>(),
 			ModelDb.Card<Dash>(),
@@ -57,12 +59,13 @@ public sealed class SilentCardPool : CardPoolModel
 			ModelDb.Card<EscapePlan>(),
 			ModelDb.Card<Expertise>(),
 			ModelDb.Card<Expose>(),
+			ModelDb.Card<Fade>(),
 			ModelDb.Card<FanOfKnives>(),
 			ModelDb.Card<Finisher>(),
 			ModelDb.Card<Flanking>(),
 			ModelDb.Card<Flechettes>(),
 			ModelDb.Card<FlickFlack>(),
-			ModelDb.Card<Scare>(),
+			ModelDb.Card<Sidestep>(),
 			ModelDb.Card<Footwork>(),
 			ModelDb.Card<GrandFinale>(),
 			ModelDb.Card<HandTrick>(),

@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Random;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace MegaCrit.Sts2.Core.Nodes.Screens.Bestiary;
 
@@ -87,11 +88,12 @@ public class NBestiaryLayoutDefault : NBestiaryLayout
 	{
 		MonsterModel monsterModel = entry.monsterModel.ToMutable();
 		monsterModel.Rng = Rng.Chaotic;
+		monsterModel.RunRng = new RunRngSet(Rng.Chaotic);
 		_creature?.QueueFreeSafely();
 		monsterModel.SetUpForCombat();
 		Creature entity = new Creature(monsterModel, CombatSide.Enemy, null)
 		{
-			CombatState = new NullCombatState()
+			CombatState = NullCombatState.Instance
 		};
 		_creature = NCreature.Create(entity);
 		_creatureContainer.AddChildSafely(_creature);

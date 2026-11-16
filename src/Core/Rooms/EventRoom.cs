@@ -55,7 +55,11 @@ public class EventRoom : AbstractRoom
 
 	public override async Task EnterInternal(IRunState? runState, bool isRestoringRoomStackBase)
 	{
-		await PreloadManager.LoadRoomEventAssets(CanonicalEvent, runState ?? NullRunState.Instance);
+		bool preloadsAfterCombatState = CanonicalEvent.LayoutType == EventLayoutType.Combat;
+		if (!preloadsAfterCombatState)
+		{
+			await PreloadManager.LoadRoomEventAssets(CanonicalEvent, runState ?? NullRunState.Instance);
+		}
 		RunManager.Instance.EventSynchronizer.BeginEvent(CanonicalEvent, IsPreFinished, OnStart);
 		foreach (EventModel @event in RunManager.Instance.EventSynchronizer.Events)
 		{
@@ -66,9 +70,10 @@ public class EventRoom : AbstractRoom
 			}
 		}
 		EventModel localEvent = RunManager.Instance.EventSynchronizer.GetLocalEvent();
-		if (localEvent.LayoutType == EventLayoutType.Combat)
+		RunManager.Instance.EventSynchronizer.GenerateInternalCombatStateIfNecessary(localEvent);
+		if (preloadsAfterCombatState)
 		{
-			localEvent.GenerateInternalCombatState(runState ?? NullRunState.Instance);
+			await PreloadManager.LoadRoomEventAssets(localEvent, runState ?? NullRunState.Instance);
 		}
 		if (!isRestoringRoomStackBase)
 		{
@@ -90,10 +95,7 @@ public class EventRoom : AbstractRoom
 		{
 			RunManager.Instance.ChecksumTracker.GenerateChecksum($"Exiting event room {localEvent.Id}", null);
 		}
-		if (localEvent.LayoutType == EventLayoutType.Combat)
-		{
-			localEvent.ResetInternalCombatState();
-		}
+		RunManager.Instance.EventSynchronizer.BeforeExitingRoom();
 		foreach (EventModel @event in RunManager.Instance.EventSynchronizer.Events)
 		{
 			@event.StateChanged -= OnEventStateChanged;

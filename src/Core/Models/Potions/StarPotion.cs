@@ -15,12 +15,13 @@ public sealed class StarPotion : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new StarsVar(3));
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		await PlayerCmd.GainStars(base.DynamicVars.Stars.BaseValue, base.Owner);
+		PotionModel.AssertValidForTargetedPotion(target);
+		await PlayerCmd.GainStars(base.DynamicVars.Stars.BaseValue, target.Player);
 	}
 }

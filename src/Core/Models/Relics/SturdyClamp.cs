@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Relics;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -39,7 +40,7 @@ public sealed class SturdyClamp : RelicModel
 		{
 			if (block > 10)
 			{
-				await CreatureCmd.LoseBlock(creature, block - 10);
+				await CreatureCmd.LoseBlock(new BlockingPlayerChoiceContext(), creature, block - 10, null);
 			}
 			Flash();
 		}

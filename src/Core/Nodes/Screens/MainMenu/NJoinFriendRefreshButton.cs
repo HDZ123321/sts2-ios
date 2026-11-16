@@ -96,7 +96,7 @@ public class NJoinFriendRefreshButton : NButton
 
 	private ShaderMaterial _hsv;
 
-	protected override string[] Hotkeys => new string[1] { MegaInput.accept };
+	protected override string[] Hotkeys => new string[1] { MegaInput.confirm };
 
 	public ulong PlayerId { get; private set; }
 

@@ -113,7 +113,7 @@ public sealed class DollRoom : EventModel
 	/// </summary>
 	private async Task TakeSomeTime()
 	{
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, (DamageVar)base.DynamicVars["TakeTimeHpLoss"], null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, (DamageVar)base.DynamicVars["TakeTimeHpLoss"], null, null, null);
 		IEnumerable<DollChoice> enumerable = _dolls.ToList().StableShuffle(base.Rng).Take(2);
 		List<EventOption> list = new List<EventOption>();
 		foreach (DollChoice item in enumerable)
@@ -128,7 +128,7 @@ public sealed class DollRoom : EventModel
 	/// </summary>
 	private async Task Examine()
 	{
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, (DamageVar)base.DynamicVars["ExamineHpLoss"], null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, (DamageVar)base.DynamicVars["ExamineHpLoss"], null, null, null);
 		IEnumerable<DollChoice> enumerable = _dolls.ToList().StableShuffle(base.Rng);
 		List<EventOption> list = new List<EventOption>();
 		foreach (DollChoice item in enumerable)

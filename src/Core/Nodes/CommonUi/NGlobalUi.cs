@@ -122,6 +122,11 @@ public class NGlobalUi : Control
 		public static readonly StringName TargetManager = "TargetManager";
 
 		/// <summary>
+		/// Cached name for the 'DebugInfo' property.
+		/// </summary>
+		public static readonly StringName DebugInfo = "DebugInfo";
+
+		/// <summary>
 		/// Cached name for the '_window' field.
 		/// </summary>
 		public static readonly StringName _window = "_window";
@@ -168,6 +173,8 @@ public class NGlobalUi : Control
 
 	public NTargetManager TargetManager { get; private set; }
 
+	public Control DebugInfo { get; private set; }
+
 	public override void _Ready()
 	{
 		_window = GetTree().Root;
@@ -186,6 +193,7 @@ public class NGlobalUi : Control
 		TargetManager = GetNode<NTargetManager>("TargetManager");
 		TimeoutOverlay = GetNode<NMultiplayerTimeoutOverlay>("%MultiplayerTimeoutOverlay");
 		AboveTopBarVfxContainer = GetNode<Control>("%AboveTopBarVfxContainer");
+		DebugInfo = GetNode<Control>("%DebugInfo");
 	}
 
 	private void OnWindowChange()
@@ -364,6 +372,11 @@ public class NGlobalUi : Control
 			TargetManager = VariantUtils.ConvertTo<NTargetManager>(in value);
 			return true;
 		}
+		if (name == PropertyName.DebugInfo)
+		{
+			DebugInfo = VariantUtils.ConvertTo<Control>(in value);
+			return true;
+		}
 		if (name == PropertyName._window)
 		{
 			_window = VariantUtils.ConvertTo<Window>(in value);
@@ -450,6 +463,12 @@ public class NGlobalUi : Control
 			value = VariantUtils.CreateFrom<NTargetManager>(TargetManager);
 			return true;
 		}
+		if (name == PropertyName.DebugInfo)
+		{
+			from = DebugInfo;
+			value = VariantUtils.CreateFrom(in from);
+			return true;
+		}
 		if (name == PropertyName._window)
 		{
 			value = VariantUtils.CreateFrom(in _window);
@@ -482,6 +501,7 @@ public class NGlobalUi : Control
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.TimeoutOverlay, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.SubmenuStack, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.TargetManager, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.DebugInfo, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -504,6 +524,7 @@ public class NGlobalUi : Control
 		info.AddProperty(PropertyName.TimeoutOverlay, Variant.From<NMultiplayerTimeoutOverlay>(TimeoutOverlay));
 		info.AddProperty(PropertyName.SubmenuStack, Variant.From<NCapstoneSubmenuStack>(SubmenuStack));
 		info.AddProperty(PropertyName.TargetManager, Variant.From<NTargetManager>(TargetManager));
+		info.AddProperty(PropertyName.DebugInfo, Variant.From<Control>(DebugInfo));
 		info.AddProperty(PropertyName._window, Variant.From(in _window));
 	}
 
@@ -568,9 +589,13 @@ public class NGlobalUi : Control
 		{
 			TargetManager = value14.As<NTargetManager>();
 		}
-		if (info.TryGetProperty(PropertyName._window, out var value15))
+		if (info.TryGetProperty(PropertyName.DebugInfo, out var value15))
 		{
-			_window = value15.As<Window>();
+			DebugInfo = value15.As<Control>();
+		}
+		if (info.TryGetProperty(PropertyName._window, out var value16))
+		{
+			_window = value16.As<Window>();
 		}
 	}
 }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using Godot;
 using Godot.Bridge;
-using Godot.Collections;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Helpers;
@@ -16,7 +15,7 @@ using MegaCrit.Sts2.Core.Runs;
 namespace MegaCrit.Sts2.Core.Nodes.Audio;
 
 /// <summary>
-/// Manages the music specifically for run.
+/// Manages the music specifically for a run.
 /// Looking into info such as room type to decided what tracks to transition to.
 /// </summary>
 [ScriptPath("res://src/Core/Nodes/Audio/NRunMusicController.cs")]
@@ -152,6 +151,11 @@ public class NRunMusicController : Node
 		/// Cached name for the '_currentAmbience' field.
 		/// </summary>
 		public static readonly StringName _currentAmbience = "_currentAmbience";
+
+		/// <summary>
+		/// Cached name for the '_failedTrack' field.
+		/// </summary>
+		public static readonly StringName _failedTrack = "_failedTrack";
 	}
 
 	/// <summary>
@@ -167,21 +171,21 @@ public class NRunMusicController : Node
 
 	private const string _musicProgressParameter = "Progress";
 
-	private const string _updateGlobalParameterCallback = "update_global_parameter";
+	private static readonly StringName _updateGlobalParameterCallback = new StringName("update_global_parameter");
 
-	private const string _updateMusicParameterCallback = "update_music_parameter";
+	private static readonly StringName _updateMusicParameterCallback = new StringName("update_music_parameter");
 
-	private const string _updateMusicCallback = "update_music";
+	private static readonly StringName _updateMusicCallback = new StringName("update_music");
 
-	private const string _updateAmbienceCallback = "update_ambience";
+	private static readonly StringName _updateAmbienceCallback = new StringName("update_ambience");
 
-	private const string _updateCampfireAmbienceCallback = "update_campfire_ambience";
+	private static readonly StringName _updateCampfireAmbienceCallback = new StringName("update_campfire_ambience");
 
-	private const string _updateCustomTrack = "update_custom_track";
+	private static readonly StringName _updateCustomTrack = new StringName("update_custom_track");
 
-	private const string _loadActBanksCallback = "load_act_banks";
+	private static readonly StringName _loadActBankCallback = new StringName("load_act_bank");
 
-	private const string _unloadActBanksCallback = "unload_act_banks";
+	private static readonly StringName _unloadActBanksCallback = new StringName("unload_act_banks");
 
 	private const string _bgMusicRngName = "bg_music";
 
@@ -192,6 +196,8 @@ public class NRunMusicController : Node
 	private string? _currentTrack;
 
 	private string _currentAmbience;
+
+	private string? _failedTrack;
 
 	public static NRunMusicController? Instance => NRun.Instance?.RunMusicController;
 
@@ -249,7 +255,7 @@ public class NRunMusicController : Node
 	/// a no-op instead of stopping and recreating the FMOD event, which restarts the track from
 	/// the top. Two such calls fire on run start, from NRun._Ready and the act-entry path.
 	/// </summary>
-	public static MusicSelection? ResolveMusic(string? currentTrack, string[] options, string[] bankPaths, uint seed)
+	public static MusicSelection? ResolveMusic(string? currentTrack, string[] options, string[] bankPaths, ulong seed)
 	{
 		if (options.Length == 0)
 		{
@@ -266,17 +272,23 @@ public class NRunMusicController : Node
 
 	public void UpdateMusic()
 	{
-		if (!NonInteractiveMode.IsActive)
+		if (NonInteractiveMode.IsActive)
 		{
-			MusicSelection? musicSelection = ResolveMusic(_currentTrack, _runState.Act.BgMusicOptions, _runState.Act.MusicBankPaths, _runState.Rng.Seed);
-			if (musicSelection.HasValue)
+			return;
+		}
+		MusicSelection? musicSelection = ResolveMusic(_currentTrack, _runState.Act.BgMusicOptions, _runState.Act.MusicBankPaths, _runState.Rng.Seed);
+		if (musicSelection.HasValue && !(musicSelection.Value.Track == _failedTrack))
+		{
+			if (!LoadActBank(musicSelection.Value.BankPath, musicSelection.Value.Track))
 			{
-				LoadActBank(musicSelection.Value.BankPath);
-				_currentTrack = musicSelection.Value.Track;
-				_proxy.Call("update_music", _currentTrack);
-				_proxy.Call("update_global_parameter", "Progress", 0);
-				UpdateAmbience();
+				_failedTrack = musicSelection.Value.Track;
+				return;
 			}
+			_failedTrack = null;
+			_currentTrack = musicSelection.Value.Track;
+			_proxy.Call(_updateMusicCallback, _currentTrack);
+			_proxy.Call(_updateGlobalParameterCallback, "Progress", 0);
+			UpdateAmbience();
 		}
 	}
 
@@ -285,7 +297,7 @@ public class NRunMusicController : Node
 		if (!NonInteractiveMode.IsActive)
 		{
 			_proxy.Call(_stopMusic);
-			_proxy.Call("update_music", customMusic);
+			_proxy.Call(_updateMusicCallback, customMusic);
 		}
 	}
 
@@ -293,7 +305,7 @@ public class NRunMusicController : Node
 	{
 		if (!NonInteractiveMode.IsActive && RunManager.Instance.IsInProgress)
 		{
-			_proxy.Call("update_custom_track", customTrack, label);
+			_proxy.Call(_updateCustomTrack, customTrack, label);
 		}
 	}
 
@@ -304,8 +316,8 @@ public class NRunMusicController : Node
 			_proxy.Call(_stopMusic);
 			if (_currentTrack != null)
 			{
-				_proxy.Call("update_music", _currentTrack);
-				_proxy.Call("update_global_parameter", "Progress", 7);
+				_proxy.Call(_updateMusicCallback, _currentTrack);
+				_proxy.Call(_updateGlobalParameterCallback, "Progress", 7);
 			}
 		}
 	}
@@ -323,34 +335,39 @@ public class NRunMusicController : Node
 			if (_currentAmbience != ambientSfx)
 			{
 				_currentAmbience = ambientSfx;
-				_proxy.Call("update_ambience", _currentAmbience);
+				_proxy.Call(_updateAmbienceCallback, _currentAmbience);
 			}
 		}
 	}
 
 	public void UpdateTrack()
 	{
+		UpdateTrack(_runState.CurrentRoom.RoomType);
+	}
+
+	public void UpdateTrack(RoomType roomType)
+	{
 		if (!NonInteractiveMode.IsActive)
 		{
-			MusicProgressTrack track = GetTrack(_runState.CurrentRoom.RoomType);
+			MusicProgressTrack track = GetTrack(roomType);
 			UpdateTrack("Progress", (float)track);
 			if (_runState.CurrentRoom is RestSiteRoom)
 			{
-				_proxy.Call("update_campfire_ambience", 0);
+				_proxy.Call(_updateCampfireAmbienceCallback, 0);
 			}
 		}
 	}
 
 	private void UpdateTrack(string label, float trackIndex)
 	{
-		_proxy.Call("update_global_parameter", label, trackIndex);
+		_proxy.Call(_updateGlobalParameterCallback, label, trackIndex);
 	}
 
 	public void UpdateMusicParameter(string label, float trackIndex)
 	{
 		if (!NonInteractiveMode.IsActive)
 		{
-			_proxy.Call("update_music_parameter", label, trackIndex);
+			_proxy.Call(_updateMusicParameterCallback, label, trackIndex);
 		}
 	}
 
@@ -364,7 +381,7 @@ public class NRunMusicController : Node
 			}
 			NMapScreen? instance = NMapScreen.Instance;
 			MusicProgressTrack musicProgressTrack = ((instance != null && instance.IsVisible()) ? MusicProgressTrack.MerchantEnd : MusicProgressTrack.Merchant);
-			_proxy.Call("update_global_parameter", "Progress", (int)musicProgressTrack);
+			_proxy.Call(_updateGlobalParameterCallback, "Progress", (int)musicProgressTrack);
 		}
 	}
 
@@ -376,7 +393,7 @@ public class NRunMusicController : Node
 			{
 				throw new InvalidOperationException("You can only trigger the elite transition in an elite room");
 			}
-			_proxy.Call("update_global_parameter", "Progress", 8);
+			_proxy.Call(_updateGlobalParameterCallback, "Progress", 8);
 		}
 	}
 
@@ -388,7 +405,7 @@ public class NRunMusicController : Node
 			{
 				throw new InvalidOperationException("You can only trigger the rest site transition in a rest site room");
 			}
-			_proxy.Call("update_campfire_ambience", 1);
+			_proxy.Call(_updateCampfireAmbienceCallback, 1);
 		}
 	}
 
@@ -396,22 +413,23 @@ public class NRunMusicController : Node
 	{
 		if (!NonInteractiveMode.IsActive)
 		{
+			_proxy.Call(_updateGlobalParameterCallback, "Progress", 0);
 			_proxy.Call(_stopMusic);
 			_proxy.Call(_stopAmbience);
 			_currentTrack = null;
+			_failedTrack = null;
 			UnloadActBanks();
 		}
 	}
 
-	private void LoadActBank(string bankPath)
+	private bool LoadActBank(string bankPath, string verifyEvent)
 	{
-		Godot.Collections.Array array = new Godot.Collections.Array { bankPath };
-		_proxy.Call("load_act_banks", array);
+		return ActBankLoadRetry.Run(bankPath, () => _proxy.Call(_loadActBankCallback, bankPath, verifyEvent).AsBool());
 	}
 
 	private void UnloadActBanks()
 	{
-		_proxy.Call("unload_act_banks");
+		_proxy.Call(_unloadActBanksCallback);
 	}
 
 	/// <summary>
@@ -422,7 +440,7 @@ public class NRunMusicController : Node
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(17);
+		List<MethodInfo> list = new List<MethodInfo>(18);
 		list.Add(new MethodInfo(MethodName.GetTrack, new PropertyInfo(Variant.Type.Int, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "roomType", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -444,6 +462,10 @@ public class NRunMusicController : Node
 		list.Add(new MethodInfo(MethodName.UpdateTrack, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateTrack, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
+			new PropertyInfo(Variant.Type.Int, "roomType", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.UpdateTrack, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
 			new PropertyInfo(Variant.Type.String, "label", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
 			new PropertyInfo(Variant.Type.Float, "trackIndex", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
@@ -456,9 +478,10 @@ public class NRunMusicController : Node
 		list.Add(new MethodInfo(MethodName.TriggerEliteSecondPhase, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.TriggerCampfireGoingOut, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.StopMusic, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.LoadActBank, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		list.Add(new MethodInfo(MethodName.LoadActBank, new PropertyInfo(Variant.Type.Bool, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
-			new PropertyInfo(Variant.Type.String, "bankPath", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+			new PropertyInfo(Variant.Type.String, "bankPath", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
+			new PropertyInfo(Variant.Type.String, "verifyEvent", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.UnloadActBanks, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
@@ -521,6 +544,12 @@ public class NRunMusicController : Node
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.UpdateTrack && args.Count == 1)
+		{
+			UpdateTrack(VariantUtils.ConvertTo<RoomType>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.UpdateTrack && args.Count == 2)
 		{
 			UpdateTrack(VariantUtils.ConvertTo<string>(in args[0]), VariantUtils.ConvertTo<float>(in args[1]));
@@ -557,10 +586,9 @@ public class NRunMusicController : Node
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.LoadActBank && args.Count == 1)
+		if (method == MethodName.LoadActBank && args.Count == 2)
 		{
-			LoadActBank(VariantUtils.ConvertTo<string>(in args[0]));
-			ret = default(godot_variant);
+			ret = VariantUtils.CreateFrom<bool>(LoadActBank(VariantUtils.ConvertTo<string>(in args[0]), VariantUtils.ConvertTo<string>(in args[1])));
 			return true;
 		}
 		if (method == MethodName.UnloadActBanks && args.Count == 0)
@@ -662,6 +690,11 @@ public class NRunMusicController : Node
 			_currentAmbience = VariantUtils.ConvertTo<string>(in value);
 			return true;
 		}
+		if (name == PropertyName._failedTrack)
+		{
+			_failedTrack = VariantUtils.ConvertTo<string>(in value);
+			return true;
+		}
 		return base.SetGodotClassPropertyValue(in name, in value);
 	}
 
@@ -684,6 +717,11 @@ public class NRunMusicController : Node
 			value = VariantUtils.CreateFrom(in _currentAmbience);
 			return true;
 		}
+		if (name == PropertyName._failedTrack)
+		{
+			value = VariantUtils.CreateFrom(in _failedTrack);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -699,6 +737,7 @@ public class NRunMusicController : Node
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._proxy, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.String, PropertyName._currentTrack, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.String, PropertyName._currentAmbience, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.String, PropertyName._failedTrack, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -710,6 +749,7 @@ public class NRunMusicController : Node
 		info.AddProperty(PropertyName._proxy, Variant.From(in _proxy));
 		info.AddProperty(PropertyName._currentTrack, Variant.From(in _currentTrack));
 		info.AddProperty(PropertyName._currentAmbience, Variant.From(in _currentAmbience));
+		info.AddProperty(PropertyName._failedTrack, Variant.From(in _failedTrack));
 	}
 
 	/// <inheritdoc />
@@ -728,6 +768,10 @@ public class NRunMusicController : Node
 		if (info.TryGetProperty(PropertyName._currentAmbience, out var value3))
 		{
 			_currentAmbience = value3.As<string>();
+		}
+		if (info.TryGetProperty(PropertyName._failedTrack, out var value4))
+		{
+			_failedTrack = value4.As<string>();
 		}
 	}
 }

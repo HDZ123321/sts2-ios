@@ -7,6 +7,10 @@ public enum ActionSynchronizerCombatState
 	/// </summary>
 	NotInCombat,
 	/// <summary>
+	/// We're about to be in combat, and we're draining the queue of non-combat actions.
+	/// </summary>
+	PreCombatSetup,
+	/// <summary>
 	/// We're in combat, and the player is fully in control.
 	/// </summary>
 	PlayPhase,

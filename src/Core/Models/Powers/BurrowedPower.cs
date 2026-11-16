@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models.Monsters;
 
 namespace MegaCrit.Sts2.Core.Models.Powers;
@@ -21,11 +22,11 @@ public sealed class BurrowedPower : PowerModel
 		return false;
 	}
 
-	public override async Task AfterBlockBroken(Creature creature)
+	public override async Task AfterBlockBroken(PlayerChoiceContext choiceContext, Creature target, Creature? breaker)
 	{
-		if (creature == base.Owner)
+		if (target == base.Owner)
 		{
-			MonsterModel monster = creature.Monster;
+			MonsterModel monster = target.Monster;
 			if (monster is Tunneler tunneler)
 			{
 				await tunneler.GetStunned();
@@ -37,6 +38,6 @@ public sealed class BurrowedPower : PowerModel
 
 	public override async Task AfterRemoved(Creature oldOwner)
 	{
-		await CreatureCmd.LoseBlock(oldOwner, 999999999m);
+		await CreatureCmd.LoseBlock(new BlockingPlayerChoiceContext(), oldOwner, 999999999m, null);
 	}
 }

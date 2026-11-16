@@ -20,12 +20,10 @@ public sealed class Synchronize : CardModel
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
 		new CalculationBaseVar(0m),
-		new CalculationExtraVar(2m),
+		new CalculationExtraVar(1m),
 		new CalculatedVar("CalculatedFocus").WithMultiplier((CardModel card, Creature? _) => (from orb in card.Owner.PlayerCombatState.OrbQueue.Orbs
 			group orb by orb.Id).Count())
 	});
-
-	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
 
 	public Synchronize()
 		: base(1, CardType.Skill, CardRarity.Uncommon, TargetType.Self)
@@ -40,6 +38,6 @@ public sealed class Synchronize : CardModel
 
 	protected override void OnUpgrade()
 	{
-		RemoveKeyword(CardKeyword.Exhaust);
+		base.DynamicVars.CalculationExtra.UpgradeValueBy(1m);
 	}
 }

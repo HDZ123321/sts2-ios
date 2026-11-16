@@ -230,7 +230,7 @@ public class NCombatRulesFtue : NFtue
 
 	public override void _Input(InputEvent inputEvent)
 	{
-		if (!IsVisibleInTree() || NDevConsole.Instance.Visible)
+		if (!IsVisibleInTree() || NDevConsole.IsConsoleVisible)
 		{
 			return;
 		}

@@ -16,7 +16,7 @@ public sealed class Relax : CardModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
-		new BlockVar(15m, ValueProp.Move),
+		new BlockVar(16m, ValueProp.Move),
 		new CardsVar(2),
 		new EnergyVar(2)
 	});

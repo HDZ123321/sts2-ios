@@ -24,14 +24,6 @@ public sealed class DingyRug : RelicModel
 		{
 			return options;
 		}
-		if (options.CardPools.Contains(ModelDb.CardPool<ColorlessCardPool>()))
-		{
-			return options;
-		}
-		if (options.CustomCardPool != null)
-		{
-			return options;
-		}
-		return options.WithCardPools(options.CardPools.ToList().Concat(new global::_003C_003Ez__ReadOnlySingleElementList<CardPoolModel>(ModelDb.CardPool<ColorlessCardPool>())), options.CardPoolFilter);
+		return options.WithCardPools(options.CardPools.Union(new global::_003C_003Ez__ReadOnlySingleElementList<CardPoolModel>(ModelDb.CardPool<ColorlessCardPool>())));
 	}
 }

@@ -87,7 +87,7 @@ public class NBestiaryLayoutDecimillipede : NBestiaryLayout
 
 	private Control _encounterSlots;
 
-	private List<NCreature> _creatures = new List<NCreature>();
+	private readonly List<NCreature> _creatures = new List<NCreature>();
 
 	private NBestiary _bestiary;
 
@@ -127,7 +127,7 @@ public class NBestiaryLayoutDecimillipede : NBestiaryLayout
 			item.SetUpForCombat();
 			Creature creature = new Creature(item, CombatSide.Enemy, item2)
 			{
-				CombatState = new NullCombatState()
+				CombatState = NullCombatState.Instance
 			};
 			NCreature nCreature = NCreature.Create(creature);
 			_creatureContainer.AddChildSafely(nCreature);

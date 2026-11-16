@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Animation;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Bindings.MegaSpine;
 using MegaCrit.Sts2.Core.Entities.Characters;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Nodes.Combat;
@@ -34,7 +35,14 @@ public abstract class CharacterModel : AbstractModel
 	public virtual bool IsPlayable => true;
 
 	/// <summary>
-	/// The name of the character. e.g. Ironclad, Silent, etc.
+	/// The name of the character without "The". Used in the Dread character select screen for drama.
+	/// e.g. Ironclad, Silent, Regent, etc.
+	/// </summary>
+	public LocString ShortTitle => new LocString("characters", base.Id.Entry + ".shortTitle");
+
+	/// <summary>
+	/// The name of the character usually displayed in various UI.
+	/// e.g. The Ironclad, The Silent, The Regent, etc.
 	/// </summary>
 	public LocString Title => new LocString("characters", base.Id.Entry + ".title");
 
@@ -61,13 +69,17 @@ public abstract class CharacterModel : AbstractModel
 	/// </summary>
 	protected abstract CharacterModel? UnlocksAfterRunAs { get; }
 
-	public LocString PronounObject => new LocString("characters", base.Id.Entry + ".pronounObject");
+	/// <summary>
+	/// Quote to display in the Bestiary Stats screen when a character has encountered a monster but has never killed it.
+	/// The quote is unique per character and is the same quote for all monsters.
+	/// </summary>
+	public LocString BestiarySeenQuote => new LocString("characters", base.Id.Entry + ".bestiaryQuote");
 
-	public LocString PossessiveAdjective => new LocString("characters", base.Id.Entry + ".possessiveAdjective");
-
-	public LocString PronounPossessive => new LocString("characters", base.Id.Entry + ".pronounPossessive");
-
-	public LocString PronounSubject => new LocString("characters", base.Id.Entry + ".pronounSubject");
+	/// <summary>
+	/// Unique Character x Monster quote. There are a lot of these. If this quote is missing, we display a placeholder quote
+	/// from bestiary.json -&gt; "QUOTE_PLACEHOLDER"
+	/// </summary>
+	public LocString? BestiaryKillQuote => LocString.GetIfExists("characters", base.Id.Entry + ".bestiaryKillQuote");
 
 	public LocString CardsModifierTitle => new LocString("characters", base.Id.Entry + ".cardsModifierTitle");
 
@@ -86,6 +98,8 @@ public abstract class CharacterModel : AbstractModel
 	public virtual Color EnergyLabelOutlineColor => new Color("0000000D");
 
 	public virtual int BaseOrbSlotCount => 0;
+
+	public virtual int BaseArrowSlotCount => 0;
 
 	public virtual bool ShouldAlwaysShowStarCounter => false;
 
@@ -157,6 +171,16 @@ public abstract class CharacterModel : AbstractModel
 
 	public virtual string CharacterSelectTransitionPath => "res://materials/transitions/" + base.Id.Entry.ToLowerInvariant() + "_transition_mat.tres";
 
+	public virtual float DreadBgBrightness => 0.7f;
+
+	public virtual float DreadBgContrast => 1.1f;
+
+	/// <summary>
+	/// Color of the name displayed in the Dread character select screen.
+	/// Differs from the norm as it's additive blended on a grayscale bg.
+	/// </summary>
+	public virtual Color DreadNameColor => new Color("ffd500c0");
+
 	protected virtual string MapMarkerPath => ImageHelper.GetImagePath("packed/map/icons/map_marker_" + base.Id.Entry.ToLowerInvariant() + ".png");
 
 	public CompressedTexture2D MapMarker => PreloadManager.Cache.GetCompressedTexture2D(MapMarkerPath);
@@ -201,11 +225,46 @@ public abstract class CharacterModel : AbstractModel
 
 	public string PowerUpSfx => CastSfx;
 
-	public string DeathSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_die";
+	public virtual string DeathSfx => $"event:/sfx/characters/{base.Id.Entry.ToLowerInvariant()}/{base.Id.Entry.ToLowerInvariant()}_die";
 
 	public virtual string CharacterTransitionSfx => "event:/sfx/ui/wipe_" + base.Id.Entry.ToLowerInvariant();
 
+	protected Func<Creature, bool> IsLowHealth => (Creature creature) => creature.GetHpPercentRemaining() <= 0.25;
+
+	/// <summary>
+	/// These are the standard animations based on the animation trigger.
+	/// These animations always transition back to an idle.
+	/// </summary>
+	protected virtual List<(AnimState, string)> AnimationStates => new List<(AnimState, string)>
+	{
+		(new AnimState("cast"), "Cast"),
+		(new AnimState("attack"), "Attack"),
+		(new AnimState("hurt"), "Hit"),
+		(new AnimState("cast"), "PowerUp")
+	};
+
 	public override bool ShouldReceiveCombatHooks => false;
+
+	private LocString GetPronoun(string pronounKey, FoolPronounGuess pronounGuess)
+	{
+		if (Gender != CharacterGender.Tree)
+		{
+			return new LocString("characters", base.Id.Entry + "." + pronounKey);
+		}
+		return new LocString("characters", $"{base.Id.Entry}.guess.{pronounGuess.ToLocKey()}.{pronounKey}");
+	}
+
+	/// <summary>
+	/// The grammatical gender to use for the Fool, this is whatever the speaker guessed.
+	/// </summary>
+	private CharacterGender GetGrammaticalGender(FoolPronounGuess pronounGuess)
+	{
+		if (Gender != CharacterGender.Tree)
+		{
+			return Gender;
+		}
+		return pronounGuess.ToGrammaticalGender();
+	}
 
 	public NCreatureVisuals CreateVisuals()
 	{
@@ -217,41 +276,44 @@ public abstract class CharacterModel : AbstractModel
 	/// </summary>
 	public abstract List<string> GetArchitectAttackVfx();
 
-	public virtual CreatureAnimator GenerateAnimator(MegaSprite controller)
+	public virtual CreatureAnimator GenerateAnimator(MegaSprite controller, Creature creature)
 	{
 		AnimState animState = new AnimState("idle_loop", isLooping: true);
-		AnimState animState2 = new AnimState("cast");
-		AnimState animState3 = new AnimState("attack");
-		AnimState animState4 = new AnimState("hurt");
 		AnimState state = new AnimState("die");
-		AnimState animState5 = new AnimState("relaxed_loop", isLooping: true);
-		animState2.NextState = animState;
-		animState3.NextState = animState;
-		animState4.NextState = animState;
-		animState5.AddBranch("Idle", animState);
-		CreatureAnimator creatureAnimator = new CreatureAnimator(animState, controller);
-		creatureAnimator.AddAnyState("Idle", animState);
+		AnimState animState2 = new AnimState("low_health_loop", isLooping: true);
+		AnimState state2 = new AnimState("relaxed_loop", isLooping: true);
+		CreatureAnimator creatureAnimator = new CreatureAnimator(IsLowHealth(creature) ? animState2 : animState, controller);
+		creatureAnimator.AddAnyState("Idle", animState, () => !IsLowHealth(creature));
+		creatureAnimator.AddAnyState("Idle", animState2, () => IsLowHealth(creature));
+		creatureAnimator.AddAnyState("Relaxed", state2);
 		creatureAnimator.AddAnyState("Dead", state);
-		creatureAnimator.AddAnyState("Hit", animState4);
-		creatureAnimator.AddAnyState("Attack", animState3);
-		creatureAnimator.AddAnyState("Cast", animState2);
-		creatureAnimator.AddAnyState("PowerUp", animState2);
-		creatureAnimator.AddAnyState("Relaxed", animState5);
+		foreach (var animationState in AnimationStates)
+		{
+			animationState.Item1.AddNextState(animState, () => !IsLowHealth(creature));
+			animationState.Item1.AddNextState(animState2, () => IsLowHealth(creature));
+			creatureAnimator.AddAnyState(animationState.Item2, animationState.Item1);
+		}
 		return creatureAnimator;
 	}
 
 	/// <summary>
 	/// Add details about this character to the given LocString.
 	/// </summary>
-	public void AddDetailsTo(LocString str)
+	/// <param name="str">LocString to add the details to.</param>
+	/// <param name="pronounGuess">
+	/// What the speaker guesses this character's pronouns are. Only used for <see cref="F:MegaCrit.Sts2.Core.Entities.Characters.CharacterGender.Tree" />
+	/// characters. Events and Ancients pass <see cref="P:MegaCrit.Sts2.Core.Models.EventModel.FoolPronounGuess" />; everything else (run history,
+	/// encounter loss messages) uses the default.
+	/// </param>
+	public void AddDetailsTo(LocString str, FoolPronounGuess pronounGuess = FoolPronounGuess.Neutral)
 	{
 		str.Add("character", Title);
 		str.Add("characterObject", TitleObject);
-		str.Add("characterGender", Gender.ToString().ToLowerInvariant());
-		str.Add("possessiveAdjective", PossessiveAdjective);
-		str.Add("pronounObject", PronounObject);
-		str.Add("pronounPossessive", PronounPossessive);
-		str.Add("pronounSubject", PronounSubject);
+		str.Add("characterGender", GetGrammaticalGender(pronounGuess).ToString().ToLowerInvariant());
+		str.Add("possessiveAdjective", GetPronoun("possessiveAdjective", pronounGuess));
+		str.Add("pronounObject", GetPronoun("pronounObject", pronounGuess));
+		str.Add("pronounPossessive", GetPronoun("pronounPossessive", pronounGuess));
+		str.Add("pronounSubject", GetPronoun("pronounSubject", pronounGuess));
 	}
 
 	/// <summary>

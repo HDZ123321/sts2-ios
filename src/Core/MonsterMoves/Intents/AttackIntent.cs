@@ -87,7 +87,7 @@ public abstract class AttackIntent : AbstractIntent
 		Player me = LocalContext.GetMe(owner.CombatState);
 		if (me != null)
 		{
-			num = Hook.ModifyDamage(me.RunState, me.Creature.CombatState, me.Creature, owner, DamageCalc(), ValueProp.Move, null, ModifyDamageHookType.All, CardPreviewMode.None, out IEnumerable<AbstractModel> _);
+			num = Hook.ModifyDamage(me.RunState, me.Creature.CombatState, me.Creature, owner, DamageCalc(), ValueProp.Move, null, null, ModifyDamageHookType.All, CardPreviewMode.None, out IEnumerable<AbstractModel> _);
 		}
 		return Math.Max(0, (int)num);
 	}

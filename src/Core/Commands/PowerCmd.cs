@@ -33,9 +33,13 @@ public static class PowerCmd
 	/// * Something blocked application (like Artifact).
 	/// * The power's amount was changed to 0 (like if you had 3 Strength and applied -3 Strength).
 	/// </returns>
-	public static async Task<IReadOnlyList<T>> Apply<T>(PlayerChoiceContext choiceContext, IEnumerable<Creature> targets, decimal amount, Creature? applier, CardModel? cardSource, bool silent = false) where T : PowerModel
+	public static async Task<IReadOnlyList<T>> Apply<T>(PlayerChoiceContext choiceContext, IEnumerable<Creature>? targets, decimal amount, Creature? applier, CardModel? cardSource, bool silent = false) where T : PowerModel
 	{
 		List<T> powers = new List<T>();
+		if (targets == null)
+		{
+			return powers;
+		}
 		foreach (Creature target in targets)
 		{
 			T val = await Apply<T>(choiceContext, target, amount, applier, cardSource, silent);
@@ -141,7 +145,7 @@ public static class PowerCmd
 			{
 				await Cmd.CustomScaledWait(0.1f, 0.25f);
 			}
-			if (target.Side == CombatSide.Player && power.Type == PowerType.Debuff)
+			if (target.Side == CombatSide.Player && combatState.CurrentSide == CombatSide.Enemy && power.Type == PowerType.Debuff)
 			{
 				power.SkipNextDurationTick = true;
 			}

@@ -119,7 +119,7 @@ public sealed class PaelsLegion : RelicModel
 
 	public override async Task AfterObtained()
 	{
-		Skin = new Rng(base.Owner, base.Id).NextItem(SkinOptions);
+		Skin = new Rng(base.Owner, base.Id, 0uL).NextItem(SkinOptions);
 		if (CombatManager.Instance.IsInProgress)
 		{
 			await SummonPet();
@@ -149,7 +149,11 @@ public sealed class PaelsLegion : RelicModel
 		{
 			return 1m;
 		}
-		return 2m;
+		if (AffectedCardPlay == null || AffectedCardPlay == cardPlay)
+		{
+			return 2m;
+		}
+		return 1m;
 	}
 
 	public override Task AfterModifyingBlockAmount(decimal modifiedAmount, CardModel? cardSource, CardPlay? cardPlay)

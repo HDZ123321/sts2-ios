@@ -140,7 +140,7 @@ public class NCustomRunModifiersList : Control
 	/// - Once when the game is loaded from a multiplayer save
 	/// </summary>
 	/// <param name="modifiers">The modifiers to display as checked.</param>
-	public void SyncModifierList(IReadOnlyList<ModifierModel> modifiers)
+	public void SyncModifierList(IReadOnlyCollection<ModifierModel> modifiers)
 	{
 		MultiplayerUiMode mode = _mode;
 		if ((uint)(mode - 1) <= 1u)
@@ -151,6 +151,26 @@ public class NCustomRunModifiersList : Control
 		{
 			tickbox.IsTicked = modifiers.FirstOrDefault((ModifierModel m) => m.IsEquivalent(tickbox.Modifier)) != null;
 		}
+	}
+
+	/// <summary>
+	/// Ticks on exactly the given modifiers, unticking all others, then notifies listeners so the change is
+	/// propagated to the lobby (and synced on to any clients).
+	/// Only valid in host or singleplayer mode. Clients receive modifier changes through <see cref="M:MegaCrit.Sts2.Core.Nodes.Screens.MainMenu.NCustomRunModifiersList.SyncModifierList(System.Collections.Generic.IReadOnlyCollection{MegaCrit.Sts2.Core.Models.ModifierModel})" />.
+	/// </summary>
+	/// <param name="modifiers">The modifiers to display as ticked. Assumed to already respect mutual exclusivity.</param>
+	public void SetTickedModifiers(IReadOnlyCollection<ModifierModel> modifiers)
+	{
+		MultiplayerUiMode mode = _mode;
+		if ((uint)(mode - 3) <= 1u)
+		{
+			throw new InvalidOperationException("This should only be called in host or singleplayer mode!");
+		}
+		foreach (NRunModifierTickbox tickbox in _modifierTickboxes)
+		{
+			tickbox.IsTicked = modifiers.Any((ModifierModel m) => m.IsEquivalent(tickbox.Modifier));
+		}
+		EmitSignal(SignalName.ModifiersChanged);
 	}
 
 	private IEnumerable<ModifierModel> GetAllModifiers()

@@ -35,6 +35,11 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 		public static readonly StringName GetVSyncString = "GetVSyncString";
 
 		/// <summary>
+		/// Cached name for the 'GetVSyncLabelKey' method.
+		/// </summary>
+		public static readonly StringName GetVSyncLabelKey = "GetVSyncLabelKey";
+
+		/// <summary>
 		/// Cached name for the 'OnIndexChanged' method.
 		/// </summary>
 		public new static readonly StringName OnIndexChanged = "OnIndexChanged";
@@ -79,14 +84,26 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 
 	private static string GetVSyncString(VSyncType vsyncType)
 	{
+		return new LocString("settings_ui", GetVSyncLabelKey(vsyncType)).GetFormattedText();
+	}
+
+	/// <summary>
+	/// Maps a stored <see cref="T:MegaCrit.Sts2.Core.Settings.VSyncType" /> to the localization key of the label the paginator
+	/// shows for it. This is the inverse of the index-to-<see cref="T:MegaCrit.Sts2.Core.Settings.VSyncType" /> mapping in
+	/// <see cref="M:MegaCrit.Sts2.Core.Nodes.Screens.Settings.NVSyncPaginator.OnIndexChanged(System.Int32)" />, so the two must stay in sync: the label shown on load has to
+	/// match the value that toggling to that label writes back. Pure and Godot-free so the mapping
+	/// can be unit tested without a scene.
+	/// </summary>
+	public static string GetVSyncLabelKey(VSyncType vsyncType)
+	{
 		switch (vsyncType)
 		{
 		case VSyncType.Off:
-			return new LocString("settings_ui", "VSYNC_ON").GetFormattedText();
+			return "VSYNC_OFF";
 		case VSyncType.On:
-			return new LocString("settings_ui", "VSYNC_OFF").GetFormattedText();
+			return "VSYNC_ON";
 		case VSyncType.Adaptive:
-			return new LocString("settings_ui", "VSYNC_ADAPTIVE").GetFormattedText();
+			return "VSYNC_ADAPTIVE";
 		default:
 			Log.Error("Invalid VSync type: " + vsyncType);
 			throw new ArgumentOutOfRangeException("vsyncType", vsyncType, null);
@@ -123,10 +140,14 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(4);
+		List<MethodInfo> list = new List<MethodInfo>(5);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SetFromSettings, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.GetVSyncString, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "vsyncType", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.GetVSyncLabelKey, new PropertyInfo(Variant.Type.String, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "vsyncType", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
@@ -158,6 +179,11 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 			ret = VariantUtils.CreateFrom<string>(GetVSyncString(VariantUtils.ConvertTo<VSyncType>(in args[0])));
 			return true;
 		}
+		if (method == MethodName.GetVSyncLabelKey && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<string>(GetVSyncLabelKey(VariantUtils.ConvertTo<VSyncType>(in args[0])));
+			return true;
+		}
 		if (method == MethodName.OnIndexChanged && args.Count == 1)
 		{
 			OnIndexChanged(VariantUtils.ConvertTo<int>(in args[0]));
@@ -173,6 +199,11 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 		if (method == MethodName.GetVSyncString && args.Count == 1)
 		{
 			ret = VariantUtils.CreateFrom<string>(GetVSyncString(VariantUtils.ConvertTo<VSyncType>(in args[0])));
+			return true;
+		}
+		if (method == MethodName.GetVSyncLabelKey && args.Count == 1)
+		{
+			ret = VariantUtils.CreateFrom<string>(GetVSyncLabelKey(VariantUtils.ConvertTo<VSyncType>(in args[0])));
 			return true;
 		}
 		ret = default(godot_variant);
@@ -192,6 +223,10 @@ public class NVSyncPaginator : NPaginator, IResettableSettingNode
 			return true;
 		}
 		if (method == MethodName.GetVSyncString)
+		{
+			return true;
+		}
+		if (method == MethodName.GetVSyncLabelKey)
 		{
 			return true;
 		}

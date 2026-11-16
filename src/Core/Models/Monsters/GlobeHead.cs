@@ -36,12 +36,14 @@ public sealed class GlobeHead : MonsterModel
 
 	private int GalvanicBurstDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 17, 16);
 
+	private int GalvanicPowerAmount => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 8, 6);
+
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Armor;
 
 	public override async Task AfterAddedToRoom()
 	{
 		await base.AfterAddedToRoom();
-		await PowerCmd.Apply<GalvanicPower>(new ThrowingPlayerChoiceContext(), base.Creature, 6m, base.Creature, null);
+		await PowerCmd.Apply<GalvanicPower>(new ThrowingPlayerChoiceContext(), base.Creature, GalvanicPowerAmount, base.Creature, null);
 	}
 
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()

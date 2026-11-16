@@ -187,7 +187,7 @@ public class SteamHost : NetHost
 		return null;
 	}
 
-	public override void DisconnectClient(ulong peerId, NetError reason, bool now = false)
+	public override void DisconnectClient(ulong peerId, NetError reason, bool now = false, string? debugReason = null)
 	{
 		HSteamNetConnection? hSteamNetConnection = null;
 		_logger.Debug($"Disconnecting peer {peerId}, reason: {reason}");
@@ -202,7 +202,7 @@ public class SteamHost : NetHost
 		}
 		if (hSteamNetConnection.HasValue)
 		{
-			CloseConnectionAndRemove(hSteamNetConnection.Value, reason.ToSteam(), null, now, selfInitiated: true);
+			CloseConnectionAndRemove(hSteamNetConnection.Value, reason.ToSteam(), debugReason, now, selfInitiated: true);
 		}
 	}
 

@@ -30,9 +30,9 @@ public class NTopBarDeckButton : NTopBarButton
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the '_Notification' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public new static readonly StringName _Notification = "_Notification";
 
 		/// <summary>
 		/// Cached name for the 'OnPileContentsChanged' method.
@@ -143,11 +143,13 @@ public class NTopBarDeckButton : NTopBarButton
 		_countLabel = GetNode<MegaLabel>("DeckCardCount");
 	}
 
-	public override void _ExitTree()
+	public override void _Notification(int what)
 	{
-		base._ExitTree();
-		_pile.CardAddFinished -= OnPileContentsChanged;
-		_pile.CardRemoveFinished -= OnPileContentsChanged;
+		if ((long)what == 1)
+		{
+			_pile.CardAddFinished -= OnPileContentsChanged;
+			_pile.CardRemoveFinished -= OnPileContentsChanged;
+		}
 	}
 
 	public void Initialize(Player player)
@@ -221,7 +223,7 @@ public class NTopBarDeckButton : NTopBarButton
 	{
 		base.OnFocus();
 		LocString locString = new LocString("static_hover_tips", "DECK.title");
-		locString.Add("Hotkey", NInputManager.Instance.GetShortcutKey(MegaInput.viewDeckAndTabLeft).ToString());
+		locString.Add("Hotkey", NInputManager.Instance.GetCurrentHotkey(MegaInput.viewDeckAndTabLeft).ToString());
 		HoverTip hoverTip = new HoverTip(locString, new LocString("static_hover_tips", "DECK.description"));
 		NHoverTipSet nHoverTipSet = NHoverTipSet.CreateAndShow(this, hoverTip);
 		nHoverTipSet?.SetGlobalPosition(base.GlobalPosition + new Vector2(base.Size.X - nHoverTipSet.Size.X, base.Size.Y + 20f));
@@ -243,7 +245,10 @@ public class NTopBarDeckButton : NTopBarButton
 	{
 		List<MethodInfo> list = new List<MethodInfo>(9);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.OnPileContentsChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.IsOpen, new PropertyInfo(Variant.Type.Bool, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -267,9 +272,9 @@ public class NTopBarDeckButton : NTopBarButton
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName._Notification && args.Count == 1)
 		{
-			_ExitTree();
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -325,7 +330,7 @@ public class NTopBarDeckButton : NTopBarButton
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

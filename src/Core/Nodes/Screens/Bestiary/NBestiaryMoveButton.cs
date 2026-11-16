@@ -30,11 +30,6 @@ public class NBestiaryMoveButton : NButton
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_UnhandledInput' method.
-		/// </summary>
-		public new static readonly StringName _UnhandledInput = "_UnhandledInput";
-
-		/// <summary>
 		/// Cached name for the 'OnRelease' method.
 		/// </summary>
 		public new static readonly StringName OnRelease = "OnRelease";
@@ -71,6 +66,11 @@ public class NBestiaryMoveButton : NButton
 		public new static readonly StringName HoveredSfx = "HoveredSfx";
 
 		/// <summary>
+		/// Cached name for the 'Hotkeys' property.
+		/// </summary>
+		public new static readonly StringName Hotkeys = "Hotkeys";
+
+		/// <summary>
 		/// Cached name for the '_buttonAnimator' field.
 		/// </summary>
 		public static readonly StringName _buttonAnimator = "_buttonAnimator";
@@ -91,9 +91,9 @@ public class NBestiaryMoveButton : NButton
 		public static readonly StringName _clickTween = "_clickTween";
 
 		/// <summary>
-		/// Cached name for the '_hotkey' field.
+		/// Cached name for the '_hotkeys' field.
 		/// </summary>
-		public static readonly StringName _hotkey = "_hotkey";
+		public static readonly StringName _hotkeys = "_hotkeys";
 	}
 
 	/// <summary>
@@ -113,13 +113,15 @@ public class NBestiaryMoveButton : NButton
 
 	private Tween? _clickTween;
 
-	private StringName _hotkey;
+	private string[] _hotkeys;
 
 	protected override string? ClickedSfx => null;
 
 	protected override string? HoveredSfx => null;
 
 	public BestiaryMonsterMove Move { get; private set; }
+
+	protected override string[] Hotkeys => _hotkeys;
 
 	public override void _Ready()
 	{
@@ -129,28 +131,13 @@ public class NBestiaryMoveButton : NButton
 		_label.SetTextAutoSize(Move.displayName);
 		_label.PivotOffset = new Vector2(0f, _label.Size.Y * 0.5f);
 		_buttonAnimator.PivotOffset = new Vector2(0f, _buttonAnimator.Size.Y * 0.5f);
-	}
-
-	public override void _UnhandledInput(InputEvent input)
-	{
-		if ((!(NControllerManager.Instance?.IsUsingController)) ?? true)
-		{
-			if (input.IsActionPressed(_hotkey))
-			{
-				OnPress();
-			}
-			else if (input.IsActionReleased(_hotkey))
-			{
-				EmitSignal(NClickableControl.SignalName.Released, this);
-				OnRelease();
-			}
-		}
+		GetNode<NHotkeyIcon>("%HotkeyIcon").UpdateInput(_hotkeys[0]);
 	}
 
 	public static NBestiaryMoveButton Create(BestiaryMonsterMove move, StringName setHotkey)
 	{
 		NBestiaryMoveButton nBestiaryMoveButton = PreloadManager.Cache.GetAsset<PackedScene>(_scenePath).Instantiate<NBestiaryMoveButton>(PackedScene.GenEditState.Disabled);
-		nBestiaryMoveButton._hotkey = setHotkey;
+		nBestiaryMoveButton._hotkeys = new string[1] { setHotkey };
 		nBestiaryMoveButton.Move = move;
 		return nBestiaryMoveButton;
 	}
@@ -201,12 +188,8 @@ public class NBestiaryMoveButton : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(6);
+		List<MethodInfo> list = new List<MethodInfo>(5);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._UnhandledInput, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Object, "input", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("InputEvent"), exported: false)
-		}, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnPress, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -221,12 +204,6 @@ public class NBestiaryMoveButton : NButton
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName._UnhandledInput && args.Count == 1)
-		{
-			_UnhandledInput(VariantUtils.ConvertTo<InputEvent>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -262,10 +239,6 @@ public class NBestiaryMoveButton : NButton
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
-		{
-			return true;
-		}
-		if (method == MethodName._UnhandledInput)
 		{
 			return true;
 		}
@@ -312,9 +285,9 @@ public class NBestiaryMoveButton : NButton
 			_clickTween = VariantUtils.ConvertTo<Tween>(in value);
 			return true;
 		}
-		if (name == PropertyName._hotkey)
+		if (name == PropertyName._hotkeys)
 		{
-			_hotkey = VariantUtils.ConvertTo<StringName>(in value);
+			_hotkeys = VariantUtils.ConvertTo<string[]>(in value);
 			return true;
 		}
 		return base.SetGodotClassPropertyValue(in name, in value);
@@ -337,6 +310,11 @@ public class NBestiaryMoveButton : NButton
 			value = VariantUtils.CreateFrom(in from);
 			return true;
 		}
+		if (name == PropertyName.Hotkeys)
+		{
+			value = VariantUtils.CreateFrom<string[]>(Hotkeys);
+			return true;
+		}
 		if (name == PropertyName._buttonAnimator)
 		{
 			value = VariantUtils.CreateFrom(in _buttonAnimator);
@@ -357,9 +335,9 @@ public class NBestiaryMoveButton : NButton
 			value = VariantUtils.CreateFrom(in _clickTween);
 			return true;
 		}
-		if (name == PropertyName._hotkey)
+		if (name == PropertyName._hotkeys)
 		{
-			value = VariantUtils.CreateFrom(in _hotkey);
+			value = VariantUtils.CreateFrom(in _hotkeys);
 			return true;
 		}
 		return base.GetGodotClassPropertyValue(in name, out value);
@@ -380,7 +358,8 @@ public class NBestiaryMoveButton : NButton
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._label, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._tween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._clickTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.StringName, PropertyName._hotkey, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.PackedStringArray, PropertyName._hotkeys, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.PackedStringArray, PropertyName.Hotkeys, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -393,7 +372,7 @@ public class NBestiaryMoveButton : NButton
 		info.AddProperty(PropertyName._label, Variant.From(in _label));
 		info.AddProperty(PropertyName._tween, Variant.From(in _tween));
 		info.AddProperty(PropertyName._clickTween, Variant.From(in _clickTween));
-		info.AddProperty(PropertyName._hotkey, Variant.From(in _hotkey));
+		info.AddProperty(PropertyName._hotkeys, Variant.From(in _hotkeys));
 	}
 
 	/// <inheritdoc />
@@ -417,9 +396,9 @@ public class NBestiaryMoveButton : NButton
 		{
 			_clickTween = value4.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._hotkey, out var value5))
+		if (info.TryGetProperty(PropertyName._hotkeys, out var value5))
 		{
-			_hotkey = value5.As<StringName>();
+			_hotkeys = value5.As<string[]>();
 		}
 	}
 }

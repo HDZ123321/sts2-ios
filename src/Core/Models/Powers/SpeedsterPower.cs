@@ -18,7 +18,7 @@ public sealed class SpeedsterPower : PowerModel
 		{
 			VfxCmd.PlayOnCreatureCenters(base.CombatState.HittableEnemies, "vfx/vfx_attack_slash");
 			SfxCmd.Play("slash_attack.mp3");
-			await CreatureCmd.Damage(choiceContext, base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner);
 		}
 	}
 }

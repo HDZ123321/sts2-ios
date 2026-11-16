@@ -36,6 +36,6 @@ public sealed class Infection : CardModel
 		{
 			NCombatRoom.Instance.CombatVfxContainer.AddChildSafely(nWormyImpactVfx);
 		}
-		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this);
+		await CreatureCmd.Damage(choiceContext, base.Owner.Creature, base.DynamicVars.Damage, this, null);
 	}
 }

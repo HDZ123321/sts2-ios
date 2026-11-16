@@ -24,6 +24,7 @@ using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Nodes.Screens.Shops;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Random;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace MegaCrit.Sts2.Core.Nodes.Events.Custom;
 
@@ -66,9 +67,9 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 		public static readonly StringName StartCharacterAnimation = "StartCharacterAnimation";
 
 		/// <summary>
-		/// Cached name for the 'HideScreen' method.
+		/// Cached name for the 'OnProceedButtonReleased' method.
 		/// </summary>
-		public static readonly StringName HideScreen = "HideScreen";
+		public static readonly StringName OnProceedButtonReleased = "OnProceedButtonReleased";
 
 		/// <summary>
 		/// Cached name for the 'OnMerchantOpened' method.
@@ -188,9 +189,10 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 	public override void _Ready()
 	{
 		_proceedButton = GetNode<NProceedButton>("%ProceedButton");
-		_proceedButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(HideScreen));
+		_proceedButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnProceedButtonReleased));
 		_proceedButton.UpdateText(NProceedButton.ProceedLoc);
 		_proceedButton.SetPulseState(isPulsing: false);
+		_proceedButton.Initialize(_players[0].RunState);
 		_proceedButton.Enable();
 		MerchantButton = GetNode<NMerchantButton>("%MerchantButton");
 		if (_event.StartedFight)
@@ -238,14 +240,11 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 
 	public async Task FoulPotionThrown()
 	{
-		LocString locString = Rng.Chaotic.NextItem(_dialogue.FoulPotionLines);
-		if (locString != null)
+		MerchantButton.Disable();
+		NSpeechBubbleVfx nSpeechBubbleVfx = MerchantButton.PlayDialogue(Rng.Chaotic.NextItem(_dialogue.FoulPotionLines));
+		if (nSpeechBubbleVfx != null)
 		{
-			NSpeechBubbleVfx nSpeechBubbleVfx = MerchantButton.PlayDialogue(locString);
-			if (nSpeechBubbleVfx != null)
-			{
-				await Cmd.Wait((float)nSpeechBubbleVfx.SecondsToDisplay - 1f, _cts.Token);
-			}
+			await Cmd.Wait((float)nSpeechBubbleVfx.SecondsToDisplay - 1f, _cts.Token);
 		}
 	}
 
@@ -300,7 +299,8 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 
 	private void StartCharacterAnimation(NCreatureVisuals visuals)
 	{
-		MegaTrackEntry megaTrackEntry = visuals.SpineAnimation.SetAnimation("relaxed_loop");
+		visuals.SpineAnimation.SetAnimation("relaxed_loop");
+		using MegaTrackEntry megaTrackEntry = visuals.SpineAnimation.GetCurrentTrack();
 		if (megaTrackEntry != null)
 		{
 			megaTrackEntry.SetLoop(loop: true);
@@ -310,9 +310,9 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 		}
 	}
 
-	private void HideScreen(NButton _)
+	private void OnProceedButtonReleased(NButton _)
 	{
-		NMapScreen.Instance.Open();
+		RunManager.Instance.Proceed();
 	}
 
 	private void OnMerchantOpened(NMerchantButton _)
@@ -389,7 +389,7 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 		{
 			new PropertyInfo(Variant.Type.Object, "visuals", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node2D"), exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.HideScreen, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		list.Add(new MethodInfo(MethodName.OnProceedButtonReleased, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
 		}, null));
@@ -445,9 +445,9 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.HideScreen && args.Count == 1)
+		if (method == MethodName.OnProceedButtonReleased && args.Count == 1)
 		{
-			HideScreen(VariantUtils.ConvertTo<NButton>(in args[0]));
+			OnProceedButtonReleased(VariantUtils.ConvertTo<NButton>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -518,7 +518,7 @@ public class NFakeMerchant : Control, ICustomEventNode, IScreenContext
 		{
 			return true;
 		}
-		if (method == MethodName.HideScreen)
+		if (method == MethodName.OnProceedButtonReleased)
 		{
 			return true;
 		}

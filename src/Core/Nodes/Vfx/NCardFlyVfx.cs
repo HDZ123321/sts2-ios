@@ -9,10 +9,12 @@ using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
+using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.TestSupport;
 
@@ -162,6 +164,21 @@ public class NCardFlyVfx : Node2D
 
 	public TaskCompletionSource? SwooshAwayCompletion { get; private set; }
 
+	public static NCardFlyVfx? Create(NCard card, NCard target, string trailPath)
+	{
+		if (TestMode.IsOn)
+		{
+			return null;
+		}
+		NCardFlyVfx nCardFlyVfx = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCardFlyVfx>(PackedScene.GenEditState.Disabled);
+		nCardFlyVfx._startPos = card.GlobalPosition;
+		nCardFlyVfx._endPos = target.GlobalPosition;
+		nCardFlyVfx._card = card;
+		nCardFlyVfx._isAddingToPile = false;
+		nCardFlyVfx._trailPath = trailPath;
+		return nCardFlyVfx;
+	}
+
 	public static NCardFlyVfx? Create(NCard card, PileType pileType, bool isAddingToPile, string trailPath)
 	{
 		if (TestMode.IsOn)
@@ -173,6 +190,30 @@ public class NCardFlyVfx : Node2D
 		nCardFlyVfx._endPos = pileType.GetTargetPosition(card);
 		nCardFlyVfx._card = card;
 		nCardFlyVfx._isAddingToPile = isAddingToPile;
+		nCardFlyVfx._trailPath = trailPath;
+		return nCardFlyVfx;
+	}
+
+	public static NCardFlyVfx? Create(NCard card, Creature target, string trailPath)
+	{
+		if (TestMode.IsOn)
+		{
+			return null;
+		}
+		if (NCombatRoom.Instance == null)
+		{
+			return null;
+		}
+		NCreature creatureNode = NCombatRoom.Instance.GetCreatureNode(target);
+		if (creatureNode == null)
+		{
+			return null;
+		}
+		NCardFlyVfx nCardFlyVfx = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NCardFlyVfx>(PackedScene.GenEditState.Disabled);
+		nCardFlyVfx._startPos = card.GlobalPosition;
+		nCardFlyVfx._endPos = creatureNode.VfxSpawnPosition;
+		nCardFlyVfx._card = card;
+		nCardFlyVfx._isAddingToPile = false;
 		nCardFlyVfx._trailPath = trailPath;
 		return nCardFlyVfx;
 	}
@@ -294,7 +335,13 @@ public class NCardFlyVfx : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(4);
+		List<MethodInfo> list = new List<MethodInfo>(5);
+		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node2D"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "card", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false),
+			new PropertyInfo(Variant.Type.Object, "target", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false),
+			new PropertyInfo(Variant.Type.String, "trailPath", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node2D"), exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "card", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false),
@@ -312,6 +359,11 @@ public class NCardFlyVfx : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool InvokeGodotClassMethod(in godot_string_name method, NativeVariantPtrArgs args, out godot_variant ret)
 	{
+		if (method == MethodName.Create && args.Count == 3)
+		{
+			ret = VariantUtils.CreateFrom<NCardFlyVfx>(Create(VariantUtils.ConvertTo<NCard>(in args[0]), VariantUtils.ConvertTo<NCard>(in args[1]), VariantUtils.ConvertTo<string>(in args[2])));
+			return true;
+		}
 		if (method == MethodName.Create && args.Count == 4)
 		{
 			ret = VariantUtils.CreateFrom<NCardFlyVfx>(Create(VariantUtils.ConvertTo<NCard>(in args[0]), VariantUtils.ConvertTo<PileType>(in args[1]), VariantUtils.ConvertTo<bool>(in args[2]), VariantUtils.ConvertTo<string>(in args[3])));
@@ -341,6 +393,11 @@ public class NCardFlyVfx : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static bool InvokeGodotClassStaticMethod(in godot_string_name method, NativeVariantPtrArgs args, out godot_variant ret)
 	{
+		if (method == MethodName.Create && args.Count == 3)
+		{
+			ret = VariantUtils.CreateFrom<NCardFlyVfx>(Create(VariantUtils.ConvertTo<NCard>(in args[0]), VariantUtils.ConvertTo<NCard>(in args[1]), VariantUtils.ConvertTo<string>(in args[2])));
+			return true;
+		}
 		if (method == MethodName.Create && args.Count == 4)
 		{
 			ret = VariantUtils.CreateFrom<NCardFlyVfx>(Create(VariantUtils.ConvertTo<NCard>(in args[0]), VariantUtils.ConvertTo<PileType>(in args[1]), VariantUtils.ConvertTo<bool>(in args[2]), VariantUtils.ConvertTo<string>(in args[3])));

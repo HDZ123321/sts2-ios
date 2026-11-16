@@ -18,7 +18,6 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Helpers.Models;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Pooling;
@@ -150,6 +149,26 @@ public class NCard : Control, IPoolable
 		/// Cached name for the 'Reload' method.
 		/// </summary>
 		public static readonly StringName Reload = "Reload";
+
+		/// <summary>
+		/// Cached name for the 'UpdatePortrait' method.
+		/// </summary>
+		public static readonly StringName UpdatePortrait = "UpdatePortrait";
+
+		/// <summary>
+		/// Cached name for the 'UpdatePortraitBlurParams' method.
+		/// </summary>
+		public static readonly StringName UpdatePortraitBlurParams = "UpdatePortraitBlurParams";
+
+		/// <summary>
+		/// Cached name for the 'SetBlurParams' method.
+		/// </summary>
+		public static readonly StringName SetBlurParams = "SetBlurParams";
+
+		/// <summary>
+		/// Cached name for the 'SetPortraitTexture' method.
+		/// </summary>
+		public static readonly StringName SetPortraitTexture = "SetPortraitTexture";
 
 		/// <summary>
 		/// Cached name for the 'UpdateTypePlaque' method.
@@ -296,11 +315,6 @@ public class NCard : Control, IPoolable
 		/// Cached name for the '_frame' field.
 		/// </summary>
 		public static readonly StringName _frame = "_frame";
-
-		/// <summary>
-		/// Cached name for the '_ancientBorderGlassOverlay' field.
-		/// </summary>
-		public static readonly StringName _ancientBorderGlassOverlay = "_ancientBorderGlassOverlay";
 
 		/// <summary>
 		/// Cached name for the '_ancientBorder' field.
@@ -489,11 +503,15 @@ public class NCard : Control, IPoolable
 
 	private const float _typePlaqueMinXSize = 61f;
 
-	private static readonly StringName _v = new StringName("v");
+	private static readonly StringName _h = new StringName("h");
 
 	private static readonly StringName _s = new StringName("s");
 
-	private static readonly StringName _h = new StringName("h");
+	private static readonly StringName _v = new StringName("v");
+
+	private static readonly StringName _blurUvRegion = new StringName("uv_region");
+
+	private static readonly StringName _blurRadiusScale = new StringName("radius_scale");
 
 	public static readonly Vector2 defaultSize = new Vector2(300f, 422f);
 
@@ -510,8 +528,6 @@ public class NCard : Control, IPoolable
 	private TextureRect _portrait;
 
 	private TextureRect _frame;
-
-	private TextureRect _ancientBorderGlassOverlay;
 
 	private TextureRect _ancientBorder;
 
@@ -672,7 +688,6 @@ public class NCard : Control, IPoolable
 		_titleLabel = GetNode<MegaLabel>("%TitleLabel");
 		_descriptionLabel = GetNode<MegaRichTextLabel>("%DescriptionLabel");
 		_frame = GetNode<TextureRect>("%Frame");
-		_ancientBorderGlassOverlay = GetNode<TextureRect>("%AncientBorderGlassOverlay");
 		_ancientBorder = GetNode<TextureRect>("%AncientBorder");
 		_ancientTextBg = GetNode<TextureRect>("%AncientTextBg");
 		_ancientBanner = GetNode<Control>("%AncientBanner");
@@ -801,8 +816,7 @@ public class NCard : Control, IPoolable
 		{
 			return null;
 		}
-		CardPile? pile = card.Pile;
-		return ((pile != null) ? new PileType?(pile.Type) : overridePile) switch
+		return (overridePile ?? card.Pile?.Type) switch
 		{
 			PileType.None => null, 
 			PileType.Draw => null, 
@@ -867,6 +881,7 @@ public class NCard : Control, IPoolable
 		}
 		DisplayingPile = pileType;
 		Creature target = _previewTarget ?? Model.CurrentTarget;
+		UpdatePortrait();
 		UpdateTitleLabel();
 		UpdateEnergyCostVisuals(pileType);
 		UpdateStarCostVisuals(pileType);
@@ -882,6 +897,7 @@ public class NCard : Control, IPoolable
 			}
 		}
 		string text = ((previewMode != CardPreviewMode.Upgrade) ? Model.GetDescriptionForPile(pileType, target) : Model.GetDescriptionForUpgradePreview());
+		_descriptionLabel.TextDirection = (TextDirection)(LocManager.Instance.IsRtl ? 2 : 0);
 		switch (Visibility)
 		{
 		case ModelVisibility.Visible:
@@ -1184,13 +1200,11 @@ public class NCard : Control, IPoolable
 		_portrait.Visible = !flag;
 		_frame.Visible = !flag;
 		_ancientPortrait.Visible = flag;
-		_ancientBorderGlassOverlay.Visible = flag;
 		_ancientBorder.Visible = flag;
 		_ancientTextBg.Visible = flag;
 		_ancientBanner.Visible = flag;
 		_banner.Visible = !flag;
 		_lock.Visible = Visibility == ModelVisibility.Locked;
-		Texture2D portrait = Model.Portrait;
 		if (Visibility != ModelVisibility.Visible)
 		{
 			if (_portraitBlurMaterial == null)
@@ -1233,71 +1247,75 @@ public class NCard : Control, IPoolable
 			_portrait.Material = null;
 			_ancientPortrait.Material = null;
 		}
-		if (Model.Rarity != CardRarity.Ancient)
-		{
-			_portrait.Texture = portrait;
-			_portraitBorder.Texture = Model.PortraitBorder;
-			_portraitBorder.Material = Model.BannerMaterial;
-			_frame.Texture = Model.Frame;
-			_banner.Material = Model.BannerMaterial;
-			_banner.Texture = Model.BannerTexture;
-		}
-		else
-		{
-			_ancientBorder.Texture = Model.AncientBorder;
-			_ancientTextBg.Texture = Model.AncientTextBg;
-			_ancientPortrait.Texture = portrait;
-			_banner.Material = null;
-		}
-		ApplyPortraitPresentation();
+		UpdatePortrait();
 		_frame.Material = Model.FrameMaterial;
 		ReloadOverlay();
 	}
 
-	private bool _portraitDefaultsCaptured;
-
-	private TextureRect.StretchModeEnum _portraitDefaultStretchMode;
-
-	private CanvasItem.TextureFilterEnum _portraitDefaultTextureFilter;
-
-	private CanvasItem.TextureFilterEnum _ancientPortraitDefaultTextureFilter;
-
-	/// <summary>
-	/// The baked-in art reworks ship full-size portraits instead of atlas sprites, so the slot has
-	/// to fit them rather than show them 1:1, and they read better with mipmaps. Cards without a
-	/// replacement keep whatever the scene set up.
-	/// </summary>
-	private void ApplyPortraitPresentation()
+	private void UpdatePortrait()
 	{
-		if (!_portraitDefaultsCaptured)
+		if (Model != null)
 		{
-			_portraitDefaultsCaptured = true;
-			_portraitDefaultStretchMode = _portrait.StretchMode;
-			_portraitDefaultTextureFilter = _portrait.TextureFilter;
-			_ancientPortraitDefaultTextureFilter = _ancientPortrait.TextureFilter;
+			Texture2D portrait = Model.Portrait;
+			if (Model.Rarity != CardRarity.Ancient)
+			{
+				_portrait.Texture = portrait;
+				_portraitBorder.Texture = Model.PortraitBorder;
+				_portraitBorder.Material = Model.BannerMaterial;
+				_frame.Texture = Model.Frame;
+				_banner.Material = Model.BannerMaterial;
+				_banner.Texture = Model.BannerTexture;
+			}
+			else
+			{
+				_ancientBorder.Texture = Model.AncientBorder;
+				_ancientTextBg.Texture = Model.AncientTextBg;
+				_ancientPortrait.Texture = portrait;
+				_banner.Material = null;
+			}
+			UpdatePortraitBlurParams();
 		}
-		bool flag = RegentCardArt.HasReplacement(Model.GetType());
-		TextureRect.StretchModeEnum stretchMode = (flag ? ReplacementStretchMode() : _portraitDefaultStretchMode);
-		_portrait.StretchMode = stretchMode;
-		_portrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _portraitDefaultTextureFilter);
-		_ancientPortrait.StretchMode = stretchMode;
-		_ancientPortrait.TextureFilter = (flag ? CanvasItem.TextureFilterEnum.LinearWithMipmaps : _ancientPortraitDefaultTextureFilter);
 	}
 
 	/// <summary>
-	/// The reworked portraits are whole illustrations, not atlas sprites trimmed to the slot, so
-	/// the wide ones (1000x760 and friends) fill it exactly and the full-card ones are taller than
-	/// it. A tall illustration gets letterboxed: cover-cropping it would cut away roughly half the
-	/// height, which on a full-card illustration is the face.
+	/// The portrait blur shader needs to know each portrait's atlas region (so its taps don't bleed in neighboring
+	/// sprites) and the portrait's scale within the canvas group (so both blur passes use the same radius).
+	/// These are per-instance shader parameters, so the blur material stays shared and batchable.
 	/// </summary>
-	private TextureRect.StretchModeEnum ReplacementStretchMode()
+	private void UpdatePortraitBlurParams()
 	{
-		Texture2D portrait = Model.Portrait;
-		if (portrait != null && portrait.GetHeight() > portrait.GetWidth())
+		if (Visibility != ModelVisibility.Visible)
 		{
-			return TextureRect.StretchModeEnum.KeepAspectCentered;
+			SetBlurParams(_portrait);
+			SetBlurParams(_ancientPortrait);
 		}
-		return TextureRect.StretchModeEnum.KeepAspectCovered;
+	}
+
+	private static void SetBlurParams(TextureRect portrait)
+	{
+		portrait.SetInstanceShaderParameter(_blurUvRegion, ImageHelper.GetAtlasUvRegion(portrait.Texture));
+		portrait.SetInstanceShaderParameter(_blurRadiusScale, 1f / portrait.Scale.X);
+	}
+
+	/// <summary>
+	/// Overrides the currently displayed portrait texture, e.g. to swap in the full-resolution
+	/// <see cref="P:MegaCrit.Sts2.Core.Models.CardModel.BigPortrait" /> for the Inspect Card screen. Does not affect
+	/// <see cref="T:MegaCrit.Sts2.Core.Models.CardModel" />, so normal pooled usage (hand/piles/combat) is unaffected.
+	/// </summary>
+	public void SetPortraitTexture(Texture2D texture)
+	{
+		if (Model != null)
+		{
+			if (Model.Rarity != CardRarity.Ancient)
+			{
+				_portrait.Texture = texture;
+			}
+			else
+			{
+				_ancientPortrait.Texture = texture;
+			}
+			UpdatePortraitBlurParams();
+		}
 	}
 
 	private void UpdateTypePlaque()
@@ -1570,7 +1588,7 @@ public class NCard : Control, IPoolable
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(35);
+		List<MethodInfo> list = new List<MethodInfo>(39);
 		list.Add(new MethodInfo(MethodName.OnInstantiated, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -1631,6 +1649,16 @@ public class NCard : Control, IPoolable
 		}, null));
 		list.Add(new MethodInfo(MethodName.PlayRandomizeCostAnim, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.Reload, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.UpdatePortrait, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.UpdatePortraitBlurParams, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.SetBlurParams, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal | MethodFlags.Static, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "portrait", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("TextureRect"), exported: false)
+		}, null));
+		list.Add(new MethodInfo(MethodName.SetPortraitTexture, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "texture", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Texture2D"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.UpdateTypePlaque, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateTypePlaqueSizeAndPosition, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateTitleLabel, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -1780,6 +1808,30 @@ public class NCard : Control, IPoolable
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.UpdatePortrait && args.Count == 0)
+		{
+			UpdatePortrait();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.UpdatePortraitBlurParams && args.Count == 0)
+		{
+			UpdatePortraitBlurParams();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.SetBlurParams && args.Count == 1)
+		{
+			SetBlurParams(VariantUtils.ConvertTo<TextureRect>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.SetPortraitTexture && args.Count == 1)
+		{
+			SetPortraitTexture(VariantUtils.ConvertTo<Texture2D>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.UpdateTypePlaque && args.Count == 0)
 		{
 			UpdateTypePlaque();
@@ -1878,6 +1930,12 @@ public class NCard : Control, IPoolable
 			ret = VariantUtils.CreateFrom<Color>(GetCostOutlineColorInHand(VariantUtils.ConvertTo<CardCostColor>(in args[0]), VariantUtils.ConvertTo<bool>(in args[1]), VariantUtils.ConvertTo<Color>(in args[2])));
 			return true;
 		}
+		if (method == MethodName.SetBlurParams && args.Count == 1)
+		{
+			SetBlurParams(VariantUtils.ConvertTo<TextureRect>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
 		ret = default(godot_variant);
 		return false;
 	}
@@ -1971,6 +2029,22 @@ public class NCard : Control, IPoolable
 			return true;
 		}
 		if (method == MethodName.Reload)
+		{
+			return true;
+		}
+		if (method == MethodName.UpdatePortrait)
+		{
+			return true;
+		}
+		if (method == MethodName.UpdatePortraitBlurParams)
+		{
+			return true;
+		}
+		if (method == MethodName.SetBlurParams)
+		{
+			return true;
+		}
+		if (method == MethodName.SetPortraitTexture)
 		{
 			return true;
 		}
@@ -2086,11 +2160,6 @@ public class NCard : Control, IPoolable
 		if (name == PropertyName._frame)
 		{
 			_frame = VariantUtils.ConvertTo<TextureRect>(in value);
-			return true;
-		}
-		if (name == PropertyName._ancientBorderGlassOverlay)
-		{
-			_ancientBorderGlassOverlay = VariantUtils.ConvertTo<TextureRect>(in value);
 			return true;
 		}
 		if (name == PropertyName._ancientBorder)
@@ -2349,11 +2418,6 @@ public class NCard : Control, IPoolable
 			value = VariantUtils.CreateFrom(in _frame);
 			return true;
 		}
-		if (name == PropertyName._ancientBorderGlassOverlay)
-		{
-			value = VariantUtils.CreateFrom(in _ancientBorderGlassOverlay);
-			return true;
-		}
 		if (name == PropertyName._ancientBorder)
 		{
 			value = VariantUtils.CreateFrom(in _ancientBorder);
@@ -2536,7 +2600,6 @@ public class NCard : Control, IPoolable
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientPortrait, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._portrait, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._frame, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientBorderGlassOverlay, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientBorder, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientBanner, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientTextBg, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -2599,7 +2662,6 @@ public class NCard : Control, IPoolable
 		info.AddProperty(PropertyName._ancientPortrait, Variant.From(in _ancientPortrait));
 		info.AddProperty(PropertyName._portrait, Variant.From(in _portrait));
 		info.AddProperty(PropertyName._frame, Variant.From(in _frame));
-		info.AddProperty(PropertyName._ancientBorderGlassOverlay, Variant.From(in _ancientBorderGlassOverlay));
 		info.AddProperty(PropertyName._ancientBorder, Variant.From(in _ancientBorder));
 		info.AddProperty(PropertyName._ancientBanner, Variant.From(in _ancientBanner));
 		info.AddProperty(PropertyName._ancientTextBg, Variant.From(in _ancientTextBg));
@@ -2684,141 +2746,137 @@ public class NCard : Control, IPoolable
 		{
 			_frame = value11.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._ancientBorderGlassOverlay, out var value12))
+		if (info.TryGetProperty(PropertyName._ancientBorder, out var value12))
 		{
-			_ancientBorderGlassOverlay = value12.As<TextureRect>();
+			_ancientBorder = value12.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._ancientBorder, out var value13))
+		if (info.TryGetProperty(PropertyName._ancientBanner, out var value13))
 		{
-			_ancientBorder = value13.As<TextureRect>();
+			_ancientBanner = value13.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._ancientBanner, out var value14))
+		if (info.TryGetProperty(PropertyName._ancientTextBg, out var value14))
 		{
-			_ancientBanner = value14.As<Control>();
+			_ancientTextBg = value14.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._ancientTextBg, out var value15))
+		if (info.TryGetProperty(PropertyName._portraitBorder, out var value15))
 		{
-			_ancientTextBg = value15.As<TextureRect>();
+			_portraitBorder = value15.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._portraitBorder, out var value16))
+		if (info.TryGetProperty(PropertyName._banner, out var value16))
 		{
-			_portraitBorder = value16.As<TextureRect>();
+			_banner = value16.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._banner, out var value17))
+		if (info.TryGetProperty(PropertyName._lock, out var value17))
 		{
-			_banner = value17.As<TextureRect>();
+			_lock = value17.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._lock, out var value18))
+		if (info.TryGetProperty(PropertyName._typePlaque, out var value18))
 		{
-			_lock = value18.As<TextureRect>();
+			_typePlaque = value18.As<NinePatchRect>();
 		}
-		if (info.TryGetProperty(PropertyName._typePlaque, out var value19))
+		if (info.TryGetProperty(PropertyName._typeLabel, out var value19))
 		{
-			_typePlaque = value19.As<NinePatchRect>();
+			_typeLabel = value19.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._typeLabel, out var value20))
+		if (info.TryGetProperty(PropertyName._portraitCanvasGroup, out var value20))
 		{
-			_typeLabel = value20.As<MegaLabel>();
+			_portraitCanvasGroup = value20.As<CanvasGroup>();
 		}
-		if (info.TryGetProperty(PropertyName._portraitCanvasGroup, out var value21))
+		if (info.TryGetProperty(PropertyName._rareGlow, out var value21))
 		{
-			_portraitCanvasGroup = value21.As<CanvasGroup>();
+			_rareGlow = value21.As<NCardRareGlow>();
 		}
-		if (info.TryGetProperty(PropertyName._rareGlow, out var value22))
+		if (info.TryGetProperty(PropertyName._uncommonGlow, out var value22))
 		{
-			_rareGlow = value22.As<NCardRareGlow>();
+			_uncommonGlow = value22.As<NCardUncommonGlow>();
 		}
-		if (info.TryGetProperty(PropertyName._uncommonGlow, out var value23))
+		if (info.TryGetProperty(PropertyName._sparkles, out var value23))
 		{
-			_uncommonGlow = value23.As<NCardUncommonGlow>();
+			_sparkles = value23.As<GpuParticles2D>();
 		}
-		if (info.TryGetProperty(PropertyName._sparkles, out var value24))
+		if (info.TryGetProperty(PropertyName._energyIcon, out var value24))
 		{
-			_sparkles = value24.As<GpuParticles2D>();
+			_energyIcon = value24.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._energyIcon, out var value25))
+		if (info.TryGetProperty(PropertyName._energyLabel, out var value25))
 		{
-			_energyIcon = value25.As<TextureRect>();
+			_energyLabel = value25.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._energyLabel, out var value26))
+		if (info.TryGetProperty(PropertyName._unplayableEnergyIcon, out var value26))
 		{
-			_energyLabel = value26.As<MegaLabel>();
+			_unplayableEnergyIcon = value26.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._unplayableEnergyIcon, out var value27))
+		if (info.TryGetProperty(PropertyName._starIcon, out var value27))
 		{
-			_unplayableEnergyIcon = value27.As<TextureRect>();
+			_starIcon = value27.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._starIcon, out var value28))
+		if (info.TryGetProperty(PropertyName._starLabel, out var value28))
 		{
-			_starIcon = value28.As<TextureRect>();
+			_starLabel = value28.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._starLabel, out var value29))
+		if (info.TryGetProperty(PropertyName._unplayableStarIcon, out var value29))
 		{
-			_starLabel = value29.As<MegaLabel>();
+			_unplayableStarIcon = value29.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._unplayableStarIcon, out var value30))
+		if (info.TryGetProperty(PropertyName._overlayContainer, out var value30))
 		{
-			_unplayableStarIcon = value30.As<TextureRect>();
+			_overlayContainer = value30.As<Node>();
 		}
-		if (info.TryGetProperty(PropertyName._overlayContainer, out var value31))
+		if (info.TryGetProperty(PropertyName._cardOverlay, out var value31))
 		{
-			_overlayContainer = value31.As<Node>();
+			_cardOverlay = value31.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._cardOverlay, out var value32))
+		if (info.TryGetProperty(PropertyName._cardVfxContainer, out var value32))
 		{
-			_cardOverlay = value32.As<Control>();
+			_cardVfxContainer = value32.As<Node>();
 		}
-		if (info.TryGetProperty(PropertyName._cardVfxContainer, out var value33))
+		if (info.TryGetProperty(PropertyName._enchantmentTab, out var value33))
 		{
-			_cardVfxContainer = value33.As<Node>();
+			_enchantmentTab = value33.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._enchantmentTab, out var value34))
+		if (info.TryGetProperty(PropertyName._enchantmentVfxOverride, out var value34))
 		{
-			_enchantmentTab = value34.As<Control>();
+			_enchantmentVfxOverride = value34.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._enchantmentVfxOverride, out var value35))
+		if (info.TryGetProperty(PropertyName._enchantmentIcon, out var value35))
 		{
-			_enchantmentVfxOverride = value35.As<TextureRect>();
+			_enchantmentIcon = value35.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._enchantmentIcon, out var value36))
+		if (info.TryGetProperty(PropertyName._enchantmentLabel, out var value36))
 		{
-			_enchantmentIcon = value36.As<TextureRect>();
+			_enchantmentLabel = value36.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._enchantmentLabel, out var value37))
+		if (info.TryGetProperty(PropertyName._defaultEnchantmentPosition, out var value37))
 		{
-			_enchantmentLabel = value37.As<MegaLabel>();
+			_defaultEnchantmentPosition = value37.As<Vector2>();
 		}
-		if (info.TryGetProperty(PropertyName._defaultEnchantmentPosition, out var value38))
+		if (info.TryGetProperty(PropertyName._pretendCardCanBePlayed, out var value38))
 		{
-			_defaultEnchantmentPosition = value38.As<Vector2>();
+			_pretendCardCanBePlayed = value38.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._pretendCardCanBePlayed, out var value39))
+		if (info.TryGetProperty(PropertyName._forceUnpoweredPreview, out var value39))
 		{
-			_pretendCardCanBePlayed = value39.As<bool>();
+			_forceUnpoweredPreview = value39.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._forceUnpoweredPreview, out var value40))
+		if (info.TryGetProperty(PropertyName._portraitBlurMaterial, out var value40))
 		{
-			_forceUnpoweredPreview = value40.As<bool>();
+			_portraitBlurMaterial = value40.As<Material>();
 		}
-		if (info.TryGetProperty(PropertyName._portraitBlurMaterial, out var value41))
+		if (info.TryGetProperty(PropertyName._canvasGroupMaskBlurMaterial, out var value41))
 		{
-			_portraitBlurMaterial = value41.As<Material>();
+			_canvasGroupMaskBlurMaterial = value41.As<Material>();
 		}
-		if (info.TryGetProperty(PropertyName._canvasGroupMaskBlurMaterial, out var value42))
+		if (info.TryGetProperty(PropertyName._canvasGroupBlurMaterial, out var value42))
 		{
-			_canvasGroupMaskBlurMaterial = value42.As<Material>();
+			_canvasGroupBlurMaterial = value42.As<Material>();
 		}
-		if (info.TryGetProperty(PropertyName._canvasGroupBlurMaterial, out var value43))
+		if (info.TryGetProperty(PropertyName._canvasGroupMaskMaterial, out var value43))
 		{
-			_canvasGroupBlurMaterial = value43.As<Material>();
+			_canvasGroupMaskMaterial = value43.As<Material>();
 		}
-		if (info.TryGetProperty(PropertyName._canvasGroupMaskMaterial, out var value44))
+		if (info.TryGetProperty(PropertyName._visibility, out var value44))
 		{
-			_canvasGroupMaskMaterial = value44.As<Material>();
-		}
-		if (info.TryGetProperty(PropertyName._visibility, out var value45))
-		{
-			_visibility = value45.As<ModelVisibility>();
+			_visibility = value44.As<ModelVisibility>();
 		}
 	}
 }

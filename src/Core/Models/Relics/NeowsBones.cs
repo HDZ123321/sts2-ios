@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Events;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Events;
@@ -38,7 +39,7 @@ public sealed class NeowsBones : RelicModel
 	public override async Task AfterObtained()
 	{
 		List<RelicModel> list = GetValidRelics(base.Owner).ToList();
-		base.Owner.PlayerRng.Rewards.Shuffle(list);
+		list.UnstableShuffle(base.Owner.PlayerRng.NonCombatGeneration);
 		List<Reward> rewards = list.Take(base.DynamicVars["Relics"].IntValue).Select((Func<RelicModel, Reward>)((RelicModel r) => new RelicReward(r, base.Owner))).ToList();
 		await new RewardsSet(base.Owner).WithCustomRewards(rewards).WithSkippingDisallowed().Offer();
 		List<CardModel> availableCurses = (from c in ModelDb.CardPool<CurseCardPool>().GetUnlockedCards(base.Owner.UnlockState, base.Owner.RunState.CardMultiplayerConstraint)
@@ -48,7 +49,7 @@ public sealed class NeowsBones : RelicModel
 		List<CardPileAddResult> curseResults = new List<CardPileAddResult>();
 		for (int i = 0; i < base.DynamicVars["Curses"].IntValue; i++)
 		{
-			CardModel cardModel = base.Owner.RunState.Rng.Niche.NextItem(availableCurses);
+			CardModel cardModel = base.Owner.PlayerRng.NonCombatGeneration.NextItem(availableCurses);
 			availableCurses.Remove(cardModel);
 			CardModel card = base.Owner.RunState.CreateCard(cardModel, base.Owner);
 			curseResults.Add(await CardPileCmd.Add(card, PileType.Deck));

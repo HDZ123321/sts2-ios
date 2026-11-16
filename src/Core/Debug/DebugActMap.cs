@@ -66,7 +66,7 @@ public class DebugActMap : Node
 
 	private void GenerateMap()
 	{
-		uint seed = Rng.Chaotic.NextUnsignedInt();
+		ulong seed = Rng.Chaotic.NextUnsignedLong();
 		_testActMap = new StandardActMap(new Rng(seed), ModelDb.Act<Overgrowth>(), isMultiplayer: false, shouldReplaceTreasureWithElites: false);
 		GetNode<NMapScreen>("%MapScreen").SetMap(_testActMap, seed, clearDrawings: true);
 	}

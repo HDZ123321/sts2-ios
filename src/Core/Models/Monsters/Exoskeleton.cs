@@ -27,9 +27,9 @@ public sealed class Exoskeleton : MonsterModel
 
 	private const string _buffSfx = "event:/sfx/enemy/enemy_attacks/roaches/roaches_buff";
 
-	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 25, 24);
+	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 26, 24);
 
-	public override int MaxInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 29, 28);
+	public override int MaxInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 30, 28);
 
 	private int SkitterDamage => 1;
 

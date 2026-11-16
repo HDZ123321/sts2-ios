@@ -37,6 +37,11 @@ public class NSettingsPanel : Control
 		public static readonly StringName OnVisibilityChange = "OnVisibilityChange";
 
 		/// <summary>
+		/// Cached name for the 'UpdateNavigation' method.
+		/// </summary>
+		public static readonly StringName UpdateNavigation = "UpdateNavigation";
+
+		/// <summary>
 		/// Cached name for the 'IsSettingsOption' method.
 		/// </summary>
 		public static readonly StringName IsSettingsOption = "IsSettingsOption";
@@ -82,7 +87,7 @@ public class NSettingsPanel : Control
 
 	private float _minPadding = 50f;
 
-	protected Control? _firstControl;
+	private Control? _firstControl;
 
 	private Tween? _tween;
 
@@ -97,15 +102,12 @@ public class NSettingsPanel : Control
 		GetViewport().Connect(Viewport.SignalName.SizeChanged, Callable.From(RefreshSize));
 		RefreshSize();
 		List<Control> list = new List<Control>();
-		GetSettingsOptionsRecursive(Content, list);
-		for (int i = 0; i < list.Count; i++)
+		GetSettingsOptionsRecursive(Content, list, includeInvisibleSettings: true);
+		foreach (Control item in list)
 		{
-			list[i].FocusNeighborLeft = list[i].GetPath();
-			list[i].FocusNeighborRight = list[i].GetPath();
-			list[i].FocusNeighborTop = ((i > 0) ? list[i - 1].GetPath() : list[i].GetPath());
-			list[i].FocusNeighborBottom = ((i < list.Count - 1) ? list[i + 1].GetPath() : list[i].GetPath());
+			item.Connect(CanvasItem.SignalName.VisibilityChanged, Callable.From(UpdateNavigation));
 		}
-		_firstControl = list.First();
+		UpdateNavigation();
 	}
 
 	private void RefreshSize()
@@ -133,15 +135,29 @@ public class NSettingsPanel : Control
 		}
 	}
 
-	private void GetSettingsOptionsRecursive(Control parent, List<Control> ancestors)
+	protected virtual void UpdateNavigation()
+	{
+		List<Control> list = new List<Control>();
+		GetSettingsOptionsRecursive(Content, list);
+		for (int i = 0; i < list.Count; i++)
+		{
+			list[i].FocusNeighborLeft = list[i].GetPath();
+			list[i].FocusNeighborRight = list[i].GetPath();
+			list[i].FocusNeighborTop = ((i > 0) ? list[i - 1].GetPath() : list[i].GetPath());
+			list[i].FocusNeighborBottom = ((i < list.Count - 1) ? list[i + 1].GetPath() : list[i].GetPath());
+		}
+		_firstControl = list.FirstOrDefault();
+	}
+
+	private void GetSettingsOptionsRecursive(Control parent, List<Control> ancestors, bool includeInvisibleSettings = false)
 	{
 		foreach (Control item in parent.GetChildren().OfType<Control>())
 		{
 			if (!IsSettingsOption(item))
 			{
-				GetSettingsOptionsRecursive(item, ancestors);
+				GetSettingsOptionsRecursive(item, ancestors, includeInvisibleSettings);
 			}
-			else if (item.GetParent<Control>().IsVisible() && item.FocusMode == FocusModeEnum.All)
+			else if ((item.GetParent<Control>().IsVisible() || includeInvisibleSettings) && item.FocusMode == FocusModeEnum.All)
 			{
 				ancestors.Add(item);
 			}
@@ -169,10 +185,11 @@ public class NSettingsPanel : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(4);
+		List<MethodInfo> list = new List<MethodInfo>(5);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.RefreshSize, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnVisibilityChange, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.UpdateNavigation, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.IsSettingsOption, new PropertyInfo(Variant.Type.Bool, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "c", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -202,6 +219,12 @@ public class NSettingsPanel : Control
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.UpdateNavigation && args.Count == 0)
+		{
+			UpdateNavigation();
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.IsSettingsOption && args.Count == 1)
 		{
 			ret = VariantUtils.CreateFrom<bool>(IsSettingsOption(VariantUtils.ConvertTo<Control>(in args[0])));
@@ -223,6 +246,10 @@ public class NSettingsPanel : Control
 			return true;
 		}
 		if (method == MethodName.OnVisibilityChange)
+		{
+			return true;
+		}
+		if (method == MethodName.UpdateNavigation)
 		{
 			return true;
 		}

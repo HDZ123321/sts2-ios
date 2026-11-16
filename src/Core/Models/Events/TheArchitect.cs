@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,8 +8,10 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Ancients;
+using MegaCrit.Sts2.Core.Entities.Characters;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Events;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
@@ -29,6 +31,8 @@ namespace MegaCrit.Sts2.Core.Models.Events;
 
 public sealed class TheArchitect : EventModel
 {
+	private const string _architectAttackSfx = "event:/sfx/enemy/enemy_attacks/architect/architect_ending_attack";
+
 	private const string _locTable = "ancients";
 
 	private static readonly LocString _emptyLocString = new LocString("ancients", "PROCEED.description");
@@ -48,6 +52,8 @@ public sealed class TheArchitect : EventModel
 	private int _score;
 
 	private AncientDialogueSet? _dialogueSet;
+
+	public override FoolPronounGuess FoolPronounGuess => FoolPronounGuess.It;
 
 	public override EventLayoutType LayoutType => EventLayoutType.Combat;
 
@@ -187,14 +193,6 @@ public sealed class TheArchitect : EventModel
 		TaskHelper.RunSafely(PlayCurrentLine());
 	}
 
-	public void TriggerVictory()
-	{
-		if (LocalContext.IsMe(base.Owner))
-		{
-			NCombatRoom.Instance?.SetWaitingForOtherPlayersOverlayVisible(visible: false);
-		}
-	}
-
 	private static string CharKey<T>() where T : CharacterModel
 	{
 		return ModelDb.Character<T>().Id.Entry;
@@ -310,6 +308,11 @@ public sealed class TheArchitect : EventModel
 						VisitIndex = 2,
 						EndAttackers = ArchitectAttackers.Both
 					}
+				}),
+				[CharKey<Fool>()] = new global::_003C_003Ez__ReadOnlySingleElementList<AncientDialogue>(new AncientDialogue("", "", "")
+				{
+					VisitIndex = 0,
+					EndAttackers = ArchitectAttackers.Both
 				})
 			},
 			AgnosticDialogues = Array.Empty<AncientDialogue>()
@@ -359,17 +362,11 @@ public sealed class TheArchitect : EventModel
 	{
 		if (LocalContext.IsMe(base.Owner))
 		{
-			// A ported or modded character has no architect dialogue, so Dialogue is null
-			// here and there is no closing attack to play.
-			ArchitectAttackers endAttackers = Dialogue?.EndAttackers ?? ArchitectAttackers.None;
-			await AnimPlayerAttackIfNecessary(endAttackers);
-			await AnimArchitectAttackIfNecessary(endAttackers);
-			if (base.Owner.RunState.Players.Count > 1)
-			{
-				NCombatRoom.Instance?.SetWaitingForOtherPlayersOverlayVisible(visible: true);
-			}
-			RunManager.Instance.ActChangeSynchronizer.SetLocalPlayerReady();
+			await AnimPlayerAttackIfNecessary(Dialogue.EndAttackers);
+			await AnimArchitectAttackIfNecessary(Dialogue.EndAttackers);
+			await RunManager.Instance.WinRun();
 		}
+		SetEventState(_emptyLocString, Array.Empty<EventOption>());
 	}
 
 	private async Task<bool> AnimPlayerAttackIfNecessary(ArchitectAttackers attackers)
@@ -383,8 +380,8 @@ public sealed class TheArchitect : EventModel
 			return false;
 		}
 		List<string> shuffledVfx = base.Owner.Character.GetArchitectAttackVfx();
-		base.Rng.Shuffle(shuffledVfx);
-		int[] damageParts = DivideWildly(Score, shuffledVfx.Count, base.Rng);
+		shuffledVfx.UnstableShuffle(MegaCrit.Sts2.Core.Random.Rng.Chaotic);
+		int[] damageParts = DivideWildly(Score, shuffledVfx.Count, MegaCrit.Sts2.Core.Random.Rng.Chaotic);
 		Control vfxContainer = NCombatRoom.Instance?.CombatVfxContainer;
 		for (int i = 0; i < shuffledVfx.Count; i++)
 		{
@@ -461,10 +458,12 @@ public sealed class TheArchitect : EventModel
 		bool flag = (uint)(attackers - 2) <= 1u;
 		if (flag && ArchitectCreature != null)
 		{
+			SfxCmd.Play("event:/sfx/enemy/enemy_attacks/architect/architect_ending_attack");
 			await CreatureCmd.TriggerAnim(ArchitectCreature, "Attack", 0.5f);
+			await Cmd.Wait(0.25f);
 			VfxCmd.PlayOnCreature(base.Owner.Creature, "vfx/vfx_attack_lightning");
 			NCombatRoom.Instance?.CombatVfxContainer.AddChildSafely(NFireBurstVfx.Create(base.Owner.Creature, 1f));
-			await Cmd.Wait(0.5f);
+			await Cmd.Wait(0.25f);
 		}
 	}
 
@@ -522,6 +521,7 @@ public sealed class TheArchitect : EventModel
 
 	private void ShowSpeechBubble(AncientDialogueLine line, Creature speaker)
 	{
+		base.Owner.Character.AddDetailsTo(line.LineText, FoolPronounGuess);
 		SpeechBubble = TalkCmd.Play(line.LineText, speaker, (line.Speaker == AncientDialogueSpeaker.Ancient) ? VfxColor.DarkGray : base.Owner.Character.SpeechBubbleColor, VfxDuration.Forever);
 	}
 

@@ -57,7 +57,7 @@ public sealed class Shiv : CardModel
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this);
+		AttackCommand attackCommand = DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).FromCard(this, cardPlay);
 		if (HasFanOfKnives)
 		{
 			Creature lastEnemy = base.CombatState.HittableEnemies.LastOrDefault();
@@ -80,12 +80,12 @@ public sealed class Shiv : CardModel
 		base.DynamicVars.Damage.UpgradeValueBy(2m);
 	}
 
-	public static async Task<CardModel?> CreateInHand(Player owner, ICombatState combatState)
+	public static async Task<CardModel?> CreateInHand(Player owner, ICombatState combatState, Player? creator = null)
 	{
-		return (await CreateInHand(owner, 1, combatState)).FirstOrDefault();
+		return (await CreateInHand(owner, 1, combatState, creator)).FirstOrDefault();
 	}
 
-	public static async Task<IEnumerable<CardModel>> CreateInHand(Player owner, int count, ICombatState combatState)
+	public static async Task<IEnumerable<CardModel>> CreateInHand(Player owner, int count, ICombatState combatState, Player? creator = null)
 	{
 		if (count == 0)
 		{
@@ -100,7 +100,7 @@ public sealed class Shiv : CardModel
 		{
 			shivs.Add(combatState.CreateCard<Shiv>(owner));
 		}
-		await CardPileCmd.AddGeneratedCardsToCombat(shivs, PileType.Hand, owner);
+		await CardPileCmd.AddGeneratedCardsToCombat(shivs, PileType.Hand, creator ?? owner);
 		return shivs;
 	}
 }

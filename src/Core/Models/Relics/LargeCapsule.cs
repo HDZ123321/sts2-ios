@@ -24,7 +24,7 @@ public sealed class LargeCapsule : RelicModel
 	{
 		for (int i = 0; i < base.DynamicVars["Relics"].IntValue; i++)
 		{
-			RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
+			RelicModel relic = RelicFactory.PullNextRelicForRewardFromFront(base.Owner).ToMutable();
 			await RelicCmd.Obtain(relic, base.Owner);
 		}
 		List<CardPileAddResult> list = new List<CardPileAddResult>(2);

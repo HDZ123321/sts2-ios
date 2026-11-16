@@ -29,9 +29,8 @@ public class Logger
 	{
 		string[] cmdlineArgs = OS.GetCmdlineArgs();
 		bool flag = cmdlineArgs.Any((string arg) => arg == "--headless");
-		bool flag2 = cmdlineArgs.Any((string arg) => arg.Contains("CiCoreRunner.tscn"));
 		bool result = OS.HasFeature("editor");
-		if (flag || flag2 || TestMode.IsOn)
+		if (flag || TestMode.IsTestRunFromCmdline() || TestMode.IsOn)
 		{
 			return false;
 		}

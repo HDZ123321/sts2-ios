@@ -21,7 +21,7 @@ public sealed class Stardust : CardModel
 
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).WithHitCount(ResolveStarXValue()).FromCard(this)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).WithHitCount(ResolveStarXValue()).FromCard(this, cardPlay)
 			.TargetingRandomOpponents(base.CombatState)
 			.WithHitFx("vfx/vfx_starry_impact")
 			.Execute(choiceContext);

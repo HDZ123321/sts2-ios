@@ -3,35 +3,18 @@ using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
-using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
-using MegaCrit.Sts2.Core.Models.Powers;
 
 namespace MegaCrit.Sts2.Core.Models.Cards;
 
 public sealed class Eidolon : CardModel
 {
-	private const int _intangibleThreshold = 9;
+	public override bool CanBeGeneratedInCombat => false;
 
-	protected override bool ShouldGlowGoldInternal
-	{
-		get
-		{
-			PlayerCombatState? playerCombatState = base.Owner.PlayerCombatState;
-			if (playerCombatState == null)
-			{
-				return false;
-			}
-			return playerCombatState.Hand.Cards.Count > 9;
-		}
-	}
+	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
 
-	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlyArray<IHoverTip>(new IHoverTip[2]
-	{
-		HoverTipFactory.FromKeyword(CardKeyword.Exhaust),
-		HoverTipFactory.FromPower<IntangiblePower>()
-	});
+	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.FromKeyword(CardKeyword.Ethereal));
 
 	public Eidolon()
 		: base(2, CardType.Skill, CardRarity.Rare, TargetType.Self)
@@ -41,16 +24,10 @@ public sealed class Eidolon : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
-		List<CardModel> list = base.Owner.PlayerCombatState.Hand.Cards.ToList();
-		int exhaustedCount = 0;
+		List<CardModel> list = base.Owner.PlayerCombatState.ExhaustPile.Cards.Where((CardModel c) => c.Keywords.Contains(CardKeyword.Ethereal) && !c.Keywords.Contains(CardKeyword.Unplayable)).ToList();
 		foreach (CardModel item in list)
 		{
-			await CardCmd.Exhaust(choiceContext, item);
-			exhaustedCount++;
-		}
-		if (exhaustedCount >= 9)
-		{
-			await PowerCmd.Apply<IntangiblePower>(choiceContext, base.Owner.Creature, 1m, base.Owner.Creature, this);
+			await CardCmd.AutoPlay(choiceContext, item, null);
 		}
 	}
 

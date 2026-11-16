@@ -126,6 +126,8 @@ public class NBestiaryEntry : NButton
 	public override void _Ready()
 	{
 		ConnectSignals();
+		base.FocusNeighborLeft = new NodePath(".");
+		base.FocusNeighborRight = new NodePath(".");
 		_label = GetNode<MegaRichTextLabel>("%Label");
 		_highlight = GetNode<Control>("%Highlight");
 		_underConstructionIcon = GetNode<TextureRect>("%UnderConstructionIcon");
@@ -156,7 +158,7 @@ public class NBestiaryEntry : NButton
 		_tween?.Kill();
 		_tween = CreateTween();
 		_tween.TweenProperty(_label, "scale", Vector2.One * 1.1f, 0.05);
-		if (NControllerManager.Instance.IsUsingController)
+		if (NControllerManager.Instance.IsUsingDirectionalNavigation)
 		{
 			_highlight.Visible = true;
 		}

@@ -16,7 +16,7 @@ internal interface IPlatformUtilStrategy
 
 	Task<IEnumerable<ulong>> GetFriendsWithOpenLobbies();
 
-	void OpenInviteDialog(INetGameService gameService);
+	bool TryOpenInviteDialog(INetGameService gameService);
 
 	void OpenUrl(string url);
 

@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Rooms;
 
 namespace MegaCrit.Sts2.Core.Models.Relics;
@@ -95,6 +96,10 @@ public sealed class UnsettlingLamp : RelicModel
 			return Task.CompletedTask;
 		}
 		if (power.GetTypeForAmount(amount) != PowerType.Debuff)
+		{
+			return Task.CompletedTask;
+		}
+		if (target.HasPower<ArtifactPower>())
 		{
 			return Task.CompletedTask;
 		}

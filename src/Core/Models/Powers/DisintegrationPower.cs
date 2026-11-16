@@ -20,7 +20,7 @@ public sealed class DisintegrationPower : PowerModel
 	{
 		if (participants.Contains(base.Owner))
 		{
-			await CreatureCmd.Damage(choiceContext, base.Owner, base.Amount, ValueProp.Unpowered, base.Owner, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner, base.Amount, ValueProp.Unpowered, base.Owner);
 			VfxCmd.PlayOnCreatureCenter(base.Owner, "vfx/vfx_attack_blunt");
 		}
 	}

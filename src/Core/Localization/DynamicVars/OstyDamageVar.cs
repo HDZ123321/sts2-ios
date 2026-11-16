@@ -45,7 +45,7 @@ public class OstyDamageVar : DynamicVar
 		if (runGlobalHooks)
 		{
 			ICombatState combatState = card.CombatState ?? card.Owner.Creature.CombatState;
-			num = Hook.ModifyDamage(card.Owner.RunState, combatState, target, card.Owner.Osty, base.BaseValue, Props, card, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
+			num = Hook.ModifyDamage(card.Owner.RunState, combatState, target, card.Owner.Osty, base.BaseValue, Props, card, null, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
 		}
 		base.PreviewValue = num;
 	}

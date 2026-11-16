@@ -30,4 +30,14 @@ public class ModManagerFileIo : IModManagerFileIo
 	{
 		return new FileAccessStream(path, mode);
 	}
+
+	public void MakeDirRecursive(string path)
+	{
+		DirAccess.MakeDirRecursiveAbsolute(path);
+	}
+
+	public Error CopyFile(string sourcePath, string destinationPath)
+	{
+		return DirAccess.CopyAbsolute(sourcePath, destinationPath);
+	}
 }

@@ -40,7 +40,7 @@ public class DamageVar : DynamicVar
 		}
 		if (runGlobalHooks)
 		{
-			num = Hook.ModifyDamage(card.Owner.RunState, card.CombatState, target, card.Owner.Creature, base.BaseValue, Props, card, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
+			num = Hook.ModifyDamage(card.Owner.RunState, card.CombatState, target, card.Owner.Creature, base.BaseValue, Props, card, null, ModifyDamageHookType.All, previewMode, out IEnumerable<AbstractModel> _);
 		}
 		base.PreviewValue = num;
 	}

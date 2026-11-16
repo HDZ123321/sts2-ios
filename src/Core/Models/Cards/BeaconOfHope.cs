@@ -15,7 +15,7 @@ public sealed class BeaconOfHope : CardModel
 	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.Static(StaticHoverTip.Block));
 
 	public BeaconOfHope()
-		: base(1, CardType.Power, CardRarity.Rare, TargetType.Self)
+		: base(2, CardType.Power, CardRarity.Rare, TargetType.Self)
 	{
 	}
 

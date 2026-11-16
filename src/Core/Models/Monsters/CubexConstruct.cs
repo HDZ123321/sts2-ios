@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
+using MegaCrit.Sts2.Core.Nodes.Combat;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -196,5 +197,12 @@ public sealed class CubexConstruct : MonsterModel
 		creatureAnimator.AddAnyState("Hit", animState3, () => !IsBurrowed && !IsCharging);
 		creatureAnimator.AddAnyState("Hit", animState4, () => !IsBurrowed && IsCharging);
 		return creatureAnimator;
+	}
+
+	public override List<BestiaryMonsterMove> GenerateBestiaryMoveList(NCreatureVisuals? creatureVisuals)
+	{
+		List<BestiaryMonsterMove> list = base.GenerateBestiaryMoveList(creatureVisuals);
+		list.RemoveAll((BestiaryMonsterMove m) => m.stateId == "REPEATER_BLAST_MOVE");
+		return list;
 	}
 }

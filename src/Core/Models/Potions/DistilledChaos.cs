@@ -17,13 +17,14 @@ public sealed class DistilledChaos : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new RepeatVar(3));
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, new Color("a296a3"));
-		await CardPileCmd.AutoPlayFromDrawPile(choiceContext, base.Owner, base.DynamicVars.Repeat.IntValue, CardPilePosition.Top, forceExhaust: false);
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, new Color("a296a3"));
+		await CardPileCmd.AutoPlayFromDrawPile(choiceContext, target.Player, base.DynamicVars.Repeat.IntValue, CardPilePosition.Top, forceExhaust: false);
 	}
 }

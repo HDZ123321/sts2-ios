@@ -14,6 +14,8 @@ public sealed class MockReattachMonster : MonsterModel
 {
 	private MoveState _deadState;
 
+	public override bool IsMock => true;
+
 	public override LocString Title => MonsterModel.L10NMonsterLookup("BIG_DUMMY.name");
 
 	public override int MinInitialHp => 1;

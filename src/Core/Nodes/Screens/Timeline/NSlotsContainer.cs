@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading.Tasks;
@@ -198,7 +199,7 @@ public class NSlotsContainer : Control
 
 	private void ProcessGuiFocus(Control focusedControl)
 	{
-		if (IsVisibleInTree() && NControllerManager.Instance.IsUsingController && IsAncestorOf(focusedControl))
+		if (IsVisibleInTree() && NControllerManager.Instance.IsUsingDirectionalNavigation && IsAncestorOf(focusedControl))
 		{
 			float x = _whatsMoved.GlobalPosition.X - focusedControl.GetParent<Control>().GlobalPosition.X;
 			_targetPosition = new Vector2(x, _targetPosition.Y);
@@ -238,7 +239,13 @@ public class NSlotsContainer : Control
 
 	public override void _Process(double delta)
 	{
+		float a = Mathf.Sign(_whatsMoved.Position.X - _targetPosition.X);
 		_whatsMoved.Position = _whatsMoved.Position.Lerp(_targetPosition, (float)delta * 20f);
+		float b = Mathf.Sign(_whatsMoved.Position.X - _targetPosition.X);
+		if (Math.Abs(_whatsMoved.Position.X - _targetPosition.X) < 0.5f || !Mathf.IsEqualApprox(a, b))
+		{
+			_whatsMoved.Position = _targetPosition;
+		}
 		if (!_isDragging)
 		{
 			float num = _targetPosition.X;
@@ -279,7 +286,7 @@ public class NSlotsContainer : Control
 		_tween?.Kill();
 		_tween = CreateTween();
 		_tween.TweenProperty(_whatsMoved, "global_position:x", num, 2.5).SetEase(Tween.EaseType.InOut).SetTrans(Tween.TransitionType.Cubic);
-		if (await _tween.AwaitFinished(this))
+		if (await _tween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			_targetPosition = _whatsMoved.Position;
 		}
@@ -287,7 +294,7 @@ public class NSlotsContainer : Control
 
 	public void SetEnabled(bool enabled)
 	{
-		base.FocusBehaviorRecursive = (FocusBehaviorRecursiveEnum)(enabled ? 2 : 1);
+		base.FocusBehaviorRecursive = (FocusBehaviorRecursiveEnum)(enabled ? 0 : 1);
 		_isDragging = false;
 	}
 

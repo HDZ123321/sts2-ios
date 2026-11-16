@@ -20,16 +20,16 @@ public sealed class ColorfulPhilosophers : EventModel
 		ModelDb.CardPool<NecrobinderCardPool>(),
 		ModelDb.CardPool<IroncladCardPool>(),
 		ModelDb.CardPool<RegentCardPool>(),
+		ModelDb.CardPool<FoolCardPool>(),
 		ModelDb.CardPool<SilentCardPool>(),
-		ModelDb.CardPool<DefectCardPool>(),
-		ModelDb.CardPool<global::Watcher.Code.Character.WatcherCardPool>()
+		ModelDb.CardPool<DefectCardPool>()
 	});
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new CardsVar(3));
 
 	public override bool IsAllowed(IRunState runState)
 	{
-		return runState.Players.All((Player p) => p.UnlockState.CharacterCardPools.Count() > 1);
+		return runState.Players.All((Player p) => p.UnlockState.CharacterCardPools.Count((CardPoolModel c) => !(c is FoolCardPool)) > 1);
 	}
 
 	protected override IReadOnlyList<EventOption> GenerateInitialOptions()

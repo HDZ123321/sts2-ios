@@ -13,20 +13,20 @@ public sealed class NostalgiaPower : PowerModel
 
 	public override PowerStackType StackType => PowerStackType.Counter;
 
-	public override (PileType, CardPilePosition) ModifyCardPlayResultPileTypeAndPosition(CardModel card, bool isAutoPlay, ResourceInfo resources, PileType pileType, CardPilePosition position)
+	public override CardLocation ModifyCardPlayResultLocation(CardModel card, bool isAutoPlay, ResourceInfo resources, CardLocation location)
 	{
 		if (card.Owner.Creature != base.Owner)
 		{
-			return (pileType, position);
+			return location;
 		}
 		CardType type = card.Type;
 		if ((uint)(type - 1) > 1u)
 		{
-			return (pileType, position);
+			return location;
 		}
-		if (pileType != PileType.Discard)
+		if (location.pileType != PileType.Discard)
 		{
-			return (pileType, position);
+			return location;
 		}
 		int num = CombatManager.Instance.History.CardPlaysStarted.Count(delegate(CardPlayStartedEntry e)
 		{
@@ -38,16 +38,18 @@ public sealed class NostalgiaPower : PowerModel
 				bool flag3 = (uint)(type2 - 1) <= 1u;
 				flag2 = flag3;
 			}
-			return flag2 && e.CardPlay.Card.Owner == base.Owner.Player;
+			return flag2 && e.CardPlay.Player == base.Owner.Player;
 		});
 		if (num >= base.Amount)
 		{
-			return (pileType, position);
+			return location;
 		}
-		return (PileType.Draw, CardPilePosition.Top);
+		location.pileType = PileType.Draw;
+		location.position = CardPilePosition.Top;
+		return location;
 	}
 
-	public override Task AfterModifyingCardPlayResultPileOrPosition(CardModel card, PileType pileType, CardPilePosition position)
+	public override Task AfterModifyingCardPlayResultLocation(CardModel card, CardLocation location)
 	{
 		if (card.Owner.Creature != base.Owner)
 		{

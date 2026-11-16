@@ -1,5 +1,7 @@
 using System;
 using System.Threading.Tasks;
+using Godot;
+using MegaCrit.Sts2.Core.Debug;
 using MegaCrit.Sts2.Core.Entities.Actions;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
@@ -31,13 +33,13 @@ namespace MegaCrit.Sts2.Core.GameActions;
 /// </summary>
 public abstract class GameAction
 {
-	private static readonly Logger _logger = new Logger("GameAction", LogType.Actions);
+	private static readonly MegaCrit.Sts2.Core.Logging.Logger _logger = new MegaCrit.Sts2.Core.Logging.Logger("GameAction", LogType.Actions);
 
 	private TaskCompletionSource? _pauseForPlayerChoiceTaskSource;
 
 	private TaskCompletionSource? _executeAfterResumptionTaskSource;
 
-	private TaskCompletionSource _completionSource = new TaskCompletionSource();
+	private readonly TaskCompletionSource _completionSource = new TaskCompletionSource();
 
 	private Task? _executionTask;
 
@@ -138,11 +140,23 @@ public abstract class GameAction
 		{
 			if (_executionTask.IsCompleted)
 			{
+				GameActionState state = State;
 				_logger.VeryDebug($"Action {this} finished execution");
 				State = GameActionState.Finished;
 				this.JustBeforeFinished?.Invoke(this);
-				_completionSource.SetResult();
+				_completionSource.TrySetResult();
 				this.AfterFinished?.Invoke(this);
+				if (state != GameActionState.Executing)
+				{
+					string text = $"GameAction {this} finished execution, but was in state {state}! The task probably kept executing in a paused state without properly resuming.";
+					Exception ex = new InvalidOperationException(text, Exception);
+					if (NonInteractiveMode.IsActive)
+					{
+						throw ex;
+					}
+					Log.Error(text);
+					SentryService.CaptureException(ex);
+				}
 			}
 			else
 			{
@@ -191,6 +205,7 @@ public abstract class GameAction
 		State = GameActionState.Canceled;
 		this.BeforeCancelled?.Invoke(this);
 		CancelAction();
+		Callable.From(() => _completionSource.TrySetCanceled()).CallDeferred();
 	}
 
 	protected virtual void CancelAction()

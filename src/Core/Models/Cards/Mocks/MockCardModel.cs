@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Models.CardPools;
 
 namespace MegaCrit.Sts2.Core.Models.Cards.Mocks;
 
@@ -31,6 +32,8 @@ public abstract class MockCardModel : CardModel
 
 	protected Action<CardModel>? _mockUpgradeLogic;
 
+	public override bool IsMock => true;
+
 	protected override int CanonicalEnergyCost => _mockEnergyCost;
 
 	protected override bool HasEnergyCostX => _mockEnergyCostX;
@@ -47,7 +50,7 @@ public abstract class MockCardModel : CardModel
 
 	public override CardRarity Rarity => _mockRarity;
 
-	public override CardPoolModel Pool => _mockPool ?? base.Pool;
+	public override CardPoolModel Pool => _mockPool ?? ModelDb.CardPool<DeprivedCardPool>();
 
 	public override IEnumerable<CardTag> Tags => _mockTags ?? new HashSet<CardTag>();
 

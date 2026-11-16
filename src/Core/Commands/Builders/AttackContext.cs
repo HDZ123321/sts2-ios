@@ -2,11 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Logging;
-using MegaCrit.Sts2.Core.Models;
 
 namespace MegaCrit.Sts2.Core.Commands.Builders;
 
@@ -25,13 +25,13 @@ public sealed class AttackContext : IAsyncDisposable
 	private bool _disposed;
 
 	/// <summary>
-	/// Private constructor. Use <see cref="M:MegaCrit.Sts2.Core.Commands.Builders.AttackContext.CreateAsync(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Models.CardModel)" /> to create instances.
+	/// Private constructor. Use <see cref="M:MegaCrit.Sts2.Core.Commands.Builders.AttackContext.CreateAsync(MegaCrit.Sts2.Core.Combat.ICombatState,MegaCrit.Sts2.Core.GameActions.Multiplayer.PlayerChoiceContext,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" /> to create instances.
 	/// </summary>
-	private AttackContext(ICombatState combatState, PlayerChoiceContext choiceContext, CardModel cardSource)
+	private AttackContext(ICombatState combatState, PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		_combatState = combatState;
 		_choiceContext = choiceContext;
-		_attackCommand = new AttackCommand(0m).FromCard(cardSource).TargetingAllOpponents(combatState);
+		_attackCommand = new AttackCommand(0m).FromCard(cardPlay.Card, cardPlay).TargetingAllOpponents(combatState);
 	}
 
 	/// <summary>
@@ -39,11 +39,11 @@ public sealed class AttackContext : IAsyncDisposable
 	/// </summary>
 	/// <param name="combatState">The current combat state</param>
 	/// <param name="choiceContext">The context that is signalled in the event of a player choice.</param>
-	/// <param name="cardSource">The card that is the source of this attack</param>
+	/// <param name="cardPlay">The card play that is the source of this attack</param>
 	/// <returns>An initialized AttackContext ready for use with await using</returns>
-	public static async Task<AttackContext> CreateAsync(ICombatState combatState, PlayerChoiceContext choiceContext, CardModel cardSource)
+	public static async Task<AttackContext> CreateAsync(ICombatState combatState, PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
-		AttackContext context = new AttackContext(combatState, choiceContext, cardSource);
+		AttackContext context = new AttackContext(combatState, choiceContext, cardPlay);
 		await Hook.BeforeAttack(combatState, context._attackCommand);
 		return context;
 	}

@@ -22,11 +22,15 @@ public class AnimState
 
 	public const string idleAnim = "idle_loop";
 
+	public const string lowHealthIdleAnim = "low_health_loop";
+
 	public const string reviveAnim = "revive";
 
 	public const string stunAnim = "stun";
 
-	private readonly Dictionary<string, List<Branch>> _branchedStates;
+	private readonly Dictionary<string, List<Branch>> _triggerBranchedStates;
+
+	private readonly List<Branch> _nextStates;
 
 	public string Id { get; }
 
@@ -40,17 +44,63 @@ public class AnimState
 	/// </summary>
 	public bool HasLooped { get; private set; }
 
+	/// <summary>
+	/// For states that immediately transition to another state on completion.
+	/// TODO: replace this so that everything just uses AddNextState() and _nextStates instead
+	/// </summary>
 	public AnimState? NextState { get; set; }
 
 	public string? BoundsContainer { get; init; }
+
+	public AnimState? GetNextState()
+	{
+		foreach (Branch nextState in _nextStates)
+		{
+			Func<bool>? condition = nextState.condition;
+			if (condition == null || condition())
+			{
+				return nextState.state;
+			}
+		}
+		return NextState;
+	}
 
 	public AnimState(string id, bool isLooping = false)
 	{
 		Id = id;
 		IsLooping = isLooping;
-		_branchedStates = new Dictionary<string, List<Branch>>();
+		_triggerBranchedStates = new Dictionary<string, List<Branch>>();
+		_nextStates = new List<Branch>();
 	}
 
+	public void AddNextState(AnimState state)
+	{
+		AddNextState(state, () => true);
+	}
+
+	/// <summary>
+	/// An animation transition that happens after the current animation is finished.
+	/// Can interrupt an animation
+	/// </summary>
+	/// <param name="state">The state to transition to</param>
+	/// <param name="condition">the required condition to perform the transition</param>
+	public void AddNextState(AnimState state, Func<bool>? condition)
+	{
+		Branch item = new Branch
+		{
+			state = state,
+			condition = condition
+		};
+		_nextStates.Add(item);
+	}
+
+	/// <summary>
+	/// An animation transition caused by a trigger.
+	/// Can interrupt an animation
+	/// </summary>
+	/// <param name="trigger">The trigger for the transition</param>
+	/// <param name="state">The state to transition to</param>
+	/// <param name="condition">the required condition to perform the transition</param>
 	public void AddBranch(string trigger, AnimState state, Func<bool>? condition = null)
 	{
 		Branch item = new Branch
@@ -58,17 +108,25 @@ public class AnimState
 			state = state,
 			condition = condition
 		};
-		if (!_branchedStates.TryGetValue(trigger, out List<Branch> value))
+		if (!_triggerBranchedStates.TryGetValue(trigger, out List<Branch> value))
 		{
 			value = new List<Branch>();
-			_branchedStates[trigger] = value;
+			_triggerBranchedStates[trigger] = value;
 		}
 		value.Add(item);
 	}
 
+	public void RemoveBranch(string trigger, string stateId)
+	{
+		if (_triggerBranchedStates.TryGetValue(trigger, out List<Branch> value))
+		{
+			value.RemoveAll((Branch b) => b.state.Id == stateId);
+		}
+	}
+
 	public AnimState? CallTrigger(string trigger)
 	{
-		if (_branchedStates.TryGetValue(trigger, out List<Branch> value))
+		if (_triggerBranchedStates.TryGetValue(trigger, out List<Branch> value))
 		{
 			foreach (Branch item in value)
 			{
@@ -84,7 +142,7 @@ public class AnimState
 
 	public bool HasTrigger(string trigger)
 	{
-		return _branchedStates.ContainsKey(trigger);
+		return _triggerBranchedStates.ContainsKey(trigger);
 	}
 
 	/// <summary>

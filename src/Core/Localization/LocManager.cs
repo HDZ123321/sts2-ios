@@ -4,7 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Godot;
@@ -61,6 +60,7 @@ public class LocManager
 		{ "es", "spa" },
 		{ "es_LATAM", "esp" },
 		{ "fr", "fra" },
+		{ "id", "ind" },
 		{ "it", "ita" },
 		{ "ja", "jpn" },
 		{ "ko", "kor" },
@@ -69,7 +69,8 @@ public class LocManager
 		{ "ru", "rus" },
 		{ "th", "tha" },
 		{ "tr", "tur" },
-		{ "zh_Hans", "zhs" }
+		{ "zh_Hans", "zhs" },
+		{ "zh_Hant", "zht" }
 	};
 
 	/// <summary>
@@ -97,7 +98,34 @@ public class LocManager
 
 	private readonly List<LocaleChangeCallback> _localeChangeCallbacks = new List<LocaleChangeCallback>();
 
-	private static readonly CultureInfo _englishCultureInfo;
+	private static readonly (string Language, string CultureCode)[] _supportedLanguages = new(string, string)[17]
+	{
+		("eng", "en"),
+		("ara", "ar"),
+		("zhs", "zh-hans"),
+		("zht", "zh-hant"),
+		("deu", "de"),
+		("esp", "es-419"),
+		("fra", "fr"),
+		("ind", "id"),
+		("ita", "it"),
+		("jpn", "ja"),
+		("kor", "ko"),
+		("pol", "pl"),
+		("ptb", "pt-br"),
+		("rus", "ru"),
+		("spa", "es-ES"),
+		("tha", "th"),
+		("tur", "tr")
+	};
+
+	private static readonly Dictionary<string, string> _cultureCodeByLanguage = _supportedLanguages.ToDictionary(((string Language, string CultureCode) entry) => entry.Language, ((string Language, string CultureCode) entry) => entry.CultureCode);
+
+	private static readonly HashSet<string> _rtlLanguages = new HashSet<string> { "ara" };
+
+	private static readonly HashSet<string> _hiddenLanguages = new HashSet<string> { "ara" };
+
+	private static readonly CultureInfo _englishCultureInfo = GetCultureInfoSafe("en");
 
 	public static LocManager Instance { get; private set; } = null;
 
@@ -117,11 +145,32 @@ public class LocManager
 
 	public string Language { get; private set; }
 
-	public static List<string> Languages { get; }
+	public static List<string> Languages { get; } = _supportedLanguages.Select(((string Language, string CultureCode) entry) => entry.Language).ToList();
+
+	/// <summary>
+	/// True if the current language is read right-to-left.
+	/// </summary>
+	public bool IsRtl => IsRtlLanguage(Language);
 
 	public CultureInfo CultureInfo { get; private set; }
 
 	public StringComparer StringComparer { get; private set; }
+
+	/// <summary>
+	/// Returns true if the language should only be selectable through the hidden Ctrl/Alt+open dropdown.
+	/// </summary>
+	public static bool IsHiddenLanguage(string language)
+	{
+		return _hiddenLanguages.Contains(language);
+	}
+
+	/// <summary>
+	/// Returns true if the language is read right-to-left, like Arabic.
+	/// </summary>
+	public static bool IsRtlLanguage(string language)
+	{
+		return _rtlLanguages.Contains(language);
+	}
 
 	private static CultureInfo GetCultureInfoSafe(string name)
 	{
@@ -161,7 +210,7 @@ public class LocManager
 		{
 			string rawLanguage = PlatformUtil.GetRawLanguage();
 			text = PlatformUtil.GetThreeLetterLanguageCode();
-			if (text == null || !Languages.Contains(text))
+			if (text == null || !Languages.Contains(text) || IsHiddenLanguage(text))
 			{
 				Log.Warn($"Could not initialize language from platform language: {rawLanguage} (resolved: {text}). Defaulting to english");
 				text = "eng";
@@ -189,33 +238,15 @@ public class LocManager
 	/// </summary>
 	private CultureInfo CultureInfoFromThreeLetterCode(string language)
 	{
-		string text = language switch
+		string valueOrDefault = _cultureCodeByLanguage.GetValueOrDefault(language);
+		if (valueOrDefault == null)
 		{
-			"eng" => "en", 
-			"zhs" => "zh-hans", 
-			"zht" => "zh-hant", 
-			"deu" => "de", 
-			"esp" => "es-419", 
-			"fra" => "fr", 
-			"ita" => "it", 
-			"jpn" => "ja", 
-			"kor" => "ko", 
-			"pol" => "pl", 
-			"ptb" => "pt-br", 
-			"rus" => "ru", 
-			"spa" => "es-ES", 
-			"tha" => "th", 
-			"tur" => "tr", 
-			_ => null, 
-		};
-		if (text == null)
-		{
-			string text2 = "Language code " + language + " could not be mapped to CultureInfo! Add a new manual mapping";
-			Log.Error(text2);
-			SentryService.CaptureMessage(text2);
+			string text = "Language code " + language + " could not be mapped to CultureInfo! Add a new manual mapping";
+			Log.Error(text);
+			SentryService.CaptureMessage(text);
 			return GetCultureInfoSafe("en");
 		}
-		return GetCultureInfoSafe(text);
+		return GetCultureInfoSafe(valueOrDefault);
 	}
 
 	/// <summary>
@@ -223,6 +254,7 @@ public class LocManager
 	/// </summary>
 	private void LoadLocFormatters()
 	{
+		ArabicPluralRule.Register();
 		_smartFormatter = new SmartFormatter();
 		ListFormatter listFormatter = new ListFormatter();
 		_smartFormatter.AddExtensions(listFormatter, new DictionarySource(), new ValueTupleSource(), new ReflectionSource(), new DefaultSource());
@@ -469,10 +501,6 @@ public class LocManager
 					dictionary4 = dictionary4.ToDictionary((KeyValuePair<string, string> kvp) => kvp.Key, (KeyValuePair<string, string> kvp) => ConvertToW(kvp.Value));
 				}
 				locTable.MergeWith(dictionary4);
-				if (BakedContent.IsBakedLocTable(moddedLocTable))
-				{
-					locTable.MergeWith(BakedContent.WithUnprefixedAliases(dictionary4));
-				}
 			}
 			dictionary2[fileNameWithoutExtension] = locTable;
 		}
@@ -625,43 +653,5 @@ public class LocManager
 			localeChangeCallback();
 		}
 		GC.Collect();
-	}
-
-	static LocManager()
-	{
-		int num = 14;
-		List<string> list = new List<string>(num);
-		CollectionsMarshal.SetCount(list, num);
-		Span<string> span = CollectionsMarshal.AsSpan(list);
-		int num2 = 0;
-		span[num2] = "eng";
-		num2++;
-		span[num2] = "zhs";
-		num2++;
-		span[num2] = "deu";
-		num2++;
-		span[num2] = "esp";
-		num2++;
-		span[num2] = "fra";
-		num2++;
-		span[num2] = "ita";
-		num2++;
-		span[num2] = "jpn";
-		num2++;
-		span[num2] = "kor";
-		num2++;
-		span[num2] = "pol";
-		num2++;
-		span[num2] = "ptb";
-		num2++;
-		span[num2] = "rus";
-		num2++;
-		span[num2] = "spa";
-		num2++;
-		span[num2] = "tha";
-		num2++;
-		span[num2] = "tur";
-		Languages = list;
-		_englishCultureInfo = GetCultureInfoSafe("en");
 	}
 }

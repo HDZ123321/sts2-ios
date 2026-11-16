@@ -12,7 +12,6 @@ using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Nodes.Combat;
-using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Models.Monsters;
@@ -64,20 +63,21 @@ public sealed class BowlbugSilk : MonsterModel
 	{
 		if (TestMode.IsOff)
 		{
-			Vector2? vector = null;
+			NCreature nCreature = null;
 			foreach (Creature target in targets)
 			{
-				NCreature creatureNode = NCombatRoom.Instance.GetCreatureNode(target);
-				if (!vector.HasValue || vector.Value.X > creatureNode.GlobalPosition.X)
+				NCreature creatureNode = target.GetCreatureNode();
+				if (creatureNode != null && (nCreature == null || nCreature.GlobalPosition.X > creatureNode.GlobalPosition.X))
 				{
-					vector = creatureNode.GlobalPosition;
+					nCreature = creatureNode;
 				}
 			}
 			NCreature creatureNode2 = base.Creature.GetCreatureNode();
 			Node2D node2D = creatureNode2?.GetSpecialNode<Node2D>("Visuals/SpineBoneNode");
-			if (node2D != null && creatureNode2 != null && vector.HasValue)
+			if (creatureNode2 != null && node2D != null && nCreature != null)
 			{
-				node2D.Position = Vector2.Right * (vector.Value.X - creatureNode2.GlobalPosition.X) * 4f;
+				float num = 0f * creatureNode2.Visuals.Scale.X;
+				node2D.GlobalPosition = new Vector2(nCreature.GlobalPosition.X + num, node2D.GlobalPosition.Y);
 			}
 		}
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/workbug_silk/workbug_silk_spit");

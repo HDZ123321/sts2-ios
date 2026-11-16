@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
@@ -161,7 +162,9 @@ public abstract class OrbModel : AbstractModel
 
 	public IEnumerable<string> AssetPaths => new global::_003C_003Ez__ReadOnlyArray<string>(new string[2] { IconPath, SpritePath });
 
-	public event Action? Triggered;
+	public event Action? PassiveActivated;
+
+	public event Action<Creature[]>? EvokeActivated;
 
 	public static OrbModel GetRandomOrb(Rng rng)
 	{
@@ -217,9 +220,14 @@ public abstract class OrbModel : AbstractModel
 		return orbModel;
 	}
 
-	public void Trigger()
+	protected void ActivatePassive()
 	{
-		this.Triggered?.Invoke();
+		this.PassiveActivated?.Invoke();
+	}
+
+	public void ActivateEvoke(Creature[] targets)
+	{
+		this.EvokeActivated?.Invoke(targets);
 	}
 
 	public virtual Task BeforeTurnEndOrbTrigger(PlayerChoiceContext choiceContext)
@@ -232,6 +240,31 @@ public abstract class OrbModel : AbstractModel
 		return Task.CompletedTask;
 	}
 
+	/// <summary>
+	/// Calculates the number of times an Orb's passive should trigger and performs it.
+	/// </summary>
+	public async Task TriggerPassive(PlayerChoiceContext choiceContext, Creature? target)
+	{
+		List<AbstractModel> modifyingModels;
+		int triggerCount = Hook.ModifyOrbPassiveTriggerCount(Owner.Creature.CombatState, this, 1, out modifyingModels);
+		await Hook.AfterModifyingOrbPassiveTriggerCount(Owner.Creature.CombatState, this, modifyingModels);
+		for (int i = 0; i < triggerCount; i++)
+		{
+			await Passive(choiceContext, target);
+			if (LocalContext.IsMe(Owner))
+			{
+				await Cmd.CustomScaledWait(0.1f, 0.25f);
+			}
+			else
+			{
+				await Cmd.Wait(0.05f);
+			}
+		}
+	}
+
+	/// <summary>
+	/// CAREFUL: Should only be used if in special cases, since this skips the ModifyOrbPassiveTrigger.
+	/// </summary>
 	public virtual Task Passive(PlayerChoiceContext choiceContext, Creature? target)
 	{
 		return Task.CompletedTask;
@@ -250,7 +283,8 @@ public abstract class OrbModel : AbstractModel
 	protected override void AfterCloned()
 	{
 		base.AfterCloned();
-		this.Triggered = null;
+		this.EvokeActivated = null;
+		this.PassiveActivated = null;
 	}
 
 	public void RemoveInternal()

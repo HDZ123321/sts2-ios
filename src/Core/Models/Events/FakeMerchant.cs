@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
@@ -15,6 +14,7 @@ using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Nodes.Events.Custom;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Runs.History;
 
 namespace MegaCrit.Sts2.Core.Models.Events;
 
@@ -112,35 +112,58 @@ public sealed class FakeMerchant : EventModel
 
 	protected override Task BeforeEventStarted(bool isPreFinished)
 	{
-		Inventory = new MerchantInventory(base.Owner);
 		List<RelicModel> list = _inventoryRelics.ToList().UnstableShuffle(base.Rng).Take(6)
 			.ToList();
-		foreach (RelicModel item in list)
+		List<MerchantRelicEntry> list2 = new List<MerchantRelicEntry>();
+		foreach (RelicModel item2 in list)
 		{
-			MerchantRelicEntry entry = new MerchantRelicEntry(item.ToMutable(), base.Owner);
-			Inventory.AddRelicEntry(entry);
+			MerchantRelicEntry item = new MerchantRelicEntry(item2.ToMutable(), base.Owner);
+			list2.Add(item);
 		}
+		Inventory = new MerchantInventory(base.Owner, new List<MerchantCardEntry>(), new List<MerchantCardEntry>(), list2, new List<MerchantPotionEntry>(), null, new List<BlitzMerchantEntry>());
+		Inventory.Setup();
+		RunManager.Instance.MerchantSynchronizer.SetMerchantInventory(base.Owner, Inventory);
 		return Task.CompletedTask;
+	}
+
+	protected override void OnEventFinished()
+	{
+		if (StartedFight)
+		{
+			return;
+		}
+		PlayerMapPointHistoryEntry playerMapPointHistoryEntry = base.Owner.RunState.CurrentMapPointHistoryEntry?.GetEntry(base.Owner.NetId);
+		if (playerMapPointHistoryEntry == null)
+		{
+			return;
+		}
+		foreach (MerchantRelicEntry relicEntry in Inventory.RelicEntries)
+		{
+			if (relicEntry.IsStocked)
+			{
+				playerMapPointHistoryEntry.RelicChoices.Add(new ModelChoiceHistoryEntry(relicEntry.Model.Id, wasPicked: false));
+			}
+		}
 	}
 
 	public async Task FoulPotionThrown(FoulPotion potion)
 	{
-		if (LocalContext.IsMine(this) && base.Node is NFakeMerchant nFakeMerchant)
+		if (base.Node is NFakeMerchant nFakeMerchant)
 		{
+			if (nFakeMerchant.Inventory.IsOpen)
+			{
+				nFakeMerchant.Inventory.Close();
+			}
 			await nFakeMerchant.FoulPotionThrown();
 		}
 		StartedFight = true;
 		List<Reward> list = new List<Reward>();
-		foreach (Player player in base.Owner.RunState.Players)
+		list.Add(new RelicReward(ModelDb.Relic<FakeMerchantsRug>().ToMutable(), base.Owner));
+		foreach (MerchantRelicEntry relicEntry in Inventory.RelicEntries)
 		{
-			list.Add(new RelicReward(ModelDb.Relic<FakeMerchantsRug>().ToMutable(), player));
-			FakeMerchant fakeMerchant = (FakeMerchant)RunManager.Instance.EventSynchronizer.GetEventForPlayer(player);
-			foreach (MerchantRelicEntry relicEntry in fakeMerchant.Inventory.RelicEntries)
+			if (relicEntry.IsStocked)
 			{
-				if (relicEntry.IsStocked || base.Owner.RunState.Players.Count > 1)
-				{
-					list.Add(new RelicReward(relicEntry.Model, player));
-				}
+				list.Add(new RelicReward(relicEntry.Model, base.Owner));
 			}
 		}
 		EnterCombatWithoutExitingEvent<FakeMerchantEventEncounter>(list, shouldResumeAfterCombat: false);

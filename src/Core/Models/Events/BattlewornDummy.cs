@@ -38,9 +38,9 @@ public sealed class BattlewornDummy : EventModel
 	{
 		int playerCount = base.Owner?.RunState.Players.Count ?? 1;
 		int actIndex = base.Owner?.RunState.CurrentActIndex ?? 0;
-		base.DynamicVars["Setting1Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV1>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventEncounter>(), playerCount, actIndex);
-		base.DynamicVars["Setting2Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV2>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventEncounter>(), playerCount, actIndex);
-		base.DynamicVars["Setting3Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV3>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventEncounter>(), playerCount, actIndex);
+		base.DynamicVars["Setting1Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV1>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventV1Encounter>(), playerCount, actIndex);
+		base.DynamicVars["Setting2Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV2>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventV1Encounter>(), playerCount, actIndex);
+		base.DynamicVars["Setting3Hp"].BaseValue = Creature.ScaleHpForMultiplayer(ModelDb.Monster<BattleFriendV3>().MinInitialHp, ModelDb.Encounter<BattlewornDummyEventV1Encounter>(), playerCount, actIndex);
 		return new global::_003C_003Ez__ReadOnlyArray<EventOption>(new EventOption[3]
 		{
 			new EventOption(this, Setting1, "BATTLEWORN_DUMMY.pages.INITIAL.options.SETTING_1"),
@@ -51,19 +51,19 @@ public sealed class BattlewornDummy : EventModel
 
 	private Task Setting1()
 	{
-		StartCombat(BattlewornDummyEventEncounter.DummySetting.Setting1);
+		EnterCombatWithoutExitingEvent(ModelDb.Encounter<BattlewornDummyEventV1Encounter>(), Array.Empty<Reward>(), shouldResumeAfterCombat: true);
 		return Task.CompletedTask;
 	}
 
 	private Task Setting2()
 	{
-		StartCombat(BattlewornDummyEventEncounter.DummySetting.Setting2);
+		EnterCombatWithoutExitingEvent(ModelDb.Encounter<BattlewornDummyEventV2Encounter>(), Array.Empty<Reward>(), shouldResumeAfterCombat: true);
 		return Task.CompletedTask;
 	}
 
 	private Task Setting3()
 	{
-		StartCombat(BattlewornDummyEventEncounter.DummySetting.Setting3);
+		EnterCombatWithoutExitingEvent(ModelDb.Encounter<BattlewornDummyEventV3Encounter>(), Array.Empty<Reward>(), shouldResumeAfterCombat: true);
 		return Task.CompletedTask;
 	}
 
@@ -77,48 +77,43 @@ public sealed class BattlewornDummy : EventModel
 			return;
 		}
 		SetEventFinished(L10NLookup("BATTLEWORN_DUMMY.pages.VICTORY.description"));
-		switch (battlewornDummyEventEncounter.Setting)
+		List<Reward> list = new List<Reward>();
+		if (!(battlewornDummyEventEncounter is BattlewornDummyEventV1Encounter))
 		{
-		case BattlewornDummyEventEncounter.DummySetting.Setting1:
+			if (!(battlewornDummyEventEncounter is BattlewornDummyEventV2Encounter))
+			{
+				if (battlewornDummyEventEncounter is BattlewornDummyEventV3Encounter)
+				{
+					RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner, base.Rng).ToMutable();
+					list.Add(new RelicReward(relic, base.Owner, base.Rng));
+				}
+			}
+			else
+			{
+				IEnumerable<CardModel> enumerable = PileType.Deck.GetPile(base.Owner).Cards.Where((CardModel c) => c?.IsUpgradable ?? false).ToList().StableShuffle(base.Rng)
+					.Take(2);
+				foreach (CardModel item in enumerable)
+				{
+					CardCmd.Upgrade(item);
+				}
+			}
+		}
+		else
 		{
 			IEnumerable<PotionModel> items = base.Owner.Character.PotionPool.GetUnlockedPotions(base.Owner.UnlockState).Concat(ModelDb.PotionPool<SharedPotionPool>().GetUnlockedPotions(base.Owner.UnlockState));
 			PotionModel potionModel = base.Owner.PlayerRng.Rewards.NextItem(items);
 			if (potionModel != null)
 			{
-				await RewardsCmd.OfferCustom(base.Owner, new List<Reward>(1)
-				{
-					new PotionReward(potionModel.ToMutable(), base.Owner)
-				});
-			}
-			break;
-		}
-		case BattlewornDummyEventEncounter.DummySetting.Setting2:
-		{
-			IEnumerable<CardModel> enumerable = PileType.Deck.GetPile(base.Owner).Cards.Where((CardModel c) => c?.IsUpgradable ?? false).ToList().StableShuffle(base.Rng)
-				.Take(2);
-			{
-				foreach (CardModel item in enumerable)
-				{
-					CardCmd.Upgrade(item);
-				}
-				break;
+				list.Add(new PotionReward(potionModel.ToMutable(), base.Owner));
 			}
 		}
-		case BattlewornDummyEventEncounter.DummySetting.Setting3:
+		if (combatRoom.ExtraRewards.ContainsKey(base.Owner))
 		{
-			RelicModel relic = RelicFactory.PullNextRelicFromFront(base.Owner).ToMutable();
-			await RelicCmd.Obtain(relic, base.Owner);
-			break;
+			list = list.Concat(combatRoom.ExtraRewards[base.Owner]).ToList();
 		}
-		default:
-			throw new InvalidOperationException("Setting must be set!");
+		if (list.Count > 0)
+		{
+			await RewardsCmd.OfferCustom(base.Owner, list);
 		}
-	}
-
-	private void StartCombat(BattlewornDummyEventEncounter.DummySetting setting)
-	{
-		BattlewornDummyEventEncounter battlewornDummyEventEncounter = (BattlewornDummyEventEncounter)ModelDb.Encounter<BattlewornDummyEventEncounter>().ToMutable();
-		battlewornDummyEventEncounter.Setting = setting;
-		EnterCombatWithoutExitingEvent(battlewornDummyEventEncounter, Array.Empty<Reward>(), shouldResumeAfterCombat: true);
 	}
 }

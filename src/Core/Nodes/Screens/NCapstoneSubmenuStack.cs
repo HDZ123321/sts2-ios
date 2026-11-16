@@ -166,9 +166,11 @@ public class NCapstoneSubmenuStack : Control, ICapstoneScreen, IScreenContext
 		globalUi.RelicInventory.AnimHide();
 		globalUi.MultiplayerPlayerContainer.AnimHide();
 		SfxCmd.Play("event:/sfx/ui/pause_open");
-		globalUi.MoveChildSafely(globalUi.AboveTopBarVfxContainer, globalUi.CapstoneContainer.GetIndex());
 		globalUi.MoveChildSafely(globalUi.CardPreviewContainer, globalUi.CapstoneContainer.GetIndex());
+		globalUi.MoveChildSafely(globalUi.GridCardPreviewContainer, globalUi.CapstoneContainer.GetIndex());
+		globalUi.MoveChildSafely(globalUi.EventCardPreviewContainer, globalUi.CapstoneContainer.GetIndex());
 		globalUi.MoveChildSafely(globalUi.MessyCardPreviewContainer, globalUi.CapstoneContainer.GetIndex());
+		globalUi.MoveChildSafely(globalUi.AboveTopBarVfxContainer, globalUi.CapstoneContainer.GetIndex());
 		base.Visible = true;
 	}
 
@@ -184,8 +186,10 @@ public class NCapstoneSubmenuStack : Control, ICapstoneScreen, IScreenContext
 		globalUi.RelicInventory.AnimShow();
 		globalUi.MultiplayerPlayerContainer.AnimShow();
 		globalUi.MoveChildSafely(globalUi.AboveTopBarVfxContainer, globalUi.TopBar.GetIndex() + 1);
-		globalUi.MoveChildSafely(globalUi.CardPreviewContainer, globalUi.TopBar.GetIndex() + 1);
 		globalUi.MoveChildSafely(globalUi.MessyCardPreviewContainer, globalUi.TopBar.GetIndex() + 1);
+		globalUi.MoveChildSafely(globalUi.EventCardPreviewContainer, globalUi.TopBar.GetIndex() + 1);
+		globalUi.MoveChildSafely(globalUi.GridCardPreviewContainer, globalUi.TopBar.GetIndex() + 1);
+		globalUi.MoveChildSafely(globalUi.CardPreviewContainer, globalUi.TopBar.GetIndex() + 1);
 		base.Visible = false;
 	}
 

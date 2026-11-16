@@ -1,11 +1,12 @@
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
 using MegaCrit.Sts2.Core.Audio.Debug;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Creatures;
-using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
@@ -62,8 +63,8 @@ public sealed class PunchOff : EventModel
 
 	private async Task PunchEachOther()
 	{
-		Creature leftEnemy = _combatStateForCombatLayout.Enemies[0];
-		Creature rightEnemy = _combatStateForCombatLayout.Enemies[1];
+		Creature leftEnemy = _combatSynchronizer.CombatStateForLayout.Enemies[0];
+		Creature rightEnemy = _combatSynchronizer.CombatStateForLayout.Enemies[1];
 		NCreature leftEnemyNode = NCombatRoom.Instance?.GetCreatureNode(leftEnemy);
 		if (leftEnemyNode == null)
 		{
@@ -79,8 +80,7 @@ public sealed class PunchOff : EventModel
 			VfxCmd.PlayOnCreatureCenter(rightEnemy, "vfx/vfx_attack_blunt");
 			vfxContainer?.AddChildSafely(NHitSparkVfx.Create(rightEnemy, requireInteractable: false));
 			await CreatureCmd.TriggerAnim(rightEnemy, "Hit", 0f);
-			await Cmd.Wait(1.2f);
-			if (_punchCts.IsCancellationRequested)
+			if (!(await Cmd.TryWait(1.2f)) || _punchCts.IsCancellationRequested)
 			{
 				break;
 			}
@@ -125,13 +125,16 @@ public sealed class PunchOff : EventModel
 
 	private Task Fight()
 	{
-		List<Reward> list = new List<Reward>();
-		foreach (Player player in base.Owner.RunState.Players)
-		{
-			list.Add(new RelicReward(player));
-			list.Add(new PotionReward(player));
-		}
-		EnterCombatWithoutExitingEvent<PunchOffEventEncounter>(list, shouldResumeAfterCombat: false);
+		int num = 2;
+		List<Reward> list = new List<Reward>(num);
+		CollectionsMarshal.SetCount(list, num);
+		Span<Reward> span = CollectionsMarshal.AsSpan(list);
+		int num2 = 0;
+		span[num2] = new RelicReward(base.Owner);
+		num2++;
+		span[num2] = new PotionReward(base.Owner);
+		List<Reward> extraRewards = list;
+		EnterCombatWithoutExitingEvent<PunchOffEventEncounter>(extraRewards, shouldResumeAfterCombat: false);
 		return Task.CompletedTask;
 	}
 

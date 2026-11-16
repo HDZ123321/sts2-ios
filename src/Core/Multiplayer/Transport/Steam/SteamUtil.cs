@@ -7,8 +7,6 @@ namespace MegaCrit.Sts2.Core.Multiplayer.Transport.Steam;
 
 public static class SteamUtil
 {
-	public const uint handshakeMagicBytes = 2204332656u;
-
 	private static readonly nint[] _messageBuffer = new nint[64];
 
 	public static NetTransferMode ModeFromFlags(int flags)
@@ -61,13 +59,23 @@ public static class SteamUtil
 			for (int i = 0; i < num; i++)
 			{
 				nint num2 = _messageBuffer[i];
-				SteamNetworkingMessage_t steamNetworkingMessage_t = Marshal.PtrToStructure<SteamNetworkingMessage_t>(num2);
-				byte[] array = new byte[steamNetworkingMessage_t.m_cbSize];
-				Marshal.Copy(steamNetworkingMessage_t.m_pData, array, 0, steamNetworkingMessage_t.m_cbSize);
-				NetTransferMode netTransferMode = ModeFromFlags(steamNetworkingMessage_t.m_nFlags);
-				logger.VeryDebug($"Received packet of size {array.Length} from sender {steamNetworkingMessage_t.m_identityPeer.GetSteamID64()} ({netTransferMode}, {steamNetworkingMessage_t.m_nChannel})");
-				handler.OnPacketReceived(steamNetworkingMessage_t.m_identityPeer.GetSteamID().m_SteamID, array, netTransferMode, steamNetworkingMessage_t.m_nChannel);
-				SteamNetworkingMessage_t.Release(num2);
+				try
+				{
+					SteamNetworkingMessage_t steamNetworkingMessage_t = Marshal.PtrToStructure<SteamNetworkingMessage_t>(num2);
+					byte[] array = new byte[steamNetworkingMessage_t.m_cbSize];
+					Marshal.Copy(steamNetworkingMessage_t.m_pData, array, 0, steamNetworkingMessage_t.m_cbSize);
+					NetTransferMode netTransferMode = ModeFromFlags(steamNetworkingMessage_t.m_nFlags);
+					logger.VeryDebug($"Received packet of size {array.Length} from sender {steamNetworkingMessage_t.m_identityPeer.GetSteamID64()} ({netTransferMode}, {steamNetworkingMessage_t.m_nChannel})");
+					handler.OnPacketReceived(steamNetworkingMessage_t.m_identityPeer.GetSteamID().m_SteamID, array, netTransferMode, steamNetworkingMessage_t.m_nChannel);
+				}
+				catch (Exception value)
+				{
+					logger.Error($"Failed to handle packet {i + 1} of {num}: {value}");
+				}
+				finally
+				{
+					SteamNetworkingMessage_t.Release(num2);
+				}
 			}
 		}
 		while (num == _messageBuffer.Length);

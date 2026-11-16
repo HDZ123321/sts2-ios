@@ -3,12 +3,12 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
-using Godot.Collections;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Utilities;
 
 namespace MegaCrit.Sts2.Core.Debug;
 
@@ -54,6 +54,11 @@ public class NCombatVfxSpawner : Control
 		/// Cached name for the 'TestFunctionC' method.
 		/// </summary>
 		public static readonly StringName TestFunctionC = "TestFunctionC";
+
+		/// <summary>
+		/// Cached name for the 'TestProjectileHandler' method.
+		/// </summary>
+		public static readonly StringName TestProjectileHandler = "TestProjectileHandler";
 
 		/// <summary>
 		/// Cached name for the 'SpawnVfx' method.
@@ -140,7 +145,7 @@ public class NCombatVfxSpawner : Control
 	}
 
 	[Export(PropertyHint.None, "")]
-	private Node2D _backCombatVfxContainer;
+	private Control _backCombatVfxContainer;
 
 	[Export(PropertyHint.None, "")]
 	private Control _combatVfxContainer;
@@ -174,7 +179,7 @@ public class NCombatVfxSpawner : Control
 	[Export(PropertyHint.None, "")]
 	private NGaseousScreenVfx _gaseousScreenVfx;
 
-	private decimal _damage = 10m;
+	private const decimal _damage = 10m;
 
 	private bool _shiftPressed;
 
@@ -211,8 +216,7 @@ public class NCombatVfxSpawner : Control
 
 	private void TestFunctionA(bool shiftPressed)
 	{
-		NSweepingBeamVfx child = NSweepingBeamVfx.Create(_defectEyePosition.GlobalPosition, new Array<Vector2> { _enemyPosition.GlobalPosition });
-		_combatVfxContainer.AddChildSafely(child);
+		TestProjectileHandler();
 	}
 
 	private void TestFunctionB(bool shiftPressed)
@@ -223,6 +227,12 @@ public class NCombatVfxSpawner : Control
 	private void TestFunctionC(bool shiftPressed)
 	{
 		NWormyImpactVfx child = NWormyImpactVfx.Create(_playerGroundPosition.GlobalPosition, _playerPosition.GlobalPosition);
+		_combatVfxContainer.AddChildSafely(child);
+	}
+
+	private void TestProjectileHandler()
+	{
+		NVfxProjectileHandler child = NVfxProjectileHandler.Create("debug/vfx/vfx_test_projectile_handler", "debug/vfx/vfx_test_projectile", _playerPosition.GlobalPosition, _enemyPosition.GlobalPosition, default(Callable));
 		_combatVfxContainer.AddChildSafely(child);
 	}
 
@@ -254,7 +264,7 @@ public class NCombatVfxSpawner : Control
 	{
 		NGrandFinaleVfx child = NGrandFinaleVfx.Create(_playerPosition.GlobalPosition);
 		_combatVfxContainer.AddChildSafely(child);
-		await Cmd.Wait(NGrandFinaleVfx.totalAnticipationDuration);
+		await Cmd.Wait(1.625f);
 		NGrandFinaleImpactVfx child2 = NGrandFinaleImpactVfx.Create(_enemyPosition.GlobalPosition, _enemyGroundPosition.GlobalPosition);
 		_combatVfxContainer.AddChildSafely(child2);
 	}
@@ -267,7 +277,7 @@ public class NCombatVfxSpawner : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(8);
+		List<MethodInfo> list = new List<MethodInfo>(9);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Process, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
@@ -290,6 +300,7 @@ public class NCombatVfxSpawner : Control
 		{
 			new PropertyInfo(Variant.Type.Bool, "shiftPressed", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.TestProjectileHandler, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SpawnVfx, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
@@ -336,6 +347,12 @@ public class NCombatVfxSpawner : Control
 		if (method == MethodName.TestFunctionC && args.Count == 1)
 		{
 			TestFunctionC(VariantUtils.ConvertTo<bool>(in args[0]));
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.TestProjectileHandler && args.Count == 0)
+		{
+			TestProjectileHandler();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -392,6 +409,10 @@ public class NCombatVfxSpawner : Control
 		{
 			return true;
 		}
+		if (method == MethodName.TestProjectileHandler)
+		{
+			return true;
+		}
 		if (method == MethodName.SpawnVfx)
 		{
 			return true;
@@ -405,7 +426,7 @@ public class NCombatVfxSpawner : Control
 	{
 		if (name == PropertyName._backCombatVfxContainer)
 		{
-			_backCombatVfxContainer = VariantUtils.ConvertTo<Node2D>(in value);
+			_backCombatVfxContainer = VariantUtils.ConvertTo<Control>(in value);
 			return true;
 		}
 		if (name == PropertyName._combatVfxContainer)
@@ -552,7 +573,7 @@ public class NCombatVfxSpawner : Control
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._backCombatVfxContainer, PropertyHint.NodeType, "Node2D", PropertyUsageFlags.Default | PropertyUsageFlags.ScriptVariable, exported: true));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._backCombatVfxContainer, PropertyHint.NodeType, "Control", PropertyUsageFlags.Default | PropertyUsageFlags.ScriptVariable, exported: true));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._combatVfxContainer, PropertyHint.NodeType, "Control", PropertyUsageFlags.Default | PropertyUsageFlags.ScriptVariable, exported: true));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._env, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._playerTopPosition, PropertyHint.NodeType, "Node2D", PropertyUsageFlags.Default | PropertyUsageFlags.ScriptVariable, exported: true));
@@ -595,7 +616,7 @@ public class NCombatVfxSpawner : Control
 		base.RestoreGodotObjectData(info);
 		if (info.TryGetProperty(PropertyName._backCombatVfxContainer, out var value))
 		{
-			_backCombatVfxContainer = value.As<Node2D>();
+			_backCombatVfxContainer = value.As<Control>();
 		}
 		if (info.TryGetProperty(PropertyName._combatVfxContainer, out var value2))
 		{

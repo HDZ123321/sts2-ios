@@ -4,9 +4,10 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.ControllerInput;
-using MegaCrit.Sts2.Core.Entities.Multiplayer;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.addons.mega_text;
@@ -27,9 +28,9 @@ public class NInvitePlayersButton : NButton
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
+		/// Cached name for the 'Cleanup' method.
 		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
+		public static readonly StringName Cleanup = "Cleanup";
 
 		/// <summary>
 		/// Cached name for the 'UpdateVisibility' method.
@@ -106,41 +107,41 @@ public class NInvitePlayersButton : NButton
 	public void Initialize(StartRunLobby lobby)
 	{
 		_startRunLobby = lobby;
-		_startRunLobby.PlayerConnected += OnPlayerConnected;
-		_startRunLobby.PlayerDisconnected += OnPlayerDisconnected;
 		UpdateVisibility();
 	}
 
-	public override void _ExitTree()
+	/// <summary>
+	/// Main menu screens are cached and only hidden, never freed, so the button outlives the lobby.
+	/// </summary>
+	public void Cleanup()
 	{
-		base._ExitTree();
-		if (_startRunLobby != null)
-		{
-			_startRunLobby.PlayerConnected -= OnPlayerConnected;
-			_startRunLobby.PlayerDisconnected -= OnPlayerDisconnected;
-		}
-	}
-
-	private void OnPlayerConnected(LobbyPlayer player)
-	{
-		UpdateVisibility();
-	}
-
-	private void OnPlayerDisconnected(LobbyPlayer player)
-	{
+		_startRunLobby = null;
 		UpdateVisibility();
 	}
 
 	private void UpdateVisibility()
 	{
-		_container.Visible = _startRunLobby != null && PlatformUtil.SupportsInviteDialog(_startRunLobby.NetService.Platform) && _startRunLobby.Players.Count < _startRunLobby.MaxPlayers;
+		_container.Visible = _startRunLobby != null && PlatformUtil.SupportsInviteDialog(_startRunLobby.NetService.Platform);
 	}
 
 	protected override void OnRelease()
 	{
-		if (_startRunLobby != null)
+		if (_startRunLobby == null || !IsVisibleInTree() || PlatformUtil.TryOpenInviteDialog(_startRunLobby.NetService))
 		{
-			PlatformUtil.OpenInviteDialog(_startRunLobby.NetService);
+			return;
+		}
+		string text = StringHelper.SnakeCase(_startRunLobby.NetService.Platform.ToString());
+		NErrorPopup nErrorPopup = NErrorPopup.Create(new LocString("main_menu_ui", "INVITE.DISABLED." + text + ".title").GetFormattedText(), new LocString("main_menu_ui", "INVITE.DISABLED." + text + ".description").GetFormattedText(), showReportBugButton: false);
+		if (nErrorPopup != null)
+		{
+			if (NModalContainer.Instance.OpenModal != null)
+			{
+				nErrorPopup.QueueFreeSafely();
+			}
+			else
+			{
+				NModalContainer.Instance.Add(nErrorPopup);
+			}
 		}
 	}
 
@@ -166,7 +167,7 @@ public class NInvitePlayersButton : NButton
 	{
 		List<MethodInfo> list = new List<MethodInfo>(6);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.Cleanup, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.UpdateVisibility, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -184,9 +185,9 @@ public class NInvitePlayersButton : NButton
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName._ExitTree && args.Count == 0)
+		if (method == MethodName.Cleanup && args.Count == 0)
 		{
-			_ExitTree();
+			Cleanup();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -225,7 +226,7 @@ public class NInvitePlayersButton : NButton
 		{
 			return true;
 		}
-		if (method == MethodName._ExitTree)
+		if (method == MethodName.Cleanup)
 		{
 			return true;
 		}

@@ -65,7 +65,7 @@ public sealed class WhisperingHollow : EventModel
 		{
 			await CardCmd.TransformToRandom(item, base.Rng, CardPreviewStyle.EventLayout);
 		}
-		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.HpLoss.BaseValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+		await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), base.Owner.Creature, base.DynamicVars.HpLoss.BaseValue, ValueProp.Unblockable | ValueProp.Unpowered, null, null, null);
 		SetEventFinished(L10NLookup("WHISPERING_HOLLOW.pages.HUG.description"));
 	}
 }

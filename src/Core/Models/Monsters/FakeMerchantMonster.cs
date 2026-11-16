@@ -86,6 +86,7 @@ public sealed class FakeMerchantMonster : MonsterModel
 	{
 		await ShowDialogueForMove("SPEW_COINS");
 		await DamageCmd.Attack(2m).FromMonster(this).WithHitCount(8)
+			.OnlyPlayAnimOnce()
 			.WithAttackerAnim("spew", 0.15f)
 			.WithAttackerFx(null, AttackSfx)
 			.WithHitFx("vfx/vfx_attack_slash")

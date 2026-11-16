@@ -29,9 +29,11 @@ public sealed class TorchHeadAmalgam : MonsterModel
 
 	public override int MaxInitialHp => MinInitialHp;
 
-	private int TackleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 19, 18);
+	private int StrongTackleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 32, 26) + (AscensionHelper.IsDread() ? 5 : 0);
 
-	private int WeakTackleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 15, 14);
+	private int TackleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 22, 18);
+
+	private int WeakTackleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 16, 14);
 
 	private int SoulBeamDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 8, 8);
 
@@ -46,7 +48,7 @@ public sealed class TorchHeadAmalgam : MonsterModel
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()
 	{
 		List<MonsterState> list = new List<MonsterState>();
-		MoveState moveState = new MoveState("TACKLE_MOVE", TackleMove, new SingleAttackIntent(TackleDamage));
+		MoveState moveState = new MoveState("STRONG_TACKLE_MOVE", StrongTackleMove, new SingleAttackIntent(StrongTackleDamage));
 		MoveState moveState2 = new MoveState("TACKLE_2_MOVE", TackleMove, new SingleAttackIntent(TackleDamage));
 		MoveState moveState3 = new MoveState("BEAM_MOVE", SoulBeamMove, new MultiAttackIntent(SoulBeamDamage, 3));
 		MoveState moveState4 = new MoveState("TACKLE_3_MOVE", WeakTackleMove, new SingleAttackIntent(WeakTackleDamage));
@@ -78,6 +80,14 @@ public sealed class TorchHeadAmalgam : MonsterModel
 		}
 	}
 
+	private async Task StrongTackleMove(IReadOnlyList<Creature> targets)
+	{
+		await DamageCmd.Attack(StrongTackleDamage).FromMonster(this).WithAttackerAnim("Attack", 0.6f)
+			.WithAttackerFx(null, AttackSfx)
+			.WithHitFx("vfx/vfx_attack_blunt")
+			.Execute(null);
+	}
+
 	private async Task TackleMove(IReadOnlyList<Creature> targets)
 	{
 		await DamageCmd.Attack(TackleDamage).FromMonster(this).WithAttackerAnim("Attack", 0.6f)
@@ -105,12 +115,13 @@ public sealed class TorchHeadAmalgam : MonsterModel
 				NCreature creatureNode2 = targets[0].GetCreatureNode();
 				if (creatureNode2 != null)
 				{
-					node2D.Position += Vector2.Left * (creatureNode2.GlobalPosition.X - creatureNode.GlobalPosition.X + 3000f);
+					float num = 400f * creatureNode.Visuals.Scale.X;
+					node2D.GlobalPosition = new Vector2(creatureNode2.GlobalPosition.X + num, node2D.GlobalPosition.Y);
 				}
 			}
 			else
 			{
-				node2D.Position += Vector2.Left * 3000f;
+				node2D.Position = Vector2.Left * 3000f;
 			}
 		}
 		await DamageCmd.Attack(SoulBeamDamage).WithHitCount(3).FromMonster(this)

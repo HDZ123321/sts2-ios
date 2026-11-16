@@ -41,6 +41,11 @@ public interface INetGameService
 	PlatformType Platform { get; }
 
 	/// <summary>
+	/// The local version of the game we're running.
+	/// </summary>
+	PeerVersionInfo LocalVersion { get; }
+
+	/// <summary>
 	/// Called when the network connection is disconnected and the sockets are disposed.
 	/// On host, this occurs when we stop hosting. On clients, this can occur when we quit, our connection drops, or the
 	/// host disconnects from us.

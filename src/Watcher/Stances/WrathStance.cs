@@ -22,7 +22,7 @@ public sealed class WrathStance : WatcherStanceModel
 		}
 	}
 
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (props.HasFlag(ValueProp.Unpowered) || base.Owner.Creature.CombatState == null)
 		{

@@ -48,7 +48,7 @@ public sealed class Fabricator : MonsterModel
 
 	public override bool ShouldFadeAfterDeath => false;
 
-	private bool CanFabricate => base.Creature.CombatState.GetTeammatesOf(base.Creature).Count((Creature c) => c.IsAlive) < 4;
+	private bool CanFabricate => base.CombatState.GetTeammatesOf(base.Creature).Count((Creature c) => c.IsAlive) < 4;
 
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()
 	{

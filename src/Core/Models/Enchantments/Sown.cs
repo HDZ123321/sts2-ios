@@ -15,7 +15,16 @@ public sealed class Sown : EnchantmentModel
 		if (base.Status == EnchantmentStatus.Normal)
 		{
 			await PlayerCmd.GainEnergy(base.Amount, base.Card.Owner);
-			base.Status = EnchantmentStatus.Disabled;
 		}
+	}
+
+	public override Task AfterCardPlayed(PlayerChoiceContext choiceContext, CardPlay cardPlay)
+	{
+		if (cardPlay.Card != base.Card)
+		{
+			return Task.CompletedTask;
+		}
+		base.Status = EnchantmentStatus.Disabled;
+		return Task.CompletedTask;
 	}
 }

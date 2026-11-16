@@ -25,6 +25,11 @@ public class NVfxParticleSystem : Node2D
 		public new static readonly StringName _Ready = "_Ready";
 
 		/// <summary>
+		/// Cached name for the 'TryPlayParticles' method.
+		/// </summary>
+		public static readonly StringName TryPlayParticles = "TryPlayParticles";
+
+		/// <summary>
 		/// Cached name for the 'AfterExpired' method.
 		/// </summary>
 		public static readonly StringName AfterExpired = "AfterExpired";
@@ -53,22 +58,28 @@ public class NVfxParticleSystem : Node2D
 
 	public override void _Ready()
 	{
-		foreach (Node child in GetChildren())
-		{
-			if (!(child is CpuParticles2D cpuParticles2D))
-			{
-				if (child is GpuParticles2D gpuParticles2D)
-				{
-					gpuParticles2D.Emitting = true;
-				}
-			}
-			else
-			{
-				cpuParticles2D.Emitting = true;
-			}
-		}
+		TryPlayParticles(this);
 		SceneTreeTimer sceneTreeTimer = GetTree().CreateTimer(_lifetime);
 		sceneTreeTimer.Connect(SceneTreeTimer.SignalName.Timeout, Callable.From(AfterExpired));
+	}
+
+	private void TryPlayParticles(Node node)
+	{
+		if (!(node is CpuParticles2D cpuParticles2D))
+		{
+			if (node is GpuParticles2D gpuParticles2D)
+			{
+				gpuParticles2D.Emitting = true;
+			}
+		}
+		else
+		{
+			cpuParticles2D.Emitting = true;
+		}
+		foreach (Node child in node.GetChildren())
+		{
+			TryPlayParticles(child);
+		}
 	}
 
 	private void AfterExpired()
@@ -87,8 +98,12 @@ public class NVfxParticleSystem : Node2D
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(2);
+		List<MethodInfo> list = new List<MethodInfo>(3);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.TryPlayParticles, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Object, "node", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node"), exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.AfterExpired, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
@@ -100,6 +115,12 @@ public class NVfxParticleSystem : Node2D
 		if (method == MethodName._Ready && args.Count == 0)
 		{
 			_Ready();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.TryPlayParticles && args.Count == 1)
+		{
+			TryPlayParticles(VariantUtils.ConvertTo<Node>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -117,6 +138,10 @@ public class NVfxParticleSystem : Node2D
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._Ready)
+		{
+			return true;
+		}
+		if (method == MethodName.TryPlayParticles)
 		{
 			return true;
 		}

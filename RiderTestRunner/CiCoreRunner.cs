@@ -28,6 +28,8 @@ public class CiCoreRunner : Node
 	{
 	}
 
+	public static CiCoreRunner? Instance { get; private set; }
+
 	/// <inheritdoc />
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)

@@ -1,12 +1,9 @@
-using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
-using MegaCrit.Sts2.Core.ControllerInput;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Debug;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.Settings;
@@ -40,11 +37,6 @@ public class NStatsTabManager : Control
 		/// Cached name for the 'SwitchToTab' method.
 		/// </summary>
 		public static readonly StringName SwitchToTab = "SwitchToTab";
-
-		/// <summary>
-		/// Cached name for the 'UpdateControllerButton' method.
-		/// </summary>
-		public static readonly StringName UpdateControllerButton = "UpdateControllerButton";
 	}
 
 	/// <summary>
@@ -52,16 +44,6 @@ public class NStatsTabManager : Control
 	/// </summary>
 	public new class PropertyName : Control.PropertyName
 	{
-		/// <summary>
-		/// Cached name for the '_leftTriggerIcon' field.
-		/// </summary>
-		public static readonly StringName _leftTriggerIcon = "_leftTriggerIcon";
-
-		/// <summary>
-		/// Cached name for the '_rightTriggerIcon' field.
-		/// </summary>
-		public static readonly StringName _rightTriggerIcon = "_rightTriggerIcon";
-
 		/// <summary>
 		/// Cached name for the '_tabContainer' field.
 		/// </summary>
@@ -80,14 +62,6 @@ public class NStatsTabManager : Control
 	{
 	}
 
-	private static readonly StringName _tabLeftHotkey = MegaInput.viewDeckAndTabLeft;
-
-	private static readonly StringName _tabRightHotkey = MegaInput.viewExhaustPileAndTabRight;
-
-	private Control _leftTriggerIcon;
-
-	private Control _rightTriggerIcon;
-
 	private Control _tabContainer;
 
 	private List<NSettingsTab> _tabs;
@@ -96,21 +70,12 @@ public class NStatsTabManager : Control
 
 	public override void _Ready()
 	{
-		_leftTriggerIcon = GetNode<Control>("LeftTriggerIcon");
-		_rightTriggerIcon = GetNode<Control>("RightTriggerIcon");
 		_tabContainer = GetNode<Control>("TabContainer");
 		_tabs = _tabContainer.GetChildren().OfType<NSettingsTab>().ToList();
-		NControllerManager.Instance.Connect(NControllerManager.SignalName.MouseDetected, Callable.From(UpdateControllerButton));
-		NControllerManager.Instance.Connect(NControllerManager.SignalName.ControllerDetected, Callable.From(UpdateControllerButton));
-		NInputManager.Instance.Connect(NInputManager.SignalName.InputRebound, Callable.From(UpdateControllerButton));
-		foreach (NSettingsTab nSettingsTab in _tabs)
+		foreach (NSettingsTab tab in _tabs)
 		{
-			nSettingsTab.Connect(NClickableControl.SignalName.Released, Callable.From<NClickableControl>(delegate
-			{
-				SwitchToTab(nSettingsTab);
-			}));
+			tab.Connect(NClickableControl.SignalName.Released, Callable.From<NSettingsTab>(SwitchToTab));
 		}
-		UpdateControllerButton();
 	}
 
 	public void ResetTabs()
@@ -120,30 +85,16 @@ public class NStatsTabManager : Control
 
 	public override void _Input(InputEvent inputEvent)
 	{
-		if (!IsVisibleInTree() || NDevConsole.Instance.Visible)
+		if (IsVisibleInTree() && !NDevConsole.IsConsoleVisible)
 		{
-			return;
-		}
-		Control control = GetViewport().GuiGetFocusOwner();
-		if ((control is TextEdit || control is LineEdit) ? true : false)
-		{
-			return;
-		}
-		if (inputEvent.IsActionPressed(_tabLeftHotkey))
-		{
-			int num = _tabs.IndexOf(_currentTab) - 1;
-			if (num >= 0)
+			Control control = GetViewport().GuiGetFocusOwner();
+			if (control is TextEdit || control is LineEdit)
 			{
-				_tabs[num].ForceTabPressed();
-				SwitchToTab(_tabs[num]);
+				bool flag = true;
 			}
-		}
-		if (inputEvent.IsActionPressed(_tabRightHotkey))
-		{
-			int num2 = Math.Min(_tabs.Count - 1, _tabs.IndexOf(_currentTab) + 1);
-			if (num2 < _tabs.Count)
+			else
 			{
-				_tabs[num2].ForceTabPressed();
+				bool flag = false;
 			}
 		}
 	}
@@ -164,12 +115,6 @@ public class NStatsTabManager : Control
 		}
 	}
 
-	private void UpdateControllerButton()
-	{
-		_leftTriggerIcon.Visible = NControllerManager.Instance.IsUsingController;
-		_rightTriggerIcon.Visible = NControllerManager.Instance.IsUsingController;
-	}
-
 	/// <summary>
 	/// Get the method information for all the methods declared in this class.
 	/// This method is used by Godot to register the available methods in the editor.
@@ -178,7 +123,7 @@ public class NStatsTabManager : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(5);
+		List<MethodInfo> list = new List<MethodInfo>(4);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ResetTabs, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._Input, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
@@ -189,7 +134,6 @@ public class NStatsTabManager : Control
 		{
 			new PropertyInfo(Variant.Type.Object, "tab", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.UpdateControllerButton, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
 
@@ -221,12 +165,6 @@ public class NStatsTabManager : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.UpdateControllerButton && args.Count == 0)
-		{
-			UpdateControllerButton();
-			ret = default(godot_variant);
-			return true;
-		}
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
@@ -250,10 +188,6 @@ public class NStatsTabManager : Control
 		{
 			return true;
 		}
-		if (method == MethodName.UpdateControllerButton)
-		{
-			return true;
-		}
 		return base.HasGodotClassMethod(in method);
 	}
 
@@ -261,16 +195,6 @@ public class NStatsTabManager : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool SetGodotClassPropertyValue(in godot_string_name name, in godot_variant value)
 	{
-		if (name == PropertyName._leftTriggerIcon)
-		{
-			_leftTriggerIcon = VariantUtils.ConvertTo<Control>(in value);
-			return true;
-		}
-		if (name == PropertyName._rightTriggerIcon)
-		{
-			_rightTriggerIcon = VariantUtils.ConvertTo<Control>(in value);
-			return true;
-		}
 		if (name == PropertyName._tabContainer)
 		{
 			_tabContainer = VariantUtils.ConvertTo<Control>(in value);
@@ -288,16 +212,6 @@ public class NStatsTabManager : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
-		if (name == PropertyName._leftTriggerIcon)
-		{
-			value = VariantUtils.CreateFrom(in _leftTriggerIcon);
-			return true;
-		}
-		if (name == PropertyName._rightTriggerIcon)
-		{
-			value = VariantUtils.CreateFrom(in _rightTriggerIcon);
-			return true;
-		}
 		if (name == PropertyName._tabContainer)
 		{
 			value = VariantUtils.CreateFrom(in _tabContainer);
@@ -320,8 +234,6 @@ public class NStatsTabManager : Control
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._leftTriggerIcon, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._rightTriggerIcon, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._tabContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._currentTab, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
@@ -332,8 +244,6 @@ public class NStatsTabManager : Control
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)
 	{
 		base.SaveGodotObjectData(info);
-		info.AddProperty(PropertyName._leftTriggerIcon, Variant.From(in _leftTriggerIcon));
-		info.AddProperty(PropertyName._rightTriggerIcon, Variant.From(in _rightTriggerIcon));
 		info.AddProperty(PropertyName._tabContainer, Variant.From(in _tabContainer));
 		info.AddProperty(PropertyName._currentTab, Variant.From(in _currentTab));
 	}
@@ -343,21 +253,13 @@ public class NStatsTabManager : Control
 	protected override void RestoreGodotObjectData(GodotSerializationInfo info)
 	{
 		base.RestoreGodotObjectData(info);
-		if (info.TryGetProperty(PropertyName._leftTriggerIcon, out var value))
+		if (info.TryGetProperty(PropertyName._tabContainer, out var value))
 		{
-			_leftTriggerIcon = value.As<Control>();
+			_tabContainer = value.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._rightTriggerIcon, out var value2))
+		if (info.TryGetProperty(PropertyName._currentTab, out var value2))
 		{
-			_rightTriggerIcon = value2.As<Control>();
-		}
-		if (info.TryGetProperty(PropertyName._tabContainer, out var value3))
-		{
-			_tabContainer = value3.As<Control>();
-		}
-		if (info.TryGetProperty(PropertyName._currentTab, out var value4))
-		{
-			_currentTab = value4.As<NSettingsTab>();
+			_currentTab = value2.As<NSettingsTab>();
 		}
 	}
 }

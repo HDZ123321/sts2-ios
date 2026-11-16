@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using Godot;
 using Godot.Bridge;
@@ -11,12 +10,11 @@ using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Daily;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
-using MegaCrit.Sts2.Core.Extensions;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Models.Modifiers;
 using MegaCrit.Sts2.Core.Multiplayer;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Game.Lobby;
@@ -26,6 +24,7 @@ using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Multiplayer;
 using MegaCrit.Sts2.Core.Nodes.Screens.MainMenu;
+using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Random;
 using MegaCrit.Sts2.Core.Runs;
@@ -108,6 +107,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		/// Cached name for the 'ModifiersChanged' method.
 		/// </summary>
 		public static readonly StringName ModifiersChanged = "ModifiersChanged";
+
+		/// <summary>
+		/// Cached name for the 'GameModeChanged' method.
+		/// </summary>
+		public static readonly StringName GameModeChanged = "GameModeChanged";
 
 		/// <summary>
 		/// Cached name for the 'OnEmbarkPressed' method.
@@ -209,6 +213,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		/// Cached name for the '_readyAndWaitingContainer' field.
 		/// </summary>
 		public static readonly StringName _readyAndWaitingContainer = "_readyAndWaitingContainer";
+
+		/// <summary>
+		/// Cached name for the '_closed' field.
+		/// </summary>
+		public static readonly StringName _closed = "_closed";
 	}
 
 	/// <summary>
@@ -259,6 +268,8 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 	private INetGameService _netService;
 
 	private StartRunLobby? _lobby;
+
+	private bool _closed;
 
 	private int? _lastSetTimeLeftSecond;
 
@@ -315,6 +326,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			throw new InvalidOperationException($"Initialized character select screen with GameService of type {gameService.Type} when hosting!");
 		}
 		_netService = gameService;
+		_closed = false;
 	}
 
 	public void InitializeMultiplayerAsClient(INetGameService gameService, ClientLobbyJoinResponseMessage message)
@@ -324,7 +336,8 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			throw new InvalidOperationException($"Initialized character select screen with GameService of type {gameService.Type} when joining!");
 		}
 		_netService = gameService;
-		_lobby = new StartRunLobby(GameMode.Daily, gameService, this, message.dailyTime.Value, -1);
+		_closed = false;
+		_lobby = new StartRunLobby(GameMode.Daily, isCustom: false, gameService, this, message.dailyTime.Value, -1);
 		_lobby.InitializeFromMessage(message);
 		SetupLobbyParams(_lobby);
 		AfterLobbyInitialized();
@@ -333,6 +346,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 	public void InitializeSingleplayer()
 	{
 		_netService = new NetSingleplayerGameService();
+		_closed = false;
 	}
 
 	public override void OnSubmenuOpened()
@@ -351,6 +365,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 
 	public override void OnSubmenuClosed()
 	{
+		_closed = true;
 		_embarkButton.Disable();
 		_remotePlayerContainer.Cleanup();
 		_leaderboard.Cleanup();
@@ -366,10 +381,24 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 	/// This is called:
 	/// - Once when the screen is shown
 	/// - Anytime when the player count changes
+	/// - Anytime the seed changes, which includes the daily rolling over
 	/// </summary>
 	private void InitializeLeaderboard()
 	{
-		_leaderboard.Initialize(_lobby.DailyTime.Value.serverTime, _lobby.Players.Select((LobbyPlayer p) => p.id), allowPagination: false);
+		_leaderboard.Initialize(GetDailyOfSeed(_lobby.Seed), _lobby.Players.Select((StartRunLobbyPlayer p) => p.id), allowPagination: true);
+	}
+
+	/// <summary>
+	/// Returns the day whose daily leaderboard the run on <paramref name="seed" /> belongs to.
+	/// </summary>
+	private DateTimeOffset GetDailyOfSeed(string? seed)
+	{
+		if (DailyRunUtility.TryGetDailySeedDate(seed, out var day))
+		{
+			return day;
+		}
+		Log.Warn("Daily run seed '" + seed + "' does not carry a date, falling back to the current server time");
+		return GetServerRelativeTime();
 	}
 
 	/// <summary>
@@ -384,65 +413,17 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			throw new InvalidOperationException("Should only be called as host or singleplayer!");
 		}
 		SetIsLoading(isLoading: true);
-		TimeServerResult timeServerResult = await GetTimeServerTime();
-		if (GodotObject.IsInstanceValid(this))
+		TimeServerResult timeServerResult = await DailyRunUtility.GetTimeServerTime();
+		if (GodotObject.IsInstanceValid(this) && !_closed)
 		{
-			_lobby = new StartRunLobby(GameMode.Daily, _netService, this, timeServerResult, 4);
-			_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), SaveManager.Instance.Progress.MaxMultiplayerAscension);
+			_lobby = new StartRunLobby(GameMode.Daily, isCustom: false, _netService, this, timeServerResult, 4);
+			_lobby.AddLocalHostPlayer(new UnlockState(SaveManager.Instance.Progress), SaveManager.Instance.Progress.MaxMultiplayerAscension, SaveManager.Instance.Progress.MaxBlitzAscension);
+			_lobby.AdmitClientsConnectedBeforeLobbyExisted();
 			SetupLobbyParams(_lobby);
 			AfterLobbyInitialized();
 			SetIsLoading(isLoading: false);
 			Log.Info($"Daily initialized with seed: {_lobby.Seed} time: {GetServerRelativeTime()}");
 		}
-	}
-
-	/// <summary>
-	/// Attempt to get the time from the time server.
-	/// If any time server request succeeded in the past, this uses the cached time server time. Otherwise, it requests
-	/// a new time. Falls back to local time if the server is unreachable.
-	/// </summary>
-	private async Task<TimeServerResult> GetTimeServerTime()
-	{
-		TimeServerResult? result = null;
-		if (TimeServer.RequestTimeTask?.IsCompleted ?? false)
-		{
-			if (!TimeServer.RequestTimeTask.IsFaulted)
-			{
-				result = await TimeServer.RequestTimeTask;
-			}
-			if (!result.HasValue)
-			{
-				try
-				{
-					result = await TimeServer.FetchDailyTime();
-				}
-				catch (Exception ex) when (((ex is HttpRequestException || ex is TaskCanceledException) ? 1 : 0) != 0)
-				{
-					Log.Error(ex.ToString());
-				}
-			}
-		}
-		else
-		{
-			try
-			{
-				result = await TimeServer.FetchDailyTime();
-			}
-			catch (Exception ex2) when (((ex2 is HttpRequestException || ex2 is TaskCanceledException) ? 1 : 0) != 0)
-			{
-				Log.Error(ex2.ToString());
-			}
-		}
-		if (!result.HasValue)
-		{
-			Log.Info("Couldn't retrieve time from time server, using local time");
-			result = new TimeServerResult
-			{
-				serverTime = DateTimeOffset.UtcNow,
-				localReceivedTime = DateTimeOffset.UtcNow
-			};
-		}
-		return result.Value;
 	}
 
 	/// <summary>
@@ -460,15 +441,16 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 	/// </summary>
 	private void SetupLobbyParams(StartRunLobby lobby)
 	{
-		DateTimeOffset serverRelativeTime = GetServerRelativeTime();
-		string str = SeedHelper.CanonicalizeSeed(serverRelativeTime.ToString("dd_MM_yyyy"));
-		string text = SeedHelper.CanonicalizeSeed(serverRelativeTime.ToString($"dd_MM_yyyy_{lobby.Players.Count}p"));
-		Rng rng = new Rng((uint)StringHelper.GetDeterministicHashCode(str));
-		Rng rng2 = new Rng(rng.NextUnsignedInt());
-		Rng rng3 = new Rng(rng.NextUnsignedInt());
-		Rng rng4 = new Rng(rng.NextUnsignedInt());
+		DateTimeOffset day;
+		DateTimeOffset dayServerTime = ((lobby.NetService.Type == NetGameType.Client && DailyRunUtility.TryGetDailySeedDate(lobby.Seed, out day)) ? day : GetServerRelativeTime());
+		string dailySeedDate = DailyRunUtility.GetDailySeedDate(dayServerTime);
+		string dailySeed = DailyRunUtility.GetDailySeed(dayServerTime, lobby.Players.Count);
+		Rng rng = new Rng(StringHelper.GetDeterministicHashCode(dailySeedDate));
+		Rng rng2 = new Rng(rng.NextUnsignedLong());
+		Rng rng3 = new Rng(rng.NextUnsignedLong());
+		Rng rng4 = new Rng(rng.NextUnsignedLong());
 		CharacterModel characterModel = null;
-		foreach (LobbyPlayer player in lobby.Players)
+		foreach (StartRunLobbyPlayer player in lobby.Players)
 		{
 			CharacterModel characterModel2 = rng2.NextItem(ModelDb.AllCharacters);
 			if (player.id == lobby.LocalPlayer.id)
@@ -477,21 +459,21 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			}
 		}
 		int num = rng3.NextInt(0, 11);
-		List<ModifierModel> list = RollModifiers(rng4);
+		IReadOnlyCollection<ModifierModel> readOnlyCollection = ModifierModel.Pick2Good1Bad(rng4, _lobby.Players.Select((StartRunLobbyPlayer p) => p.character));
 		NetGameType type = lobby.NetService.Type;
 		if ((uint)(type - 1) <= 1u)
 		{
-			if (lobby.Seed != text)
+			if (lobby.Seed != dailySeed)
 			{
-				lobby.SetSeed(text);
+				lobby.SetSeed(dailySeed);
 			}
 			if (lobby.Ascension != num)
 			{
 				lobby.SyncAscensionChange(num);
 			}
-			if (list.Any((ModifierModel m) => lobby.Modifiers.FirstOrDefault(m.IsEquivalent) == null))
+			if (readOnlyCollection.Any((ModifierModel m) => lobby.Modifiers.FirstOrDefault(m.IsEquivalent) == null))
 			{
-				lobby.SetModifiers(list);
+				lobby.SetModifiers(readOnlyCollection);
 			}
 		}
 		if (lobby.LocalPlayer.character != characterModel)
@@ -520,39 +502,6 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		}
 	}
 
-	private List<ModifierModel> RollModifiers(Rng rng)
-	{
-		List<ModifierModel> list = new List<ModifierModel>();
-		List<ModifierModel> list2 = ModelDb.GoodModifiers.ToList().StableShuffle(rng);
-		for (int i = 0; i < 2; i++)
-		{
-			ModifierModel canonicalModifier = rng.NextItem(list2);
-			if (canonicalModifier == null)
-			{
-				throw new InvalidOperationException("There were not enough good modifiers to fill the daily!");
-			}
-			ModifierModel modifierModel = canonicalModifier.ToMutable();
-			if (modifierModel is CharacterCards characterCards)
-			{
-				IEnumerable<CharacterModel> second = _lobby.Players.Select((LobbyPlayer p) => p.character);
-				characterCards.CharacterModel = rng.NextItem(ModelDb.AllCharacters.Except(second)).Id;
-			}
-			list.Add(modifierModel);
-			list2.Remove(canonicalModifier);
-			IReadOnlySet<ModifierModel> readOnlySet = ModelDb.MutuallyExclusiveModifiers.FirstOrDefault((IReadOnlySet<ModifierModel> s) => s.Contains(canonicalModifier));
-			if (readOnlySet == null)
-			{
-				continue;
-			}
-			foreach (ModifierModel item in readOnlySet)
-			{
-				list2.Remove(item);
-			}
-		}
-		list.Add(rng.NextItem(ModelDb.BadModifiers).ToMutable());
-		return list;
-	}
-
 	private void SetIsLoading(bool isLoading)
 	{
 		if (isLoading)
@@ -576,6 +525,10 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 
 	public override void _Process(double delta)
 	{
+		if (_netService.IsConnected)
+		{
+			_netService.Update();
+		}
 		if (_lobby != null)
 		{
 			DateTimeOffset serverRelativeTime = GetServerRelativeTime();
@@ -591,14 +544,10 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 				_timeLeftLabel.Text = _timeLeftLoc.GetFormattedText();
 				_lastSetTimeLeftSecond = timeSpan.Seconds;
 			}
-			if (_lobby.NetService.IsConnected)
-			{
-				_lobby.NetService.Update();
-			}
 		}
 	}
 
-	public void PlayerConnected(LobbyPlayer player)
+	public void PlayerConnected(StartRunLobbyPlayer player)
 	{
 		_remotePlayerContainer.OnPlayerConnected(player);
 		SetupLobbyParams(_lobby);
@@ -606,12 +555,8 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		UpdateRichPresence();
 	}
 
-	public void PlayerChanged(LobbyPlayer player, bool isRandomCharacterResolution)
+	public void PlayerChanged(StartRunLobbyPlayer player)
 	{
-		if (isRandomCharacterResolution)
-		{
-			throw new InvalidOperationException("Random character is not currently allowed in daily!");
-		}
 		_remotePlayerContainer.OnPlayerChanged(player);
 		if (player.id == _netService.NetId && _netService.Type.IsMultiplayer())
 		{
@@ -630,6 +575,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 
 	public void SeedChanged()
 	{
+		if (_lobby.NetService.Type == NetGameType.Client)
+		{
+			SetupLobbyParams(_lobby);
+		}
+		InitializeLeaderboard();
 	}
 
 	public void ModifiersChanged()
@@ -637,7 +587,12 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		InitializeDisplay();
 	}
 
-	public void RemotePlayerDisconnected(LobbyPlayer player)
+	public void GameModeChanged()
+	{
+		throw new NotImplementedException("Game mode should not be changed in Daily!");
+	}
+
+	public void RemotePlayerDisconnected(StartRunLobbyPlayer player)
 	{
 		_remotePlayerContainer.OnPlayerDisconnected(player);
 		SetupLobbyParams(_lobby);
@@ -715,9 +670,10 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		try
 		{
 			Log.Info($"Embarking on a DAILY {_lobby.LocalPlayer.character.Id.Entry} run with {_lobby.Players.Count} players. Ascension: {_lobby.Ascension} Seed: {seed}");
-			SfxCmd.Play(_lobby.LocalPlayer.character.CharacterTransitionSfx);
-			await NGame.Instance.Transition.FadeOut(0.8f, _lobby.LocalPlayer.character.CharacterSelectTransitionPath);
-			await NGame.Instance.StartNewSingleplayerRun(_lobby.LocalPlayer.character, shouldSave: true, acts, modifiers, seed, GameMode.Daily, _lobby.Ascension, _lobby.DailyTime.Value.serverTime);
+			Player player = _lobby.GeneratePlayers(seed)[0];
+			SfxCmd.Play(player.Character.CharacterTransitionSfx);
+			await NGame.Instance.Transition.FadeOut(0.8f, player.Character.CharacterSelectTransitionPath);
+			await NGame.Instance.StartNewSingleplayerRun(player, shouldSave: true, acts, modifiers, seed, GameMode.Daily, isCustomGame: false, _lobby.Ascension, GetDailyOfSeed(seed));
 		}
 		catch (Exception ex)
 		{
@@ -734,9 +690,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		try
 		{
 			Log.Info($"Embarking on a DAILY multiplayer run. Players: {string.Join(",", _lobby.Players)}. Ascension: {_lobby.Ascension} Seed: {seed}");
-			SfxCmd.Play(_lobby.LocalPlayer.character.CharacterTransitionSfx);
-			await NGame.Instance.Transition.FadeOut(0.8f, _lobby.LocalPlayer.character.CharacterSelectTransitionPath);
-			await NGame.Instance.StartNewMultiplayerRun(_lobby, shouldSave: true, acts, modifiers, seed, _lobby.Ascension, _lobby.DailyTime.Value.serverTime);
+			List<Player> players = _lobby.GeneratePlayers(seed);
+			Player player = players.First((Player p) => p.NetId == _lobby.LocalPlayer.id);
+			SfxCmd.Play(player.Character.CharacterTransitionSfx);
+			await NGame.Instance.Transition.FadeOut(0.8f, player.Character.CharacterSelectTransitionPath);
+			await NGame.Instance.StartNewMultiplayerRun(players, _lobby, shouldSave: true, acts, modifiers, seed, _lobby.Ascension, GetDailyOfSeed(seed));
 		}
 		catch (Exception ex)
 		{
@@ -748,17 +706,36 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		CleanUpLobby(disconnectSession: false);
 	}
 
-	private void CleanUpLobby(bool disconnectSession, NetError error = NetError.Quit)
+	private void RemoteClientFailedToConnectToLocalHost(ulong sender, NetErrorInfo info)
 	{
-		_lobby?.CleanUp(disconnectSession, error);
-		_lobby = null;
+		bool showReportBugButton;
+		string formattedText = NErrorPopup.LocStringFromNetError(info, out showReportBugButton).GetFormattedText();
+		LocString locString = new LocString("main_menu_ui", "NETWORK_ERROR.HOST.PREFIX.body");
+		locString.Add("playerName", PlatformUtil.GetPlayerName(_lobby.NetService.Platform, sender));
+		locString.Add("info", formattedText);
+		this.AddChildSafely(NFailedJoinVfx.Create(locString.GetFormattedText()));
+	}
+
+	internal void CleanUpLobby(bool disconnectSession, NetError error = NetError.Quit)
+	{
+		if (_lobby != null)
+		{
+			_lobby.PlayerFailedToConnect -= RemoteClientFailedToConnectToLocalHost;
+			_lobby.CleanUp(disconnectSession, error);
+			_lobby = null;
+		}
+		else if (disconnectSession && _netService.IsConnected)
+		{
+			_netService.Disconnect(error);
+		}
 	}
 
 	private void AfterLobbyInitialized()
 	{
-		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.Players.Select((LobbyPlayer p) => p.id));
+		NGame.Instance.RemoteCursorContainer.Initialize(_lobby.InputSynchronizer, _lobby.Players.Select((StartRunLobbyPlayer p) => p.id));
 		NGame.Instance.ReactionContainer.InitializeNetworking(_lobby.NetService);
 		NGame.Instance.TimeoutOverlay.Initialize(_lobby.NetService, isGameLevel: true);
+		_lobby.PlayerFailedToConnect += RemoteClientFailedToConnectToLocalHost;
 		_remotePlayerContainer.Initialize(_lobby, displayLocalPlayer: false);
 		UpdateRichPresence();
 		MegaCrit.Sts2.Core.Logging.Logger.logLevelTypeMap[LogType.Network] = ((_lobby.NetService.Type == NetGameType.Singleplayer) ? LogLevel.Info : LogLevel.Debug);
@@ -776,7 +753,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(18);
+		List<MethodInfo> list = new List<MethodInfo>(19);
 		list.Add(new MethodInfo(MethodName.Create, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false), MethodFlags.Normal | MethodFlags.Static, null, null));
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.InitializeSingleplayer, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -796,6 +773,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		list.Add(new MethodInfo(MethodName.AscensionChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SeedChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.ModifiersChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.GameModeChanged, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnEmbarkPressed, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "_", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -892,6 +870,12 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		if (method == MethodName.ModifiersChanged && args.Count == 0)
 		{
 			ModifiersChanged();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.GameModeChanged && args.Count == 0)
+		{
+			GameModeChanged();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -996,6 +980,10 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		{
 			return true;
 		}
+		if (method == MethodName.GameModeChanged)
+		{
+			return true;
+		}
 		if (method == MethodName.OnEmbarkPressed)
 		{
 			return true;
@@ -1088,6 +1076,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			_readyAndWaitingContainer = VariantUtils.ConvertTo<Control>(in value);
 			return true;
 		}
+		if (name == PropertyName._closed)
+		{
+			_closed = VariantUtils.ConvertTo<bool>(in value);
+			return true;
+		}
 		return base.SetGodotClassPropertyValue(in name, in value);
 	}
 
@@ -1165,6 +1158,11 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 			value = VariantUtils.CreateFrom(in _readyAndWaitingContainer);
 			return true;
 		}
+		if (name == PropertyName._closed)
+		{
+			value = VariantUtils.CreateFrom(in _closed);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -1191,6 +1189,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._modifiersContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._remotePlayerContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._readyAndWaitingContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._closed, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
 
@@ -1212,6 +1211,7 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		info.AddProperty(PropertyName._modifiersContainer, Variant.From(in _modifiersContainer));
 		info.AddProperty(PropertyName._remotePlayerContainer, Variant.From(in _remotePlayerContainer));
 		info.AddProperty(PropertyName._readyAndWaitingContainer, Variant.From(in _readyAndWaitingContainer));
+		info.AddProperty(PropertyName._closed, Variant.From(in _closed));
 	}
 
 	/// <inheritdoc />
@@ -1270,6 +1270,10 @@ public class NDailyRunScreen : NSubmenu, IStartRunLobbyListener
 		if (info.TryGetProperty(PropertyName._readyAndWaitingContainer, out var value13))
 		{
 			_readyAndWaitingContainer = value13.As<Control>();
+		}
+		if (info.TryGetProperty(PropertyName._closed, out var value14))
+		{
+			_closed = value14.As<bool>();
 		}
 	}
 }

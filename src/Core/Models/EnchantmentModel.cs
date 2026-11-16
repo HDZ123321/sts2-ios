@@ -75,6 +75,7 @@ public abstract class EnchantmentModel : AbstractModel
 			{
 				extraCardText.Add("TargetType", Card.TargetType.ToString());
 			}
+			extraCardText.Add("energyPrefix", EnergyIconHelper.GetPrefix(this));
 			DynamicVars.AddTo(extraCardText);
 			return extraCardText;
 		}
@@ -123,6 +124,12 @@ public abstract class EnchantmentModel : AbstractModel
 	/// Set this to true to sort the card to the bottom of the draw pile at the beginning of combat.
 	/// </summary>
 	public virtual bool ShouldStartAtBottomOfDrawPile => false;
+
+	/// <summary>
+	/// True if this enchantment gains Block when its card is played, so effects on Block gained from a card (like
+	/// <see cref="T:MegaCrit.Sts2.Core.Models.Powers.StretchPower" />) count the card even when the card itself doesn't gain Block.
+	/// </summary>
+	public virtual bool GainsBlock => false;
 
 	/// <summary>
 	/// Get the card that this is enchanting.
@@ -423,7 +430,7 @@ public abstract class EnchantmentModel : AbstractModel
 	/// <summary>
 	/// Add to the amount of damage that this enchantment's card does.
 	/// This hook runs BEFORE all other damage modification hooks.
-	/// Enchantments MUST use this hook instead of <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// Enchantments MUST use this hook instead of <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageAdditive(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" />.
 	/// </summary>
 	/// <param name="originalDamage">The amount of damage that would be dealt.</param>
 	/// <param name="props">ValueProp for damage.</param>
@@ -436,7 +443,7 @@ public abstract class EnchantmentModel : AbstractModel
 	/// <summary>
 	/// Multiply the amount of damage that this enchantment's card does.
 	/// This hook runs BEFORE all other damage modification hooks.
-	/// Enchantments MUST use this hook instead of <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageMultiplicative(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel)" />.
+	/// Enchantments MUST use this hook instead of <see cref="M:MegaCrit.Sts2.Core.Models.AbstractModel.ModifyDamageMultiplicative(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Decimal,MegaCrit.Sts2.Core.ValueProps.ValueProp,MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,MegaCrit.Sts2.Core.Entities.Cards.CardPlay)" />.
 	/// </summary>
 	/// <param name="originalDamage">The amount of damage that would be dealt.</param>
 	/// <param name="props">ValueProp for damage.</param>

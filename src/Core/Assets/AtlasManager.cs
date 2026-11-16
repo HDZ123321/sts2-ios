@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.Json;
-using System.Threading;
 using Godot;
 using MegaCrit.Sts2.Core.Logging;
 
@@ -25,84 +24,35 @@ public static class AtlasManager
 
 	private record SpriteInfo(Texture2D Atlas, TpSheetSprite Sprite);
 
-	/// <summary>
-	/// Atlases that are cheap enough to keep resident from the first frame: every screen the player
-	/// can reach from the main menu draws from these.
-	/// </summary>
-	private static readonly string[] _menuAtlases = new string[10]
+	private static readonly string[] _knownAtlases = new string[13]
 	{
-		"ui_atlas", "compressed", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
-		"controller_atlas", "era_atlas"
+		"ui_atlas", "compressed_atlas", "epoch_atlas", "relic_atlas", "relic_outline_atlas", "power_atlas", "card_atlas", "potion_atlas", "potion_outline_atlas", "stats_screen_atlas",
+		"intent_atlas", "era_atlas", "controller_atlas"
 	};
-
-	/// <summary>
-	/// Atlases that only a run draws from. On desktop they are deferred until a run starts so the
-	/// main menu does not pay their VRAM - card_atlas alone is 41 MPx. On mobile they are kept
-	/// resident from the first frame instead: deferring them there means any scene that asks for one
-	/// of their sprites during the startup preload triggers a synchronous AtlasManager.LoadAtlas from
-	/// inside ResourceLoader's loader thread, which is new work on a thread that previously always
-	/// found the atlas resident and is the shape the phone crashed in.
-	/// </summary>
-	private static readonly string[] _runAtlases = new string[3] { "card_atlas", "power_atlas", "intent_atlas" };
 
 	private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
 	{
-		PropertyNameCaseInsensitive = true,
-		TypeInfoResolver = TpSheetSerializerContext.Default
+		PropertyNameCaseInsensitive = true
 	};
 
 	private static readonly ConcurrentDictionary<string, AtlasData> _atlases = new ConcurrentDictionary<string, AtlasData>();
 
 	private static readonly ConcurrentDictionary<string, AtlasTexture> _spriteCache = new ConcurrentDictionary<string, AtlasTexture>();
 
-	private static readonly Lock _loadLock = new Lock();
-
 	/// <summary>
 	/// Atlases needed before main menu scene loads.
 	/// Their .tres files are referenced by scene ext_resources and must be loaded
 	/// before Godot's scene deserializer encounters them.
 	/// </summary>
-	private static readonly string[] _essentialAtlases = new string[2] { "ui_atlas", "compressed" };
+	private static readonly string[] _essentialAtlases = new string[2] { "ui_atlas", "compressed_atlas" };
 
 	/// <summary>
-	/// Loads every atlas that is kept resident outside of a run. On mobile this is all thirteen,
-	/// because deferring a run atlas there means the startup preload can ask for one of its sprites
-	/// while ResourceLoader is running on a loader thread, and that thread would then call
-	/// <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadAtlas" /> synchronously - new work on a
-	/// thread that previously always found the atlas resident. On desktop the run atlases stay
-	/// deferred and <see cref="M:MegaCrit.Sts2.Core.Assets.AtlasManager.LoadRunAtlases" /> picks them up.
+	/// Loads all known atlases. Call during initialization.
 	/// </summary>
 	public static void LoadAllAtlases()
 	{
-		if (OS.HasFeature("mobile"))
-		{
-			string[] allAtlases = _menuAtlases;
-			foreach (string atlasName in allAtlases)
-			{
-				LoadAtlas(atlasName);
-			}
-			string[] deferredAtlases = _runAtlases;
-			foreach (string atlasName2 in deferredAtlases)
-			{
-				LoadAtlas(atlasName2);
-			}
-			return;
-		}
-		string[] menuAtlases = _menuAtlases;
-		foreach (string atlasName3 in menuAtlases)
-		{
-			LoadAtlas(atlasName3);
-		}
-	}
-
-	/// <summary>
-	/// Loads the atlases that only a run draws from. Called when the first run scene is about to
-	/// load, so their memory is only paid while a run is in progress.
-	/// </summary>
-	public static void LoadRunAtlases()
-	{
-		string[] runAtlases = _runAtlases;
-		foreach (string atlasName in runAtlases)
+		string[] knownAtlases = _knownAtlases;
+		foreach (string atlasName in knownAtlases)
 		{
 			LoadAtlas(atlasName);
 		}
@@ -123,47 +73,46 @@ public static class AtlasManager
 
 	/// <summary>
 	/// Loads a single atlas by parsing its .tpsheet file and loading PNG textures.
-	/// Thread-safe: uses lock to prevent duplicate loading work.
+	/// Thread-safe without a lock: this can run on Godot's loader threads (via AtlasResourceLoader),
+	/// and blocking those threads while doing nested ResourceLoader.Load calls can deadlock the
+	/// threaded loader. Concurrent duplicate builds are idempotent (ResourceLoader caches the page
+	/// textures) and the first insert wins.
 	/// </summary>
 	public static void LoadAtlas(string atlasName)
 	{
-		if (_atlases.ContainsKey(atlasName))
+		if (!_atlases.ContainsKey(atlasName))
 		{
-			return;
-		}
-		using (_loadLock.EnterScope())
-		{
-			if (!_atlases.ContainsKey(atlasName))
+			AtlasData atlasData = BuildAtlasData(atlasName);
+			if (atlasData != null && _atlases.TryAdd(atlasName, atlasData))
 			{
-				LoadAtlasInternal(atlasName);
+				Log.Info($"AtlasManager: Loaded {atlasName} with {atlasData.SpriteMap.Count} sprites");
 			}
 		}
 	}
 
-	private static void LoadAtlasInternal(string atlasName)
+	private static AtlasData? BuildAtlasData(string atlasName)
 	{
 		string text = "res://images/atlases/" + atlasName + ".tpsheet";
 		if (!FileAccess.FileExists(text))
 		{
 			Log.Warn("AtlasManager: tpsheet not found: " + text);
-			return;
+			return null;
 		}
 		using FileAccess fileAccess = FileAccess.Open(text, FileAccess.ModeFlags.Read);
 		if (fileAccess == null)
 		{
 			Log.Warn("AtlasManager: Failed to open " + text);
-			return;
+			return null;
 		}
 		string asText = fileAccess.GetAsText();
 		TpSheetData tpSheetData = JsonSerializer.Deserialize<TpSheetData>(asText, _jsonOptions);
 		if (tpSheetData == null)
 		{
 			Log.Warn("AtlasManager: Failed to parse " + text);
-			return;
+			return null;
 		}
 		Dictionary<string, Texture2D> dictionary = new Dictionary<string, Texture2D>();
 		Dictionary<string, SpriteInfo> dictionary2 = new Dictionary<string, SpriteInfo>();
-		long pixelCount = 0L;
 		foreach (TpSheetTexture texture in tpSheetData.Textures)
 		{
 			string text2 = "res://images/atlases/" + texture.Image;
@@ -173,7 +122,6 @@ public static class AtlasManager
 				Log.Warn("AtlasManager: Failed to load texture: " + text2);
 				continue;
 			}
-			pixelCount += (long)texture2D.GetWidth() * texture2D.GetHeight();
 			dictionary[texture.Image] = texture2D;
 			foreach (TpSheetSprite sprite in texture.Sprites)
 			{
@@ -181,14 +129,12 @@ public static class AtlasManager
 				dictionary2[key] = new SpriteInfo(texture2D, sprite);
 			}
 		}
-		AtlasData value = new AtlasData
+		return new AtlasData
 		{
 			TpSheet = tpSheetData,
 			PageTextures = dictionary,
 			SpriteMap = dictionary2
 		};
-		_atlases[atlasName] = value;
-		Log.Info($"AtlasManager: Loaded {atlasName} with {dictionary2.Count} sprites, {dictionary.Count} page(s), {pixelCount / 1024L / 1024L}MPx");
 	}
 
 	/// <summary>

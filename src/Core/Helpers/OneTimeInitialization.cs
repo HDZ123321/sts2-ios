@@ -61,9 +61,9 @@ public static class OneTimeInitialization
 		}
 		Perf.Mark("settings load");
 		await ModManager.Initialize(new ModManagerFileIo(), SaveManager.Instance.SettingsSave.ModSettings, ReleaseInfoManager.Instance.SemVer);
-		Perf.Mark("mod manager");
 		UserDataPathProvider.IsRunningModded = ModManager.IsRunningModded();
-		SentryService.DisableGdExtensionIfModded();
+		Perf.Mark("mod manager");
+		SentryService.DisableSentryIfModded();
 	}
 
 	/// <summary>
@@ -84,19 +84,20 @@ public static class OneTimeInitialization
 		Perf.Mark("essential atlases");
 		LocManager.Initialize();
 		BakedContent.InjectLocEntries();
+		AssemblyInfo.Init();
 		Perf.Mark("localization");
 		ModelDb.Init();
 		BaseLib.Utils.WatcherRegistry.Populate();
 		Perf.Mark("model db");
 		ModelIdSerializationCache.Init();
 		ModelDb.InitIds();
-		Perf.Mark("model ids");
 		// The Watcher stance models are per-player state rather than canonical models,
 		// so they subscribe to the combat hook chain on their own.
 		global::Watcher.Code.Events.WatcherSubscriber.Subscribe();
+		Perf.Mark("model ids");
 		MessageTypes.Initialize();
-		ActionTypes.Initialize();
 		Perf.Mark("message and action types");
+		ActionTypes.Initialize();
 	}
 
 	/// <summary>

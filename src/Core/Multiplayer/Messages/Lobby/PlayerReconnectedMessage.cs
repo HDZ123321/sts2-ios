@@ -1,3 +1,4 @@
+using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Multiplayer.Transport;
@@ -10,7 +11,7 @@ namespace MegaCrit.Sts2.Core.Multiplayer.Messages.Lobby;
 /// </summary>
 public struct PlayerReconnectedMessage : INetMessage, IPacketSerializable
 {
-	public ulong playerId;
+	public LoadRunLobbyPlayer player;
 
 	public bool ShouldBroadcast => false;
 
@@ -22,11 +23,11 @@ public struct PlayerReconnectedMessage : INetMessage, IPacketSerializable
 
 	public void Serialize(PacketWriter writer)
 	{
-		writer.WriteULong(playerId);
+		writer.Write(player);
 	}
 
 	public void Deserialize(PacketReader reader)
 	{
-		playerId = reader.ReadULong();
+		player = reader.Read<LoadRunLobbyPlayer>();
 	}
 }

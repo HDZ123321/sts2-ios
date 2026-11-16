@@ -19,6 +19,10 @@ public sealed class Axebot : MonsterModel
 {
 	private const int _oneTwoRepeat = 2;
 
+	private const int _initialStockAmount = 2;
+
+	private const int _respawnMaxHpBonus = 10;
+
 	private const string _hammerUppercutTrigger = "uppercut";
 
 	private const string _sharpenTrigger = "sharpen";
@@ -35,15 +39,19 @@ public sealed class Axebot : MonsterModel
 
 	private int BootUpBlock => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 15, 10);
 
-	private int OneTwoDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 10, 9);
+	private int OneTwoDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 11, 10);
 
 	private int BootUpStrGain => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 4, 3);
 
-	private int HammerUppercutDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 14, 12);
+	private int HammerUppercutDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 18, 14);
 
-	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 76, 70);
+	public override int MinInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 80, 70) + RespawnMaxHpBonus;
 
-	public override int MaxInitialHp => AscensionHelper.GetValueIfAscension(AscensionLevel.ToughEnemies, 86, 78);
+	public override int MaxInitialHp => MinInitialHp;
+
+	private int RespawnMaxHpBonus => RespawnCount * 10;
+
+	private int RespawnCount => 2 - StockAmount;
 
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Armor;
 
@@ -105,7 +113,7 @@ public sealed class Axebot : MonsterModel
 		await CreatureCmd.TriggerAnim(base.Creature, "sharpen", 0.3f);
 		await Cmd.Wait(0.25f);
 		await CreatureCmd.GainBlock(base.Creature, BootUpBlock, ValueProp.Move, null);
-		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, BootUpStrGain * (2 - StockAmount), base.Creature, null);
+		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, BootUpStrGain * RespawnCount, base.Creature, null);
 	}
 
 	private async Task OneTwoMove(IReadOnlyList<Creature> targets)

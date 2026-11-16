@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.HoverTips;
@@ -282,6 +283,7 @@ public class NEventOptionButton : NButton
 	public override void _Ready()
 	{
 		ConnectSignals();
+		this.ApplyRtlLayout();
 		Event.DynamicVars.AddTo(Option.Description);
 		Event.DynamicVars.AddTo(Option.Title);
 		string formattedText = Option.Title.GetFormattedText();
@@ -318,6 +320,10 @@ public class NEventOptionButton : NButton
 		else if (WillKillPlayer())
 		{
 			ShowPersistentKillGlow();
+		}
+		if (Option.IsProceed)
+		{
+			RunManager.Instance.MapSelectionSynchronizer.PlayerVoteChanged += OnPlayerVoteChanged;
 		}
 	}
 
@@ -404,7 +410,10 @@ public class NEventOptionButton : NButton
 		await Cmd.Wait(2.5f, _deathPreventionCancellation.Token, ignoreCombatEnd: true);
 		if (!_deathPreventionCancellation.IsCancellationRequested)
 		{
-			_deathPreventionVfx?.GoAway();
+			if (_deathPreventionVfx != null)
+			{
+				TaskHelper.RunSafely(_deathPreventionVfx.GoAway());
+			}
 			_deathPreventionVfx = null;
 		}
 	}
@@ -470,7 +479,7 @@ public class NEventOptionButton : NButton
 			.SetTrans(Tween.TransitionType.Expo);
 		_flashTween.TweenProperty(_confirmFlash, "scale", Vector2.One, 0.25).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 		_flashTween.TweenProperty(_confirmFlash, "modulate:a", 0f, 0.3);
-		if (await _flashTween.AwaitFinished(this))
+		if (await _flashTween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			await Cmd.Wait(0.5f, _cancelToken.Token);
 		}
@@ -494,7 +503,21 @@ public class NEventOptionButton : NButton
 
 	private bool ShouldDisplayPlayerVote(Player player)
 	{
+		if (Option.IsProceed && player.RunState.GameMode == GameMode.Blitz)
+		{
+			return RunManager.Instance.MapSelectionSynchronizer.GetVote(player).HasValue;
+		}
 		return RunManager.Instance.EventSynchronizer.GetPlayerVote(player) == Index;
+	}
+
+	/// <summary>
+	/// Called when a player votes for a map point.
+	/// This is used to refresh the player heads container when in Blitz mode, where pressing the proceed button votes
+	/// to move on to the next map point.
+	/// </summary>
+	private void OnPlayerVoteChanged(Player player, MapVote? oldLocation, MapVote? newLocation)
+	{
+		RefreshVotes();
 	}
 
 	public void RefreshVotes()
@@ -510,6 +533,7 @@ public class NEventOptionButton : NButton
 		{
 			_animInTween.Finished -= EnableButton;
 		}
+		RunManager.Instance.MapSelectionSynchronizer.PlayerVoteChanged -= OnPlayerVoteChanged;
 	}
 
 	private bool WillKillPlayer()

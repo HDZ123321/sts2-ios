@@ -8,6 +8,8 @@ namespace MegaCrit.Sts2.Core.Models.PotionPools;
 /// </summary>
 public sealed class MockPotionPool : PotionPoolModel
 {
+	public override bool IsMock => true;
+
 	public override string EnergyColorName => "colorless";
 
 	protected override IEnumerable<PotionModel> GenerateAllPotions()

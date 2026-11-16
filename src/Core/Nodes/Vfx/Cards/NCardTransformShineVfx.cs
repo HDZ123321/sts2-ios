@@ -31,11 +31,6 @@ public class NCardTransformShineVfx : Control
 		/// Cached name for the '_ExitTree' method.
 		/// </summary>
 		public new static readonly StringName _ExitTree = "_ExitTree";
-
-		/// <summary>
-		/// Cached name for the 'GetEffectiveDuration' method.
-		/// </summary>
-		public static readonly StringName GetEffectiveDuration = "GetEffectiveDuration";
 	}
 
 	/// <summary>
@@ -263,14 +258,7 @@ public class NCardTransformShineVfx : Control
 		}
 	}
 
-	public float GetEffectiveDuration(bool shortVersion = false)
-	{
-		float num = (shortVersion ? _overlayShowShortDuration : _overlayShowDuration);
-		float num2 = (shortVersion ? _overlayIdleShortDuration : _overlayIdleDuration);
-		return num + num2;
-	}
-
-	public async Task PlayAnimation(bool shortVersion = false)
+	public async Task PlayUntilCardUpdate(bool shortVersion = false)
 	{
 		_overlay.SelfModulate = _whiteClear;
 		_borderGlow.SelfModulate = _whiteClear;
@@ -283,9 +271,15 @@ public class NCardTransformShineVfx : Control
 		{
 			_cardNode.Scale = _originalCardScale;
 			this.QueueFreeSafely();
-			return;
 		}
-		UpdateCard(_cardNode, _endCard);
+		else
+		{
+			UpdateCard(_cardNode, _endCard);
+		}
+	}
+
+	public async Task PlayShineAndReveal()
+	{
 		TaskHelper.RunSafely(AnimatingCardScale(_revealScaleCurve, _glowFadeDuration));
 		_borderGlow.SelfModulate = _whiteOpaque;
 		_borderGlow.Scale = Vector2.One;
@@ -319,6 +313,18 @@ public class NCardTransformShineVfx : Control
 			_endParticles.Restart();
 			TaskHelper.RunSafely(DelayedFree());
 		}
+	}
+
+	public async Task PlayAnimation(bool shortVersion = false)
+	{
+		await PlayUntilCardUpdate(shortVersion);
+		await PlayShineAndReveal();
+	}
+
+	public async Task PlayAnimationWithoutWaitingForEnd(bool shortVersion = false)
+	{
+		await PlayUntilCardUpdate(shortVersion);
+		TaskHelper.RunSafely(PlayShineAndReveal());
 	}
 
 	private async Task DelayedFree()
@@ -355,12 +361,8 @@ public class NCardTransformShineVfx : Control
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(2);
+		List<MethodInfo> list = new List<MethodInfo>(1);
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.GetEffectiveDuration, new PropertyInfo(Variant.Type.Float, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Bool, "shortVersion", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
-		}, null));
 		return list;
 	}
 
@@ -374,11 +376,6 @@ public class NCardTransformShineVfx : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.GetEffectiveDuration && args.Count == 1)
-		{
-			ret = VariantUtils.CreateFrom<float>(GetEffectiveDuration(VariantUtils.ConvertTo<bool>(in args[0])));
-			return true;
-		}
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
@@ -387,10 +384,6 @@ public class NCardTransformShineVfx : Control
 	protected override bool HasGodotClassMethod(in godot_string_name method)
 	{
 		if (method == MethodName._ExitTree)
-		{
-			return true;
-		}
-		if (method == MethodName.GetEffectiveDuration)
 		{
 			return true;
 		}

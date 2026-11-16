@@ -291,7 +291,8 @@ public class NMapPointHistoryEntry : NClickableControl
 	public void SetPlayer(RunHistoryPlayer player)
 	{
 		_player = player;
-		_questIcon.Visible = _entry.GetEntry(_player.Id).CompletedQuests.Count > 0;
+		PlayerMapPointHistoryEntry entry = _entry.GetEntry(_player.Id);
+		_questIcon.Visible = entry.CompletedQuests.Count > 0 || entry.IsAffectedByFurCoat;
 	}
 
 	protected override void OnFocus()
@@ -302,7 +303,7 @@ public class NMapPointHistoryEntry : NClickableControl
 		}
 		Highlight();
 		HoverTipAlignment alignment = HoverTip.GetHoverTipAlignment(this);
-		NHoverTipSet tip = NHoverTipSet.CreateAndShowMapPointHistory(this, NMapPointHistoryHoverTip.Create(FloorNum, _player.Id, _entry));
+		NHoverTipSet tip = NHoverTipSet.CreateAndShowMapPointHistory(this, NMapPointHistoryHoverTip.Create(FloorNum, _player.Id, _entry, _runHistory.GameMode));
 		Callable.From(delegate
 		{
 			tip.SetAlignment(this, alignment);

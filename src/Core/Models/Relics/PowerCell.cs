@@ -23,7 +23,9 @@ public sealed class PowerCell : RelicModel
 		if (participants.Contains(base.Owner.Creature) && base.Owner.PlayerCombatState.TurnNumber <= 1)
 		{
 			Flash();
-			IEnumerable<CardModel> cards = PileType.Draw.GetPile(base.Owner).Cards.Where((CardModel c) => !c.EnergyCost.CostsX && c.EnergyCost.GetWithModifiers(CostModifiers.Local) == 0).ToList().StableShuffle(base.Owner.RunState.Rng.CombatCardSelection)
+			List<CardModel> source = PileType.Draw.GetPile(base.Owner).Cards.Where((CardModel c) => !c.EnergyCost.CostsX && c.EnergyCost.GetWithModifiers(CostModifiers.Local) == 0).ToList();
+			IEnumerable<CardModel> cards = source.Where((CardModel c) => !c.Keywords.Contains(CardKeyword.Innate)).ToList().StableShuffle(base.Owner.RunState.Rng.CombatCardSelection)
+				.Concat(source.Where((CardModel c) => c.Keywords.Contains(CardKeyword.Innate)).ToList().StableShuffle(base.Owner.RunState.Rng.CombatCardSelection))
 				.Take(base.DynamicVars.Cards.IntValue);
 			await CardPileCmd.Add(cards, PileType.Hand);
 		}

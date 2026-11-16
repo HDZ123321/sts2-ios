@@ -21,7 +21,7 @@ namespace MegaCrit.Sts2.Core.Bindings.MegaSpine;
 /// Keep that pattern in any new binding of this kind. See GC.KeepAlive
 /// (https://learn.microsoft.com/dotnet/api/system.gc.keepalive) and PRG-6985.
 /// </remarks>
-public abstract class MegaSpineBinding
+public abstract class MegaSpineBinding : IDisposable
 {
 	/// <summary>
 	/// The Spine GodotObject that this binding wraps.
@@ -45,6 +45,22 @@ public abstract class MegaSpineBinding
 	/// The signals from the Spine API (https://en.esotericsoftware.com/spine-api-reference) that this binding exposes.
 	/// </summary>
 	protected virtual IEnumerable<string> SpineSignals => Array.Empty<string>();
+
+	/// <summary>
+	/// Deterministically releases the wrapped native object on the CALLING thread. Every Spine wrapper
+	/// connects to its owner's _internal_spine_objects_invalidated signal on construction and disconnects
+	/// on native destruction (spine-godot SpineObjectWrapper). Godot's Object signal connect/disconnect is
+	/// not thread-safe, so if a transient wrapper is left to the .NET finalizer thread, its disconnect can
+	/// race a main-thread read's connect on the same shared owner and corrupt the connection list (a
+	/// finalizer-thread heap corruption, PRG-6985). Disposing transient wrappers here keeps both the
+	/// connect and the disconnect on one thread. Long-lived wrappers (MegaSprite/MegaAnimationState the
+	/// caller retains) are simply never disposed through this path.
+	/// </summary>
+	public void Dispose()
+	{
+		BoundObject.Dispose();
+		GC.SuppressFinalize(this);
+	}
 
 	protected MegaSpineBinding(Variant native)
 	{

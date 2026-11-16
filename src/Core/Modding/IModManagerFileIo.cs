@@ -19,4 +19,8 @@ public interface IModManagerFileIo
 	bool DirectoryExists(string path);
 
 	Stream OpenStream(string path, Godot.FileAccess.ModeFlags mode);
+
+	void MakeDirRecursive(string path);
+
+	Error CopyFile(string sourcePath, string destinationPath);
 }

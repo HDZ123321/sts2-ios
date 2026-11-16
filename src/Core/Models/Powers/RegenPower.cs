@@ -17,7 +17,7 @@ public sealed class RegenPower : PowerModel
 
 	public override bool ShouldScaleInMultiplayer => true;
 
-	public override async Task AfterSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
+	public override async Task BeforeSideTurnEndEarly(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
 	{
 		if (participants.Contains(base.Owner) && !base.Owner.IsDead)
 		{

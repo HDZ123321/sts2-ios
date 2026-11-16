@@ -13,7 +13,7 @@ public class MegaSprite : MegaSpineBinding
 
 	protected override string SpineClassName => "SpineSprite";
 
-	protected override IEnumerable<string> SpineMethods => new global::_003C_003Ez__ReadOnlyArray<string>(new string[7] { "get_animation_state", "get_additive_material", "get_normal_material", "get_skeleton", "new_skin", "set_normal_material", "set_skeleton_data_res" });
+	protected override IEnumerable<string> SpineMethods => new global::_003C_003Ez__ReadOnlyArray<string>(new string[8] { "get_animation_state", "get_additive_material", "get_normal_material", "get_skeleton", "new_skin", "set_normal_material", "set_skeleton_data_res", "get_global_bone_transform" });
 
 	protected override IEnumerable<string> SpineSignals => new global::_003C_003Ez__ReadOnlyArray<string>(new string[10] { "animation_started", "animation_interrupted", "animation_ended", "animation_completed", "animation_disposed", "animation_event", "before_animation_state_update", "before_animation_state_apply", "before_world_transforms_change", "world_transforms_changed" });
 
@@ -210,5 +210,10 @@ public class MegaSprite : MegaSpineBinding
 	public void SetSkeletonDataRes(MegaSkeletonDataResource skeletonData)
 	{
 		Call("set_skeleton_data_res", skeletonData.BoundObject);
+	}
+
+	public Transform2D? GetGlobalBoneTransform(string name)
+	{
+		return CallNullable("get_global_bone_transform", name)?.As<Transform2D>();
 	}
 }

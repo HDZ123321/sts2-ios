@@ -39,7 +39,7 @@ public sealed class MockPowerCard : MockCardModel
 	{
 		if (_mockSelfHpLoss > 0)
 		{
-			await CreatureCmd.Damage(choiceContext, base.Owner.Creature, _mockSelfHpLoss, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this);
+			await CreatureCmd.Damage(choiceContext, base.Owner.Creature, _mockSelfHpLoss, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this, cardPlay);
 		}
 		if (base.DynamicVars.Block.BaseValue > 0m)
 		{

@@ -18,12 +18,13 @@ public sealed class GamblersBrew : PotionModel
 
 	public override PotionUsage Usage => PotionUsage.CombatOnly;
 
-	public override TargetType TargetType => TargetType.Self;
+	public override TargetType TargetType => TargetType.AnyPlayer;
 
 	protected override async Task OnUse(PlayerChoiceContext choiceContext, Creature? target)
 	{
-		NCombatRoom.Instance?.PlaySplashVfx(base.Owner.Creature, new Color("a19f91"));
-		List<CardModel> list = (await CardSelectCmd.FromHandForDiscard(choiceContext, base.Owner, new CardSelectorPrefs(base.SelectionScreenPrompt, 0, 999999999), null, this)).ToList();
+		PotionModel.AssertValidForTargetedPotion(target);
+		NCombatRoom.Instance?.PlaySplashVfx(target, new Color("a19f91"));
+		List<CardModel> list = (await CardSelectCmd.FromHandForDiscard(choiceContext, target.Player, new CardSelectorPrefs(base.SelectionScreenPrompt, 0, 999999999), null, this)).ToList();
 		await CardCmd.DiscardAndDraw(choiceContext, list, list.Count);
 	}
 }

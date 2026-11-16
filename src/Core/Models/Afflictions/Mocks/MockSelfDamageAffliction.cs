@@ -8,6 +8,8 @@ namespace MegaCrit.Sts2.Core.Models.Afflictions.Mocks;
 
 public sealed class MockSelfDamageAffliction : AfflictionModel
 {
+	public override bool IsMock => true;
+
 	public override bool IsStackable => true;
 
 	public override async Task OnPlay(PlayerChoiceContext choiceContext, Creature? target)

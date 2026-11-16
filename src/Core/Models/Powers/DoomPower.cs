@@ -31,7 +31,7 @@ public sealed class DoomPower : PowerModel
 	/// passed at the same time here, otherwise we can miss Fatal triggers for reviving powers like
 	/// <see cref="T:MegaCrit.Sts2.Core.Models.Powers.ReattachPower" />.
 	///
-	/// This does extra stuff in addition to a normal <see cref="M:MegaCrit.Sts2.Core.Commands.CreatureCmd.Kill(MegaCrit.Sts2.Core.Entities.Creatures.Creature,System.Boolean)" /> call:
+	/// This does extra stuff in addition to a normal <see cref="M:MegaCrit.Sts2.Core.Commands.CreatureCmd.Kill(MegaCrit.Sts2.Core.Entities.Creatures.Creature,MegaCrit.Sts2.Core.Models.CardModel,System.Boolean)" /> call:
 	/// * Plays special VFX.
 	/// * Runs <see cref="M:MegaCrit.Sts2.Core.Hooks.Hook.AfterDiedToDoom(MegaCrit.Sts2.Core.Combat.ICombatState,System.Collections.Generic.IReadOnlyList{MegaCrit.Sts2.Core.Entities.Creatures.Creature})" />.
 	///
@@ -46,8 +46,11 @@ public sealed class DoomPower : PowerModel
 		ICombatState combatState = creatures.First().CombatState;
 		foreach (Creature creature in creatures)
 		{
-			await PlayVfx(creature);
-			await CreatureCmd.Kill(creature);
+			if (!creature.IsDead && creature.CombatState != null)
+			{
+				await PlayVfx(creature);
+				await CreatureCmd.Kill(creature, null);
+			}
 		}
 		await Hook.AfterDiedToDoom(combatState, creatures);
 	}
@@ -57,30 +60,52 @@ public sealed class DoomPower : PowerModel
 		return creatures.Where((Creature c) => c.GetPower<DoomPower>()?.IsOwnerDoomed() ?? false).ToList();
 	}
 
-	/// <summary>
-	/// Will the owner of this power die to Doom at the end of their turn?
-	/// </summary>
-	public bool IsOwnerDoomed()
-	{
-		return base.Owner.CurrentHp <= base.Amount;
-	}
-
 	public override async Task BeforeSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
 	{
-		if (!CombatManager.Instance.IsOverOrEnding && participants.Contains(base.Owner) && !base.Owner.IsDead && IsOwnerDoomed())
+		if (side != CombatSide.Player && ShouldDoomTrigger(participants))
 		{
-			IReadOnlyList<Creature> doomedCreatures = GetDoomedCreatures(base.Owner.CombatState.GetCreaturesOnSide(side));
-			if (doomedCreatures.First() == base.Owner)
-			{
-				await DoomKill(doomedCreatures);
-			}
+			await DoomKill(GetDoomedCreatures(side));
 		}
+	}
+
+	public override async Task AfterSideTurnEnd(PlayerChoiceContext choiceContext, CombatSide side, IEnumerable<Creature> participants)
+	{
+		if (side != CombatSide.Enemy && ShouldDoomTrigger(participants))
+		{
+			await DoomKill(GetDoomedCreatures(side));
+		}
+	}
+
+	private bool ShouldDoomTrigger(IEnumerable<Creature> participants)
+	{
+		if (CombatManager.Instance.IsOverOrEnding)
+		{
+			return false;
+		}
+		if (!participants.Contains(base.Owner))
+		{
+			return false;
+		}
+		if (base.Owner.IsDead)
+		{
+			return false;
+		}
+		if (!IsOwnerDoomed())
+		{
+			return false;
+		}
+		IReadOnlyList<Creature> doomedCreatures = GetDoomedCreatures(base.Owner.Side);
+		if (doomedCreatures.First() != base.Owner)
+		{
+			return false;
+		}
+		return true;
 	}
 
 	private static async Task PlayVfx(Creature creature)
 	{
-		NCreature nCreature = NCombatRoom.Instance?.GetCreatureNode(creature);
-		if (nCreature == null)
+		NCreature creatureNode = creature.GetCreatureNode();
+		if (creatureNode == null)
 		{
 			return;
 		}
@@ -89,7 +114,7 @@ public sealed class DoomPower : PowerModel
 		{
 			flag = Hook.ShouldDie(creature.Player?.RunState ?? creature.CombatState.RunState, creature.CombatState, creature, out AbstractModel _) && creature.Monster.ShouldDisappearFromDoom;
 		}
-		StartDoomAnim(nCreature, flag);
+		StartDoomAnim(creatureNode, flag);
 		NDoomOverlayVfx orCreate = NDoomOverlayVfx.GetOrCreate();
 		if (orCreate != null && !orCreate.IsInsideTree())
 		{
@@ -111,23 +136,45 @@ public sealed class DoomPower : PowerModel
 		}
 	}
 
+	private IReadOnlyList<Creature> GetDoomedCreatures(CombatSide side)
+	{
+		return GetDoomedCreatures(base.CombatState.GetCreaturesOnSide(side));
+	}
+
+	/// <summary>
+	/// Will the owner of this power die to Doom at the end of their turn?
+	/// </summary>
+	private bool IsOwnerDoomed()
+	{
+		return base.Owner.CurrentHp <= base.Amount;
+	}
+
 	private static void StartDoomAnim(NCreature creature, bool shouldDie)
 	{
-		Task task = null;
+		Task task = Task.CompletedTask;
 		if (shouldDie)
 		{
 			creature.Entity.Monster?.OnDieToDoom();
-			Tween tween = creature.AnimDisableUi();
-			tween.TweenCallback(Callable.From(creature.QueueFreeSafely));
-			task = WaitForTween(tween, creature);
+			creature.DisableInteractionForDeath();
+			Tween tween = creature.AnimateOutStateDisplay();
+			if (tween != null)
+			{
+				tween.TweenCallback(Callable.From(creature.QueueFreeSafely));
+				task = WaitForTween(tween, creature);
+			}
+			else
+			{
+				creature.QueueFreeSafely();
+			}
 			if (creature.SpineAnimation.IsValid)
 			{
 				creature.SetAnimationTrigger("Hit");
-				MegaTrackEntry currentTrack = creature.SpineAnimation.GetCurrentTrack();
-				if (currentTrack?.GetAnimationName() == "hurt")
+				using MegaTrackEntry megaTrackEntry = creature.SpineAnimation.GetCurrentTrack();
+				if (megaTrackEntry?.GetAnimationName() == "hurt")
 				{
-					currentTrack.SetTrackTime(0.1f);
-					currentTrack.SetTimeScale(0f);
+					float trackTime = creature.Entity.Monster?.HurtAnimationTrackOffsetForDoom ?? 0.1f;
+					megaTrackEntry.SetTrackTime(trackTime);
+					megaTrackEntry.SetTimeScale(0f);
 				}
 			}
 			NCombatRoom.Instance?.RemoveCreatureNode(creature);

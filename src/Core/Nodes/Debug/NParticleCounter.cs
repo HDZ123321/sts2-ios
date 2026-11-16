@@ -109,7 +109,7 @@ public class NParticleCounter : Control
 
 	private void CheckForHotkey(InputEvent inputEvent)
 	{
-		if (inputEvent.IsActionReleased(_toggleParticleCounter) && !NDevConsole.Instance.Visible)
+		if (inputEvent.IsActionReleased(_toggleParticleCounter) && !NDevConsole.IsConsoleVisible)
 		{
 			base.Visible = !base.Visible;
 		}

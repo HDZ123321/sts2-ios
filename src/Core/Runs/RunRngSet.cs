@@ -23,7 +23,7 @@ public class RunRngSet
 	/// <summary>
 	/// The seed that was hashed from the InputSeed.
 	/// </summary>
-	public uint Seed { get; }
+	public ulong Seed { get; }
 
 	/// <summary>
 	/// Determines everything that's generated upfront when a run first starts. This includes:
@@ -104,11 +104,35 @@ public class RunRngSet
 	public RunRngSet(string seed)
 	{
 		StringSeed = seed;
-		Seed = (uint)StringHelper.GetDeterministicHashCode(seed);
+		if (seed.StartsWith("old"))
+		{
+			string stringSeed = StringSeed;
+			int length = "old".Length;
+			Seed = (uint)StringHelper.GetDeterministicHashCodeOld(stringSeed.Substring(length, stringSeed.Length - length));
+		}
+		else
+		{
+			Seed = StringHelper.GetDeterministicHashCode(seed);
+		}
 		RunRngType[] values = Enum.GetValues<RunRngType>();
 		foreach (RunRngType runRngType in values)
 		{
 			_rngs[runRngType] = CreateRng(runRngType);
+		}
+	}
+
+	/// <summary>
+	/// Initializes an RNG set with all RNGs set to the RNG passed.
+	/// Only used in Bestiary.
+	/// </summary>
+	public RunRngSet(Rng rng)
+	{
+		StringSeed = string.Empty;
+		Seed = 0uL;
+		RunRngType[] values = Enum.GetValues<RunRngType>();
+		foreach (RunRngType key in values)
+		{
+			_rngs[key] = rng;
 		}
 	}
 
@@ -126,7 +150,7 @@ public class RunRngSet
 		};
 		foreach (var (key, rng2) in _rngs)
 		{
-			serializableRunRngSet.Counters[key] = rng2.Counter;
+			serializableRunRngSet.Rngs[key] = rng2.ToSerializable();
 		}
 		return serializableRunRngSet;
 	}
@@ -134,14 +158,17 @@ public class RunRngSet
 	public static RunRngSet FromSave(SerializableRunRngSet save)
 	{
 		RunRngSet runRngSet = new RunRngSet(save.Seed);
-		foreach (KeyValuePair<RunRngType, int> counter in save.Counters)
+		foreach (var (key, serializable) in save.Rngs)
 		{
-			counter.Deconstruct(out var key, out var value);
-			RunRngType runRngType = key;
-			int targetCount = value;
-			Rng rng = runRngSet.CreateRng(runRngType);
-			rng.FastForwardCounter(targetCount);
-			runRngSet._rngs[runRngType] = rng;
+			runRngSet._rngs[key] = new Rng(serializable);
+		}
+		RunRngType[] values = Enum.GetValues<RunRngType>();
+		foreach (RunRngType runRngType2 in values)
+		{
+			if (!runRngSet._rngs.ContainsKey(runRngType2))
+			{
+				runRngSet._rngs[runRngType2] = runRngSet.CreateRng(runRngType2);
+			}
 		}
 		return runRngSet;
 	}
@@ -152,22 +179,9 @@ public class RunRngSet
 		{
 			throw new NotImplementedException("RngSet seed should not change during the run!");
 		}
-		foreach (KeyValuePair<RunRngType, int> counter in save.Counters)
+		foreach (var (key, serializable) in save.Rngs)
 		{
-			counter.Deconstruct(out var key, out var value);
-			RunRngType runRngType = key;
-			int num = value;
-			Rng rng = _rngs[runRngType];
-			if (num < rng.Counter)
-			{
-				rng = CreateRng(runRngType);
-				rng.FastForwardCounter(num);
-				_rngs[runRngType] = rng;
-			}
-			else
-			{
-				_rngs[runRngType].FastForwardCounter(num);
-			}
+			_rngs[key].LoadFromSerializable(serializable);
 		}
 	}
 
@@ -175,12 +189,12 @@ public class RunRngSet
 	/// ONLY USE THIS FOR TESTING!
 	/// Mock out the specified RNG type to use the specified seed.
 	/// </summary>
-	public void MockRng(RunRngType rngType, uint seed)
+	public void MockRng(RunRngType rngType, ulong seed)
 	{
 		_rngs[rngType] = new Rng(seed);
 	}
 
-	private Rng GetRng(RunRngType rngType)
+	public Rng GetRng(RunRngType rngType)
 	{
 		return _rngs[rngType];
 	}

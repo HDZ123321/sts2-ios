@@ -15,6 +15,8 @@ public sealed class MockDiscardAndAddShivsPotion : PotionModel
 {
 	private const string _shivKey = "Shivs";
 
+	public override bool IsMock => true;
+
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
 	{
 		new CardsVar(2),

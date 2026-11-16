@@ -43,6 +43,11 @@ public class NRelicInventoryHolder : NButton
 		public new static readonly StringName _ExitTree = "_ExitTree";
 
 		/// <summary>
+		/// Cached name for the '_Notification' method.
+		/// </summary>
+		public new static readonly StringName _Notification = "_Notification";
+
+		/// <summary>
 		/// Cached name for the 'RefreshAmount' method.
 		/// </summary>
 		public static readonly StringName RefreshAmount = "RefreshAmount";
@@ -185,14 +190,21 @@ public class NRelicInventoryHolder : NButton
 		base._ExitTree();
 		_hoverTween?.Kill();
 		_cancellationTokenSource?.Cancel();
-		if (_subscribedRelic != null)
+	}
+
+	public override void _Notification(int what)
+	{
+		if ((long)what == 1 && IsNodeReady())
 		{
-			_subscribedRelic.DisplayAmountChanged -= OnDisplayAmountChanged;
-			_subscribedRelic.StatusChanged -= OnStatusChanged;
-			_subscribedRelic.Flashed -= OnRelicFlashed;
+			if (_subscribedRelic != null)
+			{
+				_subscribedRelic.DisplayAmountChanged -= OnDisplayAmountChanged;
+				_subscribedRelic.StatusChanged -= OnStatusChanged;
+				_subscribedRelic.Flashed -= OnRelicFlashed;
+			}
+			_subscribedRelic = null;
+			_relic.ModelChanged -= OnModelChanged;
 		}
-		_subscribedRelic = null;
-		_relic.ModelChanged -= OnModelChanged;
 	}
 
 	private void OnModelChanged(RelicModel? oldModel, RelicModel? newModel)
@@ -347,9 +359,13 @@ public class NRelicInventoryHolder : NButton
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal new static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(9);
+		List<MethodInfo> list = new List<MethodInfo>(10);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._Notification, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
+		{
+			new PropertyInfo(Variant.Type.Int, "what", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
+		}, null));
 		list.Add(new MethodInfo(MethodName.RefreshAmount, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.RefreshStatus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnFocus, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -373,6 +389,12 @@ public class NRelicInventoryHolder : NButton
 		if (method == MethodName._ExitTree && args.Count == 0)
 		{
 			_ExitTree();
+			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName._Notification && args.Count == 1)
+		{
+			_Notification(VariantUtils.ConvertTo<int>(in args[0]));
 			ret = default(godot_variant);
 			return true;
 		}
@@ -430,6 +452,10 @@ public class NRelicInventoryHolder : NButton
 			return true;
 		}
 		if (method == MethodName._ExitTree)
+		{
+			return true;
+		}
+		if (method == MethodName._Notification)
 		{
 			return true;
 		}

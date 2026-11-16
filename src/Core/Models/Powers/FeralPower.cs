@@ -30,32 +30,39 @@ public sealed class FeralPower : PowerModel
 
 	public override Task AfterApplied(Creature? applier, CardModel? cardSource)
 	{
-		SetZeroCostAttacksPlayed(CombatManager.Instance.History.Entries.OfType<CardPlayStartedEntry>().Count((CardPlayStartedEntry e) => e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Card.Owner.Creature == base.Owner && e.CardPlay.Resources.EnergyValue == 0 && e.HappenedThisTurn(base.CombatState)));
+		SetZeroCostAttacksPlayed(CombatManager.Instance.History.Entries.OfType<CardPlayStartedEntry>().Count((CardPlayStartedEntry e) => e.CardPlay.Card.Type == CardType.Attack && e.CardPlay.Player == base.Owner.Player && e.CardPlay.Resources.EnergyValue == 0 && e.HappenedThisTurn(base.CombatState)));
 		return Task.CompletedTask;
 	}
 
-	public override (PileType, CardPilePosition) ModifyCardPlayResultPileTypeAndPosition(CardModel card, bool isAutoPlay, ResourceInfo resources, PileType pileType, CardPilePosition position)
+	public override CardLocation ModifyCardPlayResultLocation(CardModel card, bool isAutoPlay, ResourceInfo resources, CardLocation location)
 	{
 		if (card.Owner.Creature != base.Owner)
 		{
-			return (pileType, position);
+			return location;
 		}
 		if (card.Type != CardType.Attack)
 		{
-			return (pileType, position);
+			return location;
 		}
 		if (resources.EnergyValue > 0)
 		{
-			return (pileType, position);
+			return location;
+		}
+		if (card.IsDupe)
+		{
+			return location;
 		}
 		if (GetInternalData<Data>().zeroCostAttacksPlayed >= base.Amount)
 		{
-			return (pileType, position);
+			return location;
 		}
-		return (PileType.Hand, CardPilePosition.Top);
+		location.pileType = PileType.Hand;
+		location.position = CardPilePosition.Top;
+		location.player = base.Owner.Player;
+		return location;
 	}
 
-	public override Task AfterModifyingCardPlayResultPileOrPosition(CardModel card, PileType pileType, CardPilePosition position)
+	public override Task AfterModifyingCardPlayResultLocation(CardModel card, CardLocation location)
 	{
 		Flash();
 		SetZeroCostAttacksPlayed(GetInternalData<Data>().zeroCostAttacksPlayed + 1);

@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Commands.Builders;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace MegaCrit.Sts2.Core.Models.Cards.Mocks;
@@ -15,6 +16,8 @@ public sealed class MockAttackCard : MockCardModel
 	private int _hitCount = 1;
 
 	private bool _fromOsty;
+
+	private bool _fromArrow;
 
 	private TargetType _targetingType = TargetType.AnyEnemy;
 
@@ -65,6 +68,13 @@ public sealed class MockAttackCard : MockCardModel
 		return this;
 	}
 
+	public MockAttackCard MockFromArrow()
+	{
+		AssertMutable();
+		_fromArrow = true;
+		return this;
+	}
+
 	public MockAttackCard MockTargetingType(TargetType targetingType)
 	{
 		AssertMutable();
@@ -89,7 +99,7 @@ public sealed class MockAttackCard : MockCardModel
 	{
 		if (_mockSelfHpLoss > 0)
 		{
-			await CreatureCmd.Damage(choiceContext, base.Owner.Creature, _mockSelfHpLoss, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this);
+			await CreatureCmd.Damage(choiceContext, base.Owner.Creature, _mockSelfHpLoss, ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move, this, cardPlay);
 		}
 		if (base.DynamicVars.Block.BaseValue > 0m)
 		{
@@ -97,7 +107,18 @@ public sealed class MockAttackCard : MockCardModel
 		}
 		int hitCount = (base.EnergyCost.CostsX ? ResolveEnergyXValue() : ((!HasStarCostX) ? _hitCount : ResolveStarXValue()));
 		AttackCommand attackCommand = DamageCmd.Attack(_fromOsty ? base.DynamicVars.OstyDamage.BaseValue : base.DynamicVars.Damage.BaseValue).WithHitCount(hitCount);
-		attackCommand = ((!_fromOsty) ? attackCommand.FromCard(this) : attackCommand.FromOsty(base.Owner.Osty, this));
+		if (_fromOsty)
+		{
+			if (Osty.CheckMissingWithAnim(base.Owner))
+			{
+				return;
+			}
+			attackCommand = attackCommand.FromOsty(base.Owner.Osty, this, cardPlay);
+		}
+		else
+		{
+			attackCommand = attackCommand.FromCard(this, cardPlay);
+		}
 		switch (_targetingType)
 		{
 		case TargetType.AnyEnemy:
@@ -117,7 +138,15 @@ public sealed class MockAttackCard : MockCardModel
 		{
 			attackCommand = attackCommand.Unpowered();
 		}
-		await attackCommand.Execute(choiceContext);
+		if (!_fromArrow)
+		{
+			await attackCommand.Execute(choiceContext);
+		}
+		else
+		{
+			attackCommand.FromArrow();
+			await ArrowCmd.ShootArrowAtTarget(cardPlay.Target, base.Owner, attackCommand, choiceContext);
+		}
 		if (_mockExtraLogic != null)
 		{
 			await _mockExtraLogic(this);

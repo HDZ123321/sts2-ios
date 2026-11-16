@@ -51,13 +51,23 @@ public sealed class SoulFysh : MonsterModel
 
 	public override int MaxInitialHp => MinInitialHp;
 
-	private int DeGasDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 17, 16);
+	private int DeGasDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 18, 16);
 
 	private int ScreamDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 15, 13);
 
 	private int GazeDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 8, 7);
 
-	private int BeckonMoveAmount => 2;
+	private int BeckonMoveAmount
+	{
+		get
+		{
+			if (!AscensionHelper.IsDread())
+			{
+				return 2;
+			}
+			return 3;
+		}
+	}
 
 	private int GazeMoveAmount => 1;
 
@@ -78,7 +88,7 @@ public sealed class SoulFysh : MonsterModel
 		}
 	}
 
-	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, bool wasRemovalPrevented, float deathAnimLength)
+	public override Task AfterDeath(PlayerChoiceContext choiceContext, Creature creature, CardModel? source, bool wasRemovalPrevented, float deathAnimLength)
 	{
 		if (creature != base.Creature)
 		{
@@ -90,7 +100,7 @@ public sealed class SoulFysh : MonsterModel
 
 	public override Task AfterCardChangedPilesLate(CardModel card, PileType oldPileType, AbstractModel? clonedBy)
 	{
-		if (LocalContext.GetMe(base.Creature.CombatState) != card.Owner)
+		if (LocalContext.GetMe(base.CombatState) != card.Owner)
 		{
 			return Task.CompletedTask;
 		}
@@ -138,13 +148,18 @@ public sealed class SoulFysh : MonsterModel
 		foreach (Creature target in targets)
 		{
 			Player player = target.Player ?? target.PetOwner;
-			CardPileAddResult[] statusCards = new CardPileAddResult[BeckonMoveAmount];
+			List<CardPileAddResult> statusCards = new List<CardPileAddResult>();
 			CardModel card = base.CombatState.CreateCard<Beckon>(player);
-			CardPileAddResult[] array = statusCards;
-			array[0] = await CardPileCmd.AddGeneratedCardToCombat(card, PileType.Draw, null, CardPilePosition.Random);
-			CardModel card2 = base.CombatState.CreateCard<Beckon>(player);
-			array = statusCards;
-			array[1] = await CardPileCmd.AddGeneratedCardToCombat(card2, PileType.Discard, null);
+			List<CardPileAddResult> list = statusCards;
+			list.Add(await CardPileCmd.AddGeneratedCardToCombat(card, PileType.Draw, null, CardPilePosition.Random));
+			if (AscensionHelper.IsDread())
+			{
+				CardModel card2 = base.CombatState.CreateCard<Beckon>(player);
+				await CardPileCmd.AddGeneratedCardToCombat(card2, PileType.Hand, null);
+			}
+			CardModel card3 = base.CombatState.CreateCard<Beckon>(player);
+			list = statusCards;
+			list.Add(await CardPileCmd.AddGeneratedCardToCombat(card3, PileType.Discard, null));
 			if (LocalContext.IsMe(player))
 			{
 				CardCmd.PreviewCardPileAdd(statusCards);

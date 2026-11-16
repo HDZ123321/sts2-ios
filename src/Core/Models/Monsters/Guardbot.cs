@@ -24,15 +24,14 @@ public sealed class Guardbot : MonsterModel
 
 	public override DamageSfxType TakeDamageSfxType => DamageSfxType.Armor;
 
-	public override Task AfterAddedToRoom()
+	public override async Task AfterAddedToRoom()
 	{
-		base.AfterAddedToRoom();
+		await base.AfterAddedToRoom();
 		if (TestMode.IsOff)
 		{
 			NCreature creatureNode = NCombatRoom.Instance.GetCreatureNode(base.Creature);
 			FabricatorNormal.SetBotFallPosition(creatureNode);
 		}
-		return Task.CompletedTask;
 	}
 
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()
@@ -48,7 +47,7 @@ public sealed class Guardbot : MonsterModel
 	{
 		SfxCmd.Play(CastSfx);
 		await CreatureCmd.TriggerAnim(base.Creature, "Cast", 0.6f);
-		List<Creature> list = base.Creature.CombatState.Enemies.Where((Creature c) => c.Monster is Fabricator).ToList();
+		List<Creature> list = base.CombatState.Enemies.Where((Creature c) => c.Monster is Fabricator).ToList();
 		foreach (Creature item in list)
 		{
 			await CreatureCmd.GainBlock(item, 15m, ValueProp.Unpowered, null);

@@ -11,8 +11,6 @@ public sealed class DeprecatedEncounter : EncounterModel
 {
 	public override RoomType RoomType => RoomType.Monster;
 
-	public override bool IsDebugEncounter => true;
-
 	public override IEnumerable<MonsterModel> AllPossibleMonsters => Array.Empty<MonsterModel>();
 
 	protected override IReadOnlyList<(MonsterModel, string?)> GenerateMonsters()

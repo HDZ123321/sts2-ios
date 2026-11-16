@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -25,27 +24,20 @@ public sealed class ToastyMittens : RelicModel
 		HoverTipFactory.FromPower<StrengthPower>()
 	});
 
-	public override async Task BeforeHandDraw(Player player, PlayerChoiceContext choiceContext, ICombatState combatState)
+	/// <summary>
+	/// BeforeHandDraw fires ahead of CardPileCmd.Draw, so the hand is not populated yet. This hook runs immediately
+	/// after the draw completes.
+	/// </summary>
+	public override async Task AfterPlayerTurnStart(PlayerChoiceContext choiceContext, Player player)
 	{
 		if (player != base.Owner.Creature.Player)
 		{
 			return;
 		}
 		Flash();
-		await CardPileCmd.ShuffleIfNecessary(choiceContext, base.Owner);
-		IReadOnlyList<CardModel> cards = PileType.Draw.GetPile(player).Cards;
-		CardModel cardModel = null;
-		if (base.Owner.PlayerCombatState.TurnNumber == 1)
+		foreach (CardModel item in await CardSelectCmd.FromHand(choiceContext, player, new CardSelectorPrefs(CardSelectorPrefs.ExhaustSelectionPrompt, 1), null, this))
 		{
-			cardModel = cards.FirstOrDefault((CardModel c) => !c.Keywords.Contains(CardKeyword.Innate));
-		}
-		if (cardModel == null)
-		{
-			cardModel = cards.FirstOrDefault();
-		}
-		if (cardModel != null)
-		{
-			await CardCmd.Exhaust(choiceContext, cardModel);
+			await CardCmd.Exhaust(choiceContext, item);
 		}
 		await PowerCmd.Apply<StrengthPower>(choiceContext, player.Creature, base.DynamicVars.Strength.BaseValue, player.Creature, null);
 	}

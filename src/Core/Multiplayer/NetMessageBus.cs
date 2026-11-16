@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 
@@ -17,9 +18,9 @@ public class NetMessageBus
 		public object originalHandler;
 	}
 
-	private readonly PacketReader _reader = new PacketReader();
+	private readonly PacketReader _reader;
 
-	private readonly PacketWriter _writer = new PacketWriter();
+	private readonly PacketWriter _writer;
 
 	private readonly Logger _logger = new Logger("NetMessageBus", LogType.Network);
 
@@ -29,7 +30,15 @@ public class NetMessageBus
 
 	private bool _isBufferingMessages;
 
+	private readonly HashSet<byte> _warnedMessageTypes = new HashSet<byte>();
+
 	private readonly List<(INetMessage, ulong)> _bufferedMessages = new List<(INetMessage, ulong)>();
+
+	public NetMessageBus(PacketReader reader, PacketWriter writer)
+	{
+		_reader = reader;
+		_writer = writer;
+	}
 
 	public byte[] SerializeMessage<T>(ulong senderId, T message, out int length) where T : INetMessage
 	{
@@ -37,7 +46,7 @@ public class NetMessageBus
 		_writer.WriteByte((byte)message.ToId());
 		_writer.WriteULong(senderId);
 		message.Serialize(_writer);
-		length = (int)Math.Ceiling((float)_writer.BitPosition / 8f);
+		length = _writer.BytePosition;
 		return _writer.Buffer;
 	}
 
@@ -49,7 +58,15 @@ public class NetMessageBus
 		byte b = _reader.ReadByte();
 		if (!MessageTypes.TryGetMessageType(b, out Type type))
 		{
-			Log.Error($"Received message with first byte {b} that is not a valid message ID!");
+			if (ModManager.IsRunningModded() && b >= MessageTypes.Count && !_warnedMessageTypes.Contains(b))
+			{
+				Log.Warn($"Received message with length {packetBytes.Length} and first byte {b} that is outside the bounds of our known messages ({MessageTypes.Count}). Since we are modded, we are assuming this is a message that does not affect gameplay and will not warn about this again.");
+				_warnedMessageTypes.Add(b);
+			}
+			else
+			{
+				Log.Error($"Received message with length {packetBytes.Length} and first byte {b} that is not a valid message ID!");
+			}
 			return false;
 		}
 		overrideSenderId = _reader.ReadULong();

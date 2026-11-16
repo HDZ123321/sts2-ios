@@ -50,11 +50,6 @@ public class NPingButton : NButton
 		public new static readonly StringName _EnterTree = "_EnterTree";
 
 		/// <summary>
-		/// Cached name for the '_ExitTree' method.
-		/// </summary>
-		public new static readonly StringName _ExitTree = "_ExitTree";
-
-		/// <summary>
 		/// Cached name for the 'OnRelease' method.
 		/// </summary>
 		public new static readonly StringName OnRelease = "OnRelease";
@@ -113,6 +108,11 @@ public class NPingButton : NButton
 		/// Cached name for the 'RefreshEnabled' method.
 		/// </summary>
 		public static readonly StringName RefreshEnabled = "RefreshEnabled";
+
+		/// <summary>
+		/// Cached name for the '_ExitTree' method.
+		/// </summary>
+		public new static readonly StringName _ExitTree = "_ExitTree";
 	}
 
 	/// <summary>
@@ -209,9 +209,9 @@ public class NPingButton : NButton
 
 	private Tween? _hoverTween;
 
-	private Vector2 ShowPos => NGame.Instance.MapToSafeArea(_showPosRatio);
+	private Vector2 ShowPos => _showPosRatio * _viewport.GetVisibleRect().Size;
 
-	private Vector2 HidePos => NGame.Instance.MapToSafeArea(_hidePosRatio);
+	private Vector2 HidePos => _hidePosRatio * _viewport.GetVisibleRect().Size;
 
 	protected override string[] Hotkeys => new string[1] { MegaInput.select };
 
@@ -235,16 +235,6 @@ public class NPingButton : NButton
 		CombatManager.Instance.AboutToSwitchToEnemyTurn += OnAboutToSwitchToEnemyTurn;
 		CombatManager.Instance.PlayerEndedTurn += AfterPlayerEndedTurn;
 		CombatManager.Instance.PlayerUnendedTurn += AfterPlayerUnendedTurn;
-	}
-
-	public override void _ExitTree()
-	{
-		base._ExitTree();
-		_showCancelTokenSource?.Cancel();
-		_showCancelTokenSource = null;
-		CombatManager.Instance.AboutToSwitchToEnemyTurn -= OnAboutToSwitchToEnemyTurn;
-		CombatManager.Instance.PlayerEndedTurn -= AfterPlayerEndedTurn;
-		CombatManager.Instance.PlayerUnendedTurn -= AfterPlayerUnendedTurn;
 	}
 
 	private void AfterPlayerEndedTurn(Player player, bool _)
@@ -298,6 +288,7 @@ public class NPingButton : NButton
 
 	protected override void OnEnable()
 	{
+		base.OnEnable();
 		_image.Modulate = Colors.White;
 		_label.Modulate = StsColors.cream;
 	}
@@ -307,6 +298,7 @@ public class NPingButton : NButton
 	/// </summary>
 	protected override void OnDisable()
 	{
+		base.OnDisable();
 		NHoverTipSet.Remove(this);
 		_image.Modulate = StsColors.gray;
 		_label.Modulate = StsColors.gray;
@@ -411,6 +403,16 @@ public class NPingButton : NButton
 		}
 	}
 
+	public override void _ExitTree()
+	{
+		base._ExitTree();
+		_showCancelTokenSource?.Cancel();
+		_showCancelTokenSource = null;
+		CombatManager.Instance.AboutToSwitchToEnemyTurn -= OnAboutToSwitchToEnemyTurn;
+		CombatManager.Instance.PlayerEndedTurn -= AfterPlayerEndedTurn;
+		CombatManager.Instance.PlayerUnendedTurn -= AfterPlayerUnendedTurn;
+	}
+
 	/// <summary>
 	/// Get the method information for all the methods declared in this class.
 	/// This method is used by Godot to register the available methods in the editor.
@@ -422,7 +424,6 @@ public class NPingButton : NButton
 		List<MethodInfo> list = new List<MethodInfo>(15);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnRelease, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnEnable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.OnDisable, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
@@ -441,6 +442,7 @@ public class NPingButton : NButton
 			new PropertyInfo(Variant.Type.Int, "newState", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.RefreshEnabled, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		return list;
 	}
 
@@ -457,12 +459,6 @@ public class NPingButton : NButton
 		if (method == MethodName._EnterTree && args.Count == 0)
 		{
 			_EnterTree();
-			ret = default(godot_variant);
-			return true;
-		}
-		if (method == MethodName._ExitTree && args.Count == 0)
-		{
-			_ExitTree();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -538,6 +534,12 @@ public class NPingButton : NButton
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName._ExitTree && args.Count == 0)
+		{
+			_ExitTree();
+			ret = default(godot_variant);
+			return true;
+		}
 		return base.InvokeGodotClassMethod(in method, args, out ret);
 	}
 
@@ -550,10 +552,6 @@ public class NPingButton : NButton
 			return true;
 		}
 		if (method == MethodName._EnterTree)
-		{
-			return true;
-		}
-		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}
@@ -602,6 +600,10 @@ public class NPingButton : NButton
 			return true;
 		}
 		if (method == MethodName.RefreshEnabled)
+		{
+			return true;
+		}
+		if (method == MethodName._ExitTree)
 		{
 			return true;
 		}

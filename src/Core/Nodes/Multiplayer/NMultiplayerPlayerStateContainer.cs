@@ -14,7 +14,6 @@ using MegaCrit.Sts2.Core.Nodes.Relics;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Runs;
-using MegaCrit.Sts2.addons.mega_text;
 
 namespace MegaCrit.Sts2.Core.Nodes.Multiplayer;
 
@@ -233,23 +232,12 @@ public class NMultiplayerPlayerStateContainer : Control
 	private Vector2 GetTargetPosition()
 	{
 		NRelicInventory relicInventory = NRun.Instance.GlobalUi.RelicInventory;
-		int lineCount = relicInventory.GetLineCount();
-		Vector2 result;
-		if (lineCount == 0 || relicInventory.GetChildCount() == 0)
-		{
-			result = relicInventory.GetDefaultPosition();
-		}
-		else
-		{
-			float y = relicInventory.GetChild<Control>(0).Size.Y;
-			float num = relicInventory.GetThemeConstant(ThemeConstants.FlowContainer.VSeparation, "FlowContainer");
-			result = relicInventory.GetDefaultPosition() + (float)lineCount * (y + num) * Vector2.Down;
-		}
+		Vector2 bottomOfInventory = relicInventory.GetBottomOfInventory();
 		if (_hidden)
 		{
-			result.X = 0f - base.Size.X;
+			bottomOfInventory.X = 0f - base.Size.X;
 		}
-		return result;
+		return bottomOfInventory;
 	}
 
 	public void HighlightPlayer(Player player)

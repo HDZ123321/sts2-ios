@@ -7,6 +7,8 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models.Acts;
 using MegaCrit.Sts2.Core.Models.CardPools;
 using MegaCrit.Sts2.Core.Models.Characters;
+using MegaCrit.Sts2.Core.Models.Dread;
+using MegaCrit.Sts2.Core.Models.Encounters;
 using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Models.Exceptions;
 using MegaCrit.Sts2.Core.Models.Modifiers;
@@ -22,9 +24,11 @@ public static class ModelDb
 
 	private static readonly Dictionary<ModelId, AbstractModel> _contentById = new Dictionary<ModelId, AbstractModel>(4096);
 
-	private static Dictionary<ModelId, Type> _typeById;
+	private static Dictionary<ModelId, Type>? _typeById;
 
 	private static readonly HashSet<ModelId> _resolving = new HashSet<ModelId>();
+
+	private static Type[]? _allAbstractModelSubtypes;
 
 	private static IEnumerable<CardModel>? _allCards;
 
@@ -37,6 +41,8 @@ public static class ModelDb
 	private static IEnumerable<EventModel>? _allEvents;
 
 	private static IEnumerable<EncounterModel>? _allEncounters;
+
+	private static IEnumerable<EncounterModel>? _eventEncounters;
 
 	private static IEnumerable<PotionModel>? _allPotions;
 
@@ -68,12 +74,29 @@ public static class ModelDb
 	{
 		get
 		{
-			List<Type> list = new List<Type>();
-			list.AddRange(AbstractModelSubtypes.All);
-			list.AddRange(ReflectionHelper.GetSubtypesInMods<AbstractModel>());
-			return list.ToArray();
+			if (_allAbstractModelSubtypes != null)
+			{
+				return _allAbstractModelSubtypes;
+			}
+			HashSet<Type> hashSet = new HashSet<Type>();
+			foreach (Type item in AbstractModelSubtypes.All)
+			{
+				hashSet.Add(item);
+			}
+			foreach (Type subtypesInMod in ReflectionHelper.GetSubtypesInMods<AbstractModel>())
+			{
+				hashSet.Add(subtypesInMod);
+			}
+			_allAbstractModelSubtypes = hashSet.ToArray();
+			return _allAbstractModelSubtypes;
 		}
 	}
+
+	/// <summary>
+	/// Returns every model registered to the database.
+	/// This should be used very sparingly.
+	/// </summary>
+	public static IEnumerable<AbstractModel> All => _contentById.Values;
 
 	/// <summary>
 	/// Every Affliction defined in the game code, including mock ones for testing.
@@ -124,25 +147,27 @@ public static class ModelDb
 	/// <summary>
 	/// Get all the characters in the game (ignores Unlocks/Epoch state).
 	/// </summary>
-	public static IEnumerable<CharacterModel> AllCharacters => new global::_003C_003Ez__ReadOnlyArray<CharacterModel>(new CharacterModel[6]
+	public static IEnumerable<CharacterModel> AllCharacters => new global::_003C_003Ez__ReadOnlyArray<CharacterModel>(new CharacterModel[7]
 	{
 		Character<Ironclad>(),
 		Character<Silent>(),
 		Character<Regent>(),
 		Character<Necrobinder>(),
 		Character<Defect>(),
+		Character<Fool>(),
 		Character<global::Watcher.Code.Character.Watcher>()
 	});
 
 	/// <summary>
 	/// Get all the events in the game that don't belong to a specific act.
 	/// </summary>
-	public static IEnumerable<EventModel> AllSharedEvents => _allSharedEvents ?? (_allSharedEvents = new global::_003C_003Ez__ReadOnlyArray<EventModel>(new EventModel[18]
+	public static IEnumerable<EventModel> AllSharedEvents => _allSharedEvents ?? (_allSharedEvents = new global::_003C_003Ez__ReadOnlyArray<EventModel>(new EventModel[19]
 	{
 		Event<BrainLeech>(),
 		Event<CrystalSphere>(),
 		Event<DollRoom>(),
 		Event<FakeMerchant>(),
+		Event<MuseumOfTorture>(),
 		Event<PotionCourier>(),
 		Event<RanwidTheElder>(),
 		Event<RelicTrader>(),
@@ -179,12 +204,24 @@ public static class ModelDb
 	/// <summary>
 	/// Returns a list of every possible Monster in the game.
 	/// </summary>
-	public static IEnumerable<MonsterModel> Monsters => Acts.SelectMany((ActModel act) => act.AllMonsters).Distinct();
+	public static IEnumerable<MonsterModel> Monsters => Acts.SelectMany((ActModel act) => act.AllMonsters).Concat(EventEncounters.SelectMany((EncounterModel e) => e.AllPossibleMonsters)).Distinct();
 
 	/// <summary>
 	/// Get all the encounters in the game.
 	/// </summary>
-	public static IEnumerable<EncounterModel> AllEncounters => _allEncounters ?? (_allEncounters = Acts.SelectMany((ActModel a) => a.AllEncounters).Distinct());
+	public static IEnumerable<EncounterModel> AllEncounters => _allEncounters ?? (_allEncounters = Acts.SelectMany((ActModel a) => a.AllEncounters).Concat(EventEncounters).Distinct());
+
+	/// <summary>
+	/// There's not a good place to source these encounters, so we store it here
+	/// </summary>
+	public static IEnumerable<EncounterModel> EventEncounters => _eventEncounters ?? (_eventEncounters = new global::_003C_003Ez__ReadOnlyArray<EncounterModel>(new EncounterModel[5]
+	{
+		Encounter<FakeMerchantEventEncounter>(),
+		Encounter<MysteriousKnightEventEncounter>(),
+		Encounter<BattlewornDummyEventV1Encounter>(),
+		Encounter<BattlewornDummyEventV2Encounter>(),
+		Encounter<BattlewornDummyEventV3Encounter>()
+	}));
 
 	/// <summary>
 	/// Get all the potions in the game.
@@ -254,12 +291,13 @@ public static class ModelDb
 		RelicPool<SharedRelicPool>()
 	});
 
-	public static IEnumerable<OrbModel> Orbs => new global::_003C_003Ez__ReadOnlyArray<OrbModel>(new OrbModel[4]
+	public static IEnumerable<OrbModel> Orbs => new global::_003C_003Ez__ReadOnlyArray<OrbModel>(new OrbModel[5]
 	{
 		Orb<LightningOrb>(),
 		Orb<FrostOrb>(),
 		Orb<DarkOrb>(),
-		Orb<PlasmaOrb>()
+		Orb<PlasmaOrb>(),
+		Orb<GlassOrb>()
 	});
 
 	/// <summary>
@@ -391,10 +429,10 @@ public static class ModelDb
 	/// Note that the alternative is to initialize in a static initializer, but if we do this we don't control the time
 	/// at which it gets initialized, and it usually happens at a bad time during gameplay.
 	/// </summary>
-	public static void Init()
+	public static void Init(Type[]? injectedModelTypes = null)
 	{
-		Type[] allAbstractModelSubtypes = AllAbstractModelSubtypes;
-		foreach (Type type in allAbstractModelSubtypes)
+		Type[] array = injectedModelTypes ?? AllAbstractModelSubtypes;
+		foreach (Type type in array)
 		{
 			ModelId id = GetId(type);
 			if (_contentById.ContainsKey(id))
@@ -471,6 +509,40 @@ public static class ModelDb
 	{
 		ModelId id = GetId(type);
 		_contentById.Remove(id);
+	}
+
+	/// <summary>
+	/// Only called in tests.
+	/// Remove all content from the DB.
+	/// Clears the memoized collections as well. A following <see cref="M:MegaCrit.Sts2.Core.Models.ModelDb.Init(System.Type[])" /> with no argument constructs a
+	/// new instance of every model, so a collection left populated would still return instances the database
+	/// no longer holds, and any later comparison by reference rather than by <see cref="T:MegaCrit.Sts2.Core.Models.ModelId" /> would
+	/// evaluate false. Note that a following <see cref="M:MegaCrit.Sts2.Core.Models.ModelDb.Init(System.Type[])" /> with an explicit subset rebuilds a
+	/// partial database, and touching one of these collections in that window now throws rather than
+	/// returning what it held before the reset.
+	/// </summary>
+	public static void ResetForTest()
+	{
+		_allAbstractModelSubtypes = null;
+		_contentById.Clear();
+		_achievements = null;
+		_acts = null;
+		_actsByIndex = null;
+		_allCardPools = null;
+		_allCards = null;
+		_allCharacterCardPools = null;
+		_allCharacterPotionPools = null;
+		_allCharacterRelicPools = null;
+		_allEncounters = null;
+		_allEvents = null;
+		_allPotionPools = null;
+		_allPotions = null;
+		_allPowers = null;
+		_allRelics = null;
+		_allSharedEvents = null;
+		_allSharedPotionPools = null;
+		_badges = null;
+		_eventEncounters = null;
 	}
 
 	/// <summary>
@@ -581,7 +653,7 @@ public static class ModelDb
 
 	private static T Get<T>() where T : AbstractModel
 	{
-		return GetById<T>(GetId<T>());
+		return (T)_contentById[GetId<T>()];
 	}
 
 	private static AbstractModel Get(Type type)
@@ -695,7 +767,12 @@ public static class ModelDb
 		return Get<T>();
 	}
 
-	public static T Singleton<T>() where T : SingletonModel
+	public static T RunModel<T>() where T : RunModel
+	{
+		return Get<T>();
+	}
+
+	public static T Dominion<T>() where T : DominionModel
 	{
 		return Get<T>();
 	}

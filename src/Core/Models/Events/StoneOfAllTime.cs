@@ -63,13 +63,13 @@ public sealed class StoneOfAllTime : EventModel
 
 	protected override Task BeforeEventStarted(bool isPreFinished)
 	{
-		base.Owner.CanRemovePotions = false;
+		base.Owner.CanUseOrRemovePotions = false;
 		return Task.CompletedTask;
 	}
 
 	protected override void OnEventFinished()
 	{
-		base.Owner.CanRemovePotions = true;
+		base.Owner.CanUseOrRemovePotions = true;
 	}
 
 	protected override IReadOnlyList<EventOption> GenerateInitialOptions()

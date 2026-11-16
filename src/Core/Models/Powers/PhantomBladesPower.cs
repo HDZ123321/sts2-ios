@@ -3,9 +3,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
-using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.HoverTips;
 using MegaCrit.Sts2.Core.Models.Cards;
@@ -25,30 +25,47 @@ public sealed class PhantomBladesPower : PowerModel
 		HoverTipFactory.FromKeyword(CardKeyword.Retain)
 	});
 
-	public override Task AfterCardEnteredCombat(CardModel card)
+	/// <summary>
+	/// Retain is granted to the owner's Shivs for as long as this power exists. When this power is removed, it stops
+	/// contributing here automatically, so any Retain from another source (e.g. <see cref="T:MegaCrit.Sts2.Core.Models.Cards.Snap" />) is left untouched.
+	/// </summary>
+	public override bool TryModifyKeywordsInCombat(CardModel card, ISet<CardKeyword> keywords)
 	{
-		if (!card.Tags.Contains(CardTag.Shiv))
-		{
-			return Task.CompletedTask;
-		}
 		if (card.Owner != base.Owner.Player)
 		{
-			return Task.CompletedTask;
+			return false;
 		}
-		CardCmd.ApplyKeyword(card, CardKeyword.Retain);
-		return Task.CompletedTask;
+		if (!card.Tags.Contains(CardTag.Shiv))
+		{
+			return false;
+		}
+		return keywords.Add(CardKeyword.Retain);
 	}
 
 	public override Task AfterApplied(Creature? applier, CardModel? cardSource)
 	{
-		foreach (CardModel item in base.Owner.Player.PlayerCombatState.AllCards.Where((CardModel c) => c.Tags.Contains(CardTag.Shiv)))
-		{
-			CardCmd.ApplyKeyword(item, CardKeyword.Retain);
-		}
+		InvokeKeywordsChangedOnShivs(base.Owner.Player);
 		return Task.CompletedTask;
 	}
 
-	public override decimal ModifyDamageAdditive(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override Task AfterRemoved(Creature oldOwner)
+	{
+		InvokeKeywordsChangedOnShivs(oldOwner.Player);
+		return Task.CompletedTask;
+	}
+
+	/// <summary>
+	/// Retain from the hook above raises no card event, so the Shivs already in combat are told here to flash.
+	/// </summary>
+	private static void InvokeKeywordsChangedOnShivs(Player player)
+	{
+		foreach (CardModel item in player.PlayerCombatState.AllCards.Where((CardModel c) => c.Tags.Contains(CardTag.Shiv)))
+		{
+			item.InvokeKeywordsChanged();
+		}
+	}
+
+	public override decimal ModifyDamageAdditive(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (!props.IsPoweredAttack())
 		{
@@ -62,7 +79,7 @@ public sealed class PhantomBladesPower : PowerModel
 		{
 			return 0m;
 		}
-		int num = CombatManager.Instance.History.CardPlaysFinished.Count((CardPlayFinishedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Card.Tags.Contains(CardTag.Shiv) && e.CardPlay.Card.Owner.Creature == base.Owner);
+		int num = CombatManager.Instance.History.CardPlaysFinished.Count((CardPlayFinishedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Card.Tags.Contains(CardTag.Shiv) && e.CardPlay.Player == base.Owner.Player);
 		if (num > 0)
 		{
 			return 0m;

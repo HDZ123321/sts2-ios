@@ -21,14 +21,15 @@ public static class RunHistoryUtilities
 		MapPointHistoryEntry mapPointHistoryEntry = run.MapPointHistory.LastOrDefault()?.LastOrDefault();
 		if (!victory && mapPointHistoryEntry != null)
 		{
-			RoomType roomType = mapPointHistoryEntry.Rooms.First().RoomType;
+			MapPointRoomHistoryEntry mapPointRoomHistoryEntry = mapPointHistoryEntry.Rooms.Last();
+			RoomType roomType = mapPointRoomHistoryEntry.RoomType;
 			if (roomType.IsCombatRoom())
 			{
-				killedByEncounter = mapPointHistoryEntry.Rooms.First().ModelId;
+				killedByEncounter = mapPointRoomHistoryEntry.ModelId;
 			}
 			else if (roomType == RoomType.Event)
 			{
-				killedByEvent = mapPointHistoryEntry.Rooms.First().ModelId;
+				killedByEvent = mapPointRoomHistoryEntry.ModelId;
 			}
 		}
 		List<RunHistoryPlayer> list = new List<RunHistoryPlayer>();
@@ -52,6 +53,7 @@ public static class RunHistoryUtilities
 			PlatformType = platformType,
 			Players = list,
 			GameMode = GetGameMode(run),
+			IsCustomGame = run.IsCustomGame,
 			Win = victory,
 			KilledByEncounter = killedByEncounter,
 			KilledByEvent = killedByEvent,

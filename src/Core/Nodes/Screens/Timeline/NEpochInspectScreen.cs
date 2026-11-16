@@ -10,11 +10,11 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.ControllerInput;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Localization;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Settings;
 using MegaCrit.Sts2.Core.Timeline;
 using MegaCrit.Sts2.addons.mega_text;
 
@@ -145,11 +145,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		public static readonly StringName _chapterLabel = "_chapterLabel";
 
 		/// <summary>
-		/// Cached name for the '_closeLabel' field.
-		/// </summary>
-		public static readonly StringName _closeLabel = "_closeLabel";
-
-		/// <summary>
 		/// Cached name for the '_placeholderLabel' field.
 		/// </summary>
 		public static readonly StringName _placeholderLabel = "_placeholderLabel";
@@ -236,7 +231,7 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 
 	public static readonly string lockedImagePath = ImageHelper.GetImagePath("packed/timeline/epoch_slot_locked.png");
 
-	private NButton _closeButton;
+	private NCloseButton _closeButton;
 
 	private TextureRect _portrait;
 
@@ -254,8 +249,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 
 	private MegaLabel _chapterLabel;
 
-	private MegaLabel _closeLabel;
-
 	private MegaLabel _placeholderLabel;
 
 	private NEpochPaginateButton _nextChapterButton;
@@ -263,8 +256,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 	private NEpochPaginateButton _prevChapterButton;
 
 	private NUnlockInfo _unlockInfo;
-
-	private List<SerializableEpoch> _allEpochs;
 
 	private EpochModel _epoch;
 
@@ -314,36 +305,39 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		_maskOffsetX = _mask.OffsetLeft;
 		_chains = GetNode<NEpochChains>("%Chains");
 		_portraitHsv = (ShaderMaterial)_portrait.Material;
-		_closeButton = GetNode<NButton>("%CloseButton");
+		_closeButton = GetNode<NCloseButton>("%CloseButton");
 		_fancyText = GetNode<MegaRichTextLabel>("%FancyText");
-		_closeLabel = GetNode<MegaLabel>("%CloseLabel");
 		_chapterLoc = new LocString("timeline", "EPOCH_INSPECT.chapterFormat");
 		_unlockInfo = GetNode<NUnlockInfo>("%UnlockInfo");
 		_nextChapterButton = GetNode<NEpochPaginateButton>("%NextChapterButton");
 		_prevChapterButton = GetNode<NEpochPaginateButton>("%PrevChapterButton");
 		_prevChapterButtonOffsetX = _prevChapterButton.OffsetLeft;
 		_nextChapterButtonOffsetX = _nextChapterButton.OffsetLeft;
-		_nextChapterButton.Connect(NClickableControl.SignalName.MouseReleased, Callable.From<InputEvent>(delegate
+		_nextChapterButton.Connect(NClickableControl.SignalName.Released, Callable.From<NClickableControl>(delegate
 		{
 			NextChapter();
 		}));
-		_prevChapterButton.Connect(NClickableControl.SignalName.MouseReleased, Callable.From<InputEvent>(delegate
+		_prevChapterButton.Connect(NClickableControl.SignalName.Released, Callable.From<NClickableControl>(delegate
 		{
 			PrevChapter();
 		}));
+		_prevChapterButton.IsLeft = true;
 		Connect(NClickableControl.SignalName.MouseReleased, Callable.From<InputEvent>(OnMouseReleased));
 		_closeButton.Disable();
+		_nextChapterButton.Disable();
+		_prevChapterButton.Disable();
 	}
 
 	/// <summary>
-	/// If the Epoch was revealed, we go through a slightly different UX flow (more dramatic opening of screen, queue up unlocks, etc)
+	/// If the Epoch was revealed, we go through a slightly different UX flow (more dramatic opening of screen, queue up
+	/// unlocks, etc)
 	/// </summary>
 	public async Task Open(NEpochSlot slot, EpochModel epoch, bool wasRevealed)
 	{
 		_buttonTween?.FastForwardToCompletion();
 		_wasRevealed = wasRevealed;
 		_epoch = epoch;
-		if (_epoch.IsArtPlaceholder)
+		if (!_epoch.HasRealPortrait)
 		{
 			_placeholderLabel.Visible = true;
 			_placeholderLabel.Text = _placeholderLoc.GetRawText();
@@ -365,6 +359,8 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 			_chapterLoc.Add("ChapterName", epoch.Title);
 			_chapterLabel.SetTextAutoSize(_chapterLoc.GetFormattedText());
 			_chapterLabel.VerticalAlignment = VerticalAlignment.Center;
+			_nextChapterButton.Enable();
+			_prevChapterButton.Enable();
 		}
 		else
 		{
@@ -409,7 +405,7 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 			await TaskHelper.RunSafely(UnlockAnimation(epoch));
 			return;
 		}
-		_closeLabel.SetTextAutoSize(new LocString("timeline", "EPOCH_INSPECT.closeButton").GetRawText());
+		_closeButton.SetLabel(new LocString("timeline", "EPOCH_INSPECT.closeButton").GetRawText());
 		_fancyText.Text = epoch.Description;
 		_textTween?.Kill();
 		_textTween = CreateTween().SetParallel();
@@ -429,8 +425,8 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 	private void HidePaginators()
 	{
 		_hasStory = false;
-		_nextChapterButton.Visible = false;
-		_prevChapterButton.Visible = false;
+		_nextChapterButton.Disable();
+		_prevChapterButton.Disable();
 	}
 
 	/// <summary>
@@ -445,6 +441,15 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		_hasStory = epoch.StoryTitle != null;
 		_storyLabel.Modulate = Colors.White;
 		_chapterLabel.Modulate = Colors.White;
+		if (!_epoch.HasRealPortrait)
+		{
+			_placeholderLabel.Visible = true;
+			_placeholderLabel.Text = _placeholderLoc.GetRawText();
+		}
+		else
+		{
+			_placeholderLabel.Visible = false;
+		}
 		if (_hasStory)
 		{
 			_storyLabel.SetTextAutoSize(epoch.StoryTitle ?? string.Empty);
@@ -452,16 +457,16 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 			_chapterLoc.Add("ChapterName", epoch.Title);
 			_chapterLabel.SetTextAutoSize(_chapterLoc.GetFormattedText());
 			_chapterLabel.VerticalAlignment = VerticalAlignment.Center;
-			_nextChapterButton.Modulate = Colors.White;
-			_prevChapterButton.Modulate = Colors.White;
+			_nextChapterButton.Enable();
+			_prevChapterButton.Enable();
 		}
 		else
 		{
 			_storyLabel.SetTextAutoSize(string.Empty);
 			_chapterLabel.SetTextAutoSize(epoch.Title.GetFormattedText());
 			_chapterLabel.VerticalAlignment = VerticalAlignment.Bottom;
-			_nextChapterButton.Visible = false;
-			_prevChapterButton.Visible = false;
+			_nextChapterButton.Disable();
+			_prevChapterButton.Disable();
 		}
 		_fancyText.Modulate = StsColors.transparentWhite;
 		NTimelineScreen.Instance.ShowBackstopAndHideUi();
@@ -505,21 +510,21 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 				AchievementsHelper.CheckTimelineComplete();
 			}
 		}));
-		NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.right, NextChapter);
-		NHotkeyManager.Instance.RemoveHotkeyPressedBinding(MegaInput.left, PrevChapter);
+		_nextChapterButton.Disable();
+		_prevChapterButton.Disable();
 	}
 
 	/// <summary>
 	/// Is called when the player opens the Epoch inspect screen by clicking on a locked node in the Timeline.
 	/// </summary>
 	/// <param name="epoch"></param>
-	public async Task UnlockAnimation(EpochModel epoch)
+	private async Task UnlockAnimation(EpochModel epoch)
 	{
 		HidePaginators();
 		epoch.QueueUnlocks();
 		SaveManager.Instance.SaveProgressFile();
 		_unlockInfo.HideImmediately();
-		_closeLabel.SetTextAutoSize(new LocString("timeline", "EPOCH_INSPECT.continueButton").GetRawText());
+		_closeButton.SetLabel(new LocString("timeline", "EPOCH_INSPECT.continueButton").GetRawText());
 		_fancyText.VisibleRatio = 0f;
 		_fancyText.Modulate = StsColors.transparentWhite;
 		_portraitHsv.SetShaderParameter(_s, 0f);
@@ -528,30 +533,31 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		_chains.Visible = true;
 		_chains.Modulate = Colors.White;
 		_chains.SelfModulate = Colors.White;
-		_portraitFlash.Modulate = new Color(1f, 1f, 1f, 0f);
+		_portraitFlash.Modulate = StsColors.transparentWhite;
+		bool isFast = SaveManager.Instance.PrefsSave.FastMode == FastModeType.Fast;
 		_unlockTween?.Kill();
 		_unlockTween = CreateTween().SetParallel();
-		_unlockTween.TweenProperty(_chains, "scale", Vector2.One * 0.98f, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo)
-			.SetDelay(0.5);
-		if (await _unlockTween.AwaitFinished(this))
+		_unlockTween.TweenProperty(_chains, "scale", Vector2.One * 0.98f, isFast ? 0.25 : 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo)
+			.SetDelay(isFast ? 0.25 : 0.5);
+		if (await _unlockTween.AwaitFinished(this) == TweenOutcome.Finished)
 		{
 			_chains.Unlock();
 			await _chains.AwaitSignal(NEpochChains.SignalName.OnAnimationFinished, this);
 			_portraitFlash.Modulate = Colors.White;
 			_unlockTween = CreateTween().SetParallel();
-			_unlockTween.TweenProperty(_portraitFlash, "modulate:a", 0f, 0.5);
-			_unlockTween.TweenMethod(Callable.From<float>(UpdateShaderS), _portraitHsv.GetShaderParameter(_s), 1f, 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
-			_unlockTween.TweenMethod(Callable.From<float>(UpdateShaderV), _portraitHsv.GetShaderParameter(_v), 1f, 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
+			_unlockTween.TweenProperty(_portraitFlash, "modulate:a", 0f, isFast ? 0.25 : 0.5);
+			_unlockTween.TweenMethod(Callable.From<float>(UpdateShaderS), _portraitHsv.GetShaderParameter(_s), 1f, isFast ? 0.5 : 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
+			_unlockTween.TweenMethod(Callable.From<float>(UpdateShaderV), _portraitHsv.GetShaderParameter(_v), 1f, isFast ? 0.5 : 1.0).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
 			_textTween?.Kill();
 			_textTween = CreateTween().SetParallel();
-			_textTween.TweenProperty(_fancyText, "modulate:a", 1f, 2.0).SetDelay(0.25);
-			_textTween.TweenProperty(_fancyText, "visible_ratio", 1f, (double)_fancyText.GetTotalCharacterCount() * 0.015).SetDelay(0.5);
+			_textTween.TweenProperty(_fancyText, "modulate:a", 1f, isFast ? 1.0 : 2.0).SetDelay(isFast ? 0.1 : 0.25);
+			_textTween.TweenProperty(_fancyText, "visible_ratio", 1f, (double)_fancyText.GetTotalCharacterCount() * 0.015).SetDelay(isFast ? 0.25 : 0.5);
 			_buttonTween?.Kill();
 			_buttonTween = CreateTween().SetParallel();
 			_buttonTween.TweenProperty(_closeButton, "modulate:a", 1f, 0.3).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Cubic)
-				.SetDelay(1.0);
+				.SetDelay(isFast ? 0.5 : 1.0);
 			_buttonTween.TweenProperty(_closeButton, "position:y", _closeButtonY - 180f, 0.3).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Back)
-				.SetDelay(1.0);
+				.SetDelay(isFast ? 0.5 : 1.0);
 			_buttonTween.TweenCallback(Callable.From(_closeButton.Enable));
 			await _unlockTween.AwaitFinished(this);
 		}
@@ -569,7 +575,7 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 
 	public override void _Input(InputEvent inputEvent)
 	{
-		if (inputEvent.IsActionPressed(MegaInput.select) || inputEvent.IsActionPressed(MegaInput.accept))
+		if (inputEvent.IsActionPressed(MegaInput.select) || inputEvent.IsActionPressed(MegaInput.confirm))
 		{
 			SpeedUpTextAnimation();
 		}
@@ -610,21 +616,19 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 			_prevChapterEpoch = StoryModel.PrevChapter(_epoch);
 			if (_nextChapterEpoch != null)
 			{
-				NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.right, NextChapter);
-				_nextChapterButton.Visible = true;
+				_nextChapterButton.Enable();
 			}
 			else
 			{
-				_nextChapterButton.Visible = false;
+				_nextChapterButton.Disable();
 			}
 			if (_prevChapterEpoch != null)
 			{
-				NHotkeyManager.Instance.PushHotkeyPressedBinding(MegaInput.left, PrevChapter);
-				_prevChapterButton.Visible = true;
+				_prevChapterButton.Enable();
 			}
 			else
 			{
-				_prevChapterButton.Visible = false;
+				_prevChapterButton.Disable();
 			}
 		}
 	}
@@ -794,7 +798,7 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 	{
 		if (name == PropertyName._closeButton)
 		{
-			_closeButton = VariantUtils.ConvertTo<NButton>(in value);
+			_closeButton = VariantUtils.ConvertTo<NCloseButton>(in value);
 			return true;
 		}
 		if (name == PropertyName._portrait)
@@ -835,11 +839,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		if (name == PropertyName._chapterLabel)
 		{
 			_chapterLabel = VariantUtils.ConvertTo<MegaLabel>(in value);
-			return true;
-		}
-		if (name == PropertyName._closeLabel)
-		{
-			_closeLabel = VariantUtils.ConvertTo<MegaLabel>(in value);
 			return true;
 		}
 		if (name == PropertyName._placeholderLabel)
@@ -974,11 +973,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 			value = VariantUtils.CreateFrom(in _chapterLabel);
 			return true;
 		}
-		if (name == PropertyName._closeLabel)
-		{
-			value = VariantUtils.CreateFrom(in _closeLabel);
-			return true;
-		}
 		if (name == PropertyName._placeholderLabel)
 		{
 			value = VariantUtils.CreateFrom(in _placeholderLabel);
@@ -1075,7 +1069,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._fancyText, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._storyLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._chapterLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._closeLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._placeholderLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._nextChapterButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._prevChapterButton, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1109,7 +1102,6 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		info.AddProperty(PropertyName._fancyText, Variant.From(in _fancyText));
 		info.AddProperty(PropertyName._storyLabel, Variant.From(in _storyLabel));
 		info.AddProperty(PropertyName._chapterLabel, Variant.From(in _chapterLabel));
-		info.AddProperty(PropertyName._closeLabel, Variant.From(in _closeLabel));
 		info.AddProperty(PropertyName._placeholderLabel, Variant.From(in _placeholderLabel));
 		info.AddProperty(PropertyName._nextChapterButton, Variant.From(in _nextChapterButton));
 		info.AddProperty(PropertyName._prevChapterButton, Variant.From(in _prevChapterButton));
@@ -1134,7 +1126,7 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		base.RestoreGodotObjectData(info);
 		if (info.TryGetProperty(PropertyName._closeButton, out var value))
 		{
-			_closeButton = value.As<NButton>();
+			_closeButton = value.As<NCloseButton>();
 		}
 		if (info.TryGetProperty(PropertyName._portrait, out var value2))
 		{
@@ -1168,69 +1160,65 @@ public class NEpochInspectScreen : NClickableControl, IScreenContext
 		{
 			_chapterLabel = value9.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._closeLabel, out var value10))
+		if (info.TryGetProperty(PropertyName._placeholderLabel, out var value10))
 		{
-			_closeLabel = value10.As<MegaLabel>();
+			_placeholderLabel = value10.As<MegaLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._placeholderLabel, out var value11))
+		if (info.TryGetProperty(PropertyName._nextChapterButton, out var value11))
 		{
-			_placeholderLabel = value11.As<MegaLabel>();
+			_nextChapterButton = value11.As<NEpochPaginateButton>();
 		}
-		if (info.TryGetProperty(PropertyName._nextChapterButton, out var value12))
+		if (info.TryGetProperty(PropertyName._prevChapterButton, out var value12))
 		{
-			_nextChapterButton = value12.As<NEpochPaginateButton>();
+			_prevChapterButton = value12.As<NEpochPaginateButton>();
 		}
-		if (info.TryGetProperty(PropertyName._prevChapterButton, out var value13))
+		if (info.TryGetProperty(PropertyName._unlockInfo, out var value13))
 		{
-			_prevChapterButton = value13.As<NEpochPaginateButton>();
+			_unlockInfo = value13.As<NUnlockInfo>();
 		}
-		if (info.TryGetProperty(PropertyName._unlockInfo, out var value14))
+		if (info.TryGetProperty(PropertyName._hasStory, out var value14))
 		{
-			_unlockInfo = value14.As<NUnlockInfo>();
+			_hasStory = value14.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._hasStory, out var value15))
+		if (info.TryGetProperty(PropertyName._wasRevealed, out var value15))
 		{
-			_hasStory = value15.As<bool>();
+			_wasRevealed = value15.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._wasRevealed, out var value16))
+		if (info.TryGetProperty(PropertyName._prevChapterButtonOffsetX, out var value16))
 		{
-			_wasRevealed = value16.As<bool>();
+			_prevChapterButtonOffsetX = value16.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._prevChapterButtonOffsetX, out var value17))
+		if (info.TryGetProperty(PropertyName._nextChapterButtonOffsetX, out var value17))
 		{
-			_prevChapterButtonOffsetX = value17.As<float>();
+			_nextChapterButtonOffsetX = value17.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._nextChapterButtonOffsetX, out var value18))
+		if (info.TryGetProperty(PropertyName._maskOffsetX, out var value18))
 		{
-			_nextChapterButtonOffsetX = value18.As<float>();
+			_maskOffsetX = value18.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._maskOffsetX, out var value19))
+		if (info.TryGetProperty(PropertyName._maskOffsetY, out var value19))
 		{
-			_maskOffsetX = value19.As<float>();
+			_maskOffsetY = value19.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._maskOffsetY, out var value20))
+		if (info.TryGetProperty(PropertyName._closeButtonY, out var value20))
 		{
-			_maskOffsetY = value20.As<float>();
+			_closeButtonY = value20.As<float>();
 		}
-		if (info.TryGetProperty(PropertyName._closeButtonY, out var value21))
+		if (info.TryGetProperty(PropertyName._unlockTween, out var value21))
 		{
-			_closeButtonY = value21.As<float>();
+			_unlockTween = value21.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._unlockTween, out var value22))
+		if (info.TryGetProperty(PropertyName._buttonTween, out var value22))
 		{
-			_unlockTween = value22.As<Tween>();
+			_buttonTween = value22.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._buttonTween, out var value23))
+		if (info.TryGetProperty(PropertyName._tween, out var value23))
 		{
-			_buttonTween = value23.As<Tween>();
+			_tween = value23.As<Tween>();
 		}
-		if (info.TryGetProperty(PropertyName._tween, out var value24))
+		if (info.TryGetProperty(PropertyName._textTween, out var value24))
 		{
-			_tween = value24.As<Tween>();
-		}
-		if (info.TryGetProperty(PropertyName._textTween, out var value25))
-		{
-			_textTween = value25.As<Tween>();
+			_textTween = value24.As<Tween>();
 		}
 	}
 }

@@ -16,14 +16,20 @@ namespace MegaCrit.Sts2.Core.Models.Cards;
 
 public sealed class Haze : CardModel
 {
-	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Sly);
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
+	{
+		new PowerVar<PoisonPower>(4m),
+		new PowerVar<WeakPower>(1m)
+	});
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new PowerVar<PoisonPower>(4m));
-
-	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlySingleElementList<IHoverTip>(HoverTipFactory.FromPower<PoisonPower>());
+	protected override IEnumerable<IHoverTip> ExtraHoverTips => new global::_003C_003Ez__ReadOnlyArray<IHoverTip>(new IHoverTip[2]
+	{
+		HoverTipFactory.FromPower<PoisonPower>(),
+		HoverTipFactory.FromPower<WeakPower>()
+	});
 
 	public Haze()
-		: base(3, CardType.Skill, CardRarity.Uncommon, TargetType.AllEnemies)
+		: base(2, CardType.Skill, CardRarity.Uncommon, TargetType.AllEnemies)
 	{
 	}
 
@@ -32,10 +38,8 @@ public sealed class Haze : CardModel
 		await CreatureCmd.TriggerAnim(base.Owner.Creature, "Cast", base.Owner.Character.CastAnimDelay);
 		SpawnVfx();
 		await Cmd.CustomScaledWait(0.2f, 0.4f);
-		foreach (Creature hittableEnemy in base.CombatState.HittableEnemies)
-		{
-			await PowerCmd.Apply<PoisonPower>(choiceContext, hittableEnemy, base.DynamicVars.Poison.BaseValue, base.Owner.Creature, this);
-		}
+		await PowerCmd.Apply<PoisonPower>(choiceContext, base.CombatState?.HittableEnemies, base.DynamicVars.Poison.BaseValue, base.Owner.Creature, this);
+		await PowerCmd.Apply<WeakPower>(choiceContext, base.CombatState?.HittableEnemies, base.DynamicVars.Weak.BaseValue, base.Owner.Creature, this);
 	}
 
 	private void SpawnVfx()
@@ -56,5 +60,6 @@ public sealed class Haze : CardModel
 	protected override void OnUpgrade()
 	{
 		base.DynamicVars.Poison.UpgradeValueBy(2m);
+		base.DynamicVars.Weak.UpgradeValueBy(1m);
 	}
 }

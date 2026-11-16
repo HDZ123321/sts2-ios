@@ -22,7 +22,7 @@ public sealed class Ignition : CardModel
 	});
 
 	public Ignition()
-		: base(1, CardType.Skill, CardRarity.Rare, TargetType.AnyAlly)
+		: base(1, CardType.Skill, CardRarity.Uncommon, TargetType.AnyAlly)
 	{
 	}
 

@@ -63,6 +63,11 @@ public class NHandImage : Control
 		public static readonly StringName SetFrozenForRelicAwards = "SetFrozenForRelicAwards";
 
 		/// <summary>
+		/// Cached name for the 'GetFrozenPosition' method.
+		/// </summary>
+		public static readonly StringName GetFrozenPosition = "GetFrozenPosition";
+
+		/// <summary>
 		/// Cached name for the 'DoFightMove' method.
 		/// </summary>
 		public static readonly StringName DoFightMove = "DoFightMove";
@@ -96,11 +101,6 @@ public class NHandImage : Control
 		/// Cached name for the 'SetSkipped' method.
 		/// </summary>
 		public static readonly StringName SetSkipped = "SetSkipped";
-
-		/// <summary>
-		/// Cached name for the 'SetAnimateInProgress' method.
-		/// </summary>
-		public static readonly StringName SetAnimateInProgress = "SetAnimateInProgress";
 
 		/// <summary>
 		/// Cached name for the '_Process' method.
@@ -254,8 +254,8 @@ public class NHandImage : Control
 	}
 
 	/// <summary>
-	/// If true: Z-indexes hand to 1 so that they appear above the fight backdrop, modulates them to white regardless of
-	/// whether they belong to the local player, and adjusts their pivot in preparation for throwing RPS moves.
+	/// If true: Modulates them to white regardless of whether they belong to the local player and adjusts their pivot
+	/// in preparation for throwing RPS moves.
 	/// If false: undoes all the above.
 	/// </summary>
 	/// <param name="inFight"></param>
@@ -266,7 +266,6 @@ public class NHandImage : Control
 		{
 			_textureRect.PivotOffset = _fightingPivot;
 			base.Modulate = Colors.White;
-			base.ZIndex = 1;
 			return;
 		}
 		_textureRect.PivotOffset = _pointingPivot;
@@ -274,7 +273,10 @@ public class NHandImage : Control
 		{
 			base.Modulate = new Color(0.5f, 0.5f, 0.5f, 0.5f);
 		}
-		base.ZIndex = 0;
+		else
+		{
+			base.Modulate = Colors.White;
+		}
 	}
 
 	/// <summary>
@@ -286,14 +288,19 @@ public class NHandImage : Control
 		if (frozenForRelicAwards)
 		{
 			_state = State.Frozen;
-			Rect2 viewportRect = GetViewportRect();
-			Vector2 vector = Vector2.Down.Rotated(base.Rotation);
-			_desiredPosition = viewportRect.Size / 2f + viewportRect.Size * vector * 0.1667f;
+			_desiredPosition = GetFrozenPosition();
 		}
 		else
 		{
 			_state = State.None;
 		}
+	}
+
+	private Vector2 GetFrozenPosition()
+	{
+		Rect2 viewportRect = GetViewportRect();
+		Vector2 vector = Vector2.Down.Rotated(base.Rotation);
+		return viewportRect.Size * 0.5f + viewportRect.Size * vector * 0.1667f;
 	}
 
 	/// <summary>
@@ -382,7 +389,7 @@ public class NHandImage : Control
 	{
 		Rect2 viewportRect = GetViewportRect();
 		Vector2 vector = Vector2.Down.Rotated(base.Rotation);
-		_desiredPosition = viewportRect.Size / 2f + viewportRect.Size * vector * 0.8f;
+		_desiredPosition = viewportRect.Size * 0.5f + viewportRect.Size * vector * 0.8f;
 		IsShown = false;
 	}
 
@@ -398,6 +405,10 @@ public class NHandImage : Control
 			_handAnimateInProgress = v;
 		}), 0f, 1f, 0.6000000238418579).SetTrans(Tween.TransitionType.Expo).SetEase(Tween.EaseType.Out);
 		IsShown = true;
+		if (_state == State.Frozen)
+		{
+			_desiredPosition = GetFrozenPosition();
+		}
 	}
 
 	/// <summary>
@@ -429,11 +440,12 @@ public class NHandImage : Control
 	{
 		CreateTween().TweenProperty(this, "modulate", new Color(0.5f, 0.5f, 0.5f, 0.5f), duration * 0.333f).SetDelay(duration * 0.667f);
 		ScreenRumbleInstance rumble = new ScreenRumbleInstance(100f, duration, 5f, RumbleStyle.Rumble);
+		CancellationToken ct = _cts.Token;
 		while (!rumble.IsDone)
 		{
 			Vector2 vector = rumble.Update(GetProcessDeltaTime());
 			_textureRect.Position = _originalPosition + vector;
-			await this.AwaitProcessFrame(_cts.Token);
+			await this.AwaitProcessFrame(ct);
 		}
 		_textureRect.Position = _originalPosition;
 	}
@@ -445,20 +457,25 @@ public class NHandImage : Control
 	/// <param name="holder">The relic holder to grab.</param>
 	public async Task GrabRelic(NTreasureRoomRelicHolder holder)
 	{
+		CancellationToken ct = _cts.Token;
 		State oldState = _state;
 		_state = State.GrabbingRelic;
 		SetTextureToFightMove(RelicPickingFightMove.Paper);
 		Tween tween = CreateTween();
 		tween.TweenProperty(this, "global_position", holder.GlobalPosition - _grabMarker.Position.Rotated(base.Rotation) + holder.Size * 0.5f, 0.5).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-		await tween.AwaitFinished(_cts.Token);
-		SetTextureToFightMove(RelicPickingFightMove.Rock);
-		holder.Reparent(this);
-		holder.Rotation = 0f - base.Rotation;
-		holder.Position = _grabMarker.Position - holder.Size * 0.5f;
-		tween = CreateTween();
-		tween.TweenProperty(this, "global_position", _desiredPosition, 0.5).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
-		await tween.AwaitFinished(_cts.Token);
-		_state = oldState;
+		if (await tween.AwaitFinished(this, ct) == TweenOutcome.Finished)
+		{
+			SetTextureToFightMove(RelicPickingFightMove.Rock);
+			holder.Reparent(this);
+			holder.Rotation = 0f - base.Rotation;
+			holder.Position = _grabMarker.Position - holder.Size * 0.5f;
+			tween = CreateTween();
+			tween.TweenProperty(this, "global_position", _desiredPosition, 0.5).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.InOut);
+			if (await tween.AwaitFinished(this, ct) == TweenOutcome.Finished)
+			{
+				_state = oldState;
+			}
+		}
 	}
 
 	/// <summary>
@@ -467,16 +484,6 @@ public class NHandImage : Control
 	public void SetSkipped()
 	{
 		SetTextureToFightMove(RelicPickingFightMove.Rock);
-	}
-
-	/// <summary>
-	/// Sets the progress of the slide-in animation, from 0 to 1.
-	/// This should be used when the treasure room is opened for the first time, so that the hands do not immediately
-	/// spawn on-screen.
-	/// </summary>
-	public void SetAnimateInProgress(float animateInProgress)
-	{
-		_handAnimateInProgress = animateInProgress;
 	}
 
 	public override void _Process(double delta)
@@ -497,7 +504,7 @@ public class NHandImage : Control
 				vector = num3 * Vector2.Left;
 			}
 			Rect2 viewportRect = GetViewportRect();
-			Vector2 vector2 = viewportRect.Size / 2f + viewportRect.Size * vector;
+			Vector2 vector2 = viewportRect.Size * 0.5f + viewportRect.Size * vector;
 			float smoothTime = ((_state == State.Frozen) ? 0.25f : ((!LocalContext.IsMe(Player)) ? 0.07f : 0.01f));
 			Vector2 target = vector2.Lerp(_desiredPosition, _handAnimateInProgress);
 			base.GlobalPosition = MathHelper.SmoothDamp(base.GlobalPosition, target, ref _currentVelocity, smoothTime, (float)delta);
@@ -507,12 +514,12 @@ public class NHandImage : Control
 			if ((num == 0 || num == 3) ? true : false)
 			{
 				float num4 = ((num == 0) ? 1 : (-1));
-				_textureRect.Rotation = num4 * (base.GlobalPosition.X - size.X / 2f) / 2000f;
+				_textureRect.Rotation = num4 * (base.GlobalPosition.X - size.X * 0.5f) / 2000f;
 			}
 			else
 			{
 				float num5 = ((num == 1) ? 1 : (-1));
-				_textureRect.Rotation = num5 * (base.GlobalPosition.Y - size.Y / 2f) / 1000f;
+				_textureRect.Rotation = num5 * (base.GlobalPosition.Y - size.Y * 0.5f) / 1000f;
 			}
 		}
 		else
@@ -541,6 +548,7 @@ public class NHandImage : Control
 		{
 			new PropertyInfo(Variant.Type.Bool, "frozenForRelicAwards", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
+		list.Add(new MethodInfo(MethodName.GetFrozenPosition, new PropertyInfo(Variant.Type.Vector2, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.DoFightMove, new PropertyInfo(Variant.Type.Object, "", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Tween"), exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Int, "move", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false),
@@ -561,10 +569,6 @@ public class NHandImage : Control
 			new PropertyInfo(Variant.Type.Bool, "isDown", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
 		list.Add(new MethodInfo(MethodName.SetSkipped, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
-		list.Add(new MethodInfo(MethodName.SetAnimateInProgress, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Float, "animateInProgress", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
-		}, null));
 		list.Add(new MethodInfo(MethodName._Process, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Float, "delta", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
@@ -604,6 +608,11 @@ public class NHandImage : Control
 		{
 			SetFrozenForRelicAwards(VariantUtils.ConvertTo<bool>(in args[0]));
 			ret = default(godot_variant);
+			return true;
+		}
+		if (method == MethodName.GetFrozenPosition && args.Count == 0)
+		{
+			ret = VariantUtils.CreateFrom<Vector2>(GetFrozenPosition());
 			return true;
 		}
 		if (method == MethodName.DoFightMove && args.Count == 2)
@@ -647,12 +656,6 @@ public class NHandImage : Control
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.SetAnimateInProgress && args.Count == 1)
-		{
-			SetAnimateInProgress(VariantUtils.ConvertTo<float>(in args[0]));
-			ret = default(godot_variant);
-			return true;
-		}
 		if (method == MethodName._Process && args.Count == 1)
 		{
 			_Process(VariantUtils.ConvertTo<double>(in args[0]));
@@ -686,6 +689,10 @@ public class NHandImage : Control
 		{
 			return true;
 		}
+		if (method == MethodName.GetFrozenPosition)
+		{
+			return true;
+		}
 		if (method == MethodName.DoFightMove)
 		{
 			return true;
@@ -711,10 +718,6 @@ public class NHandImage : Control
 			return true;
 		}
 		if (method == MethodName.SetSkipped)
-		{
-			return true;
-		}
-		if (method == MethodName.SetAnimateInProgress)
 		{
 			return true;
 		}

@@ -227,8 +227,14 @@ public class NEraColumn : Control
 		{
 			_labelSpawned = true;
 			_labelTween = CreateTween().SetParallel();
-			_name.SelfModulate = new Color(_name.SelfModulate.R, _name.SelfModulate.G, _name.SelfModulate.B, 0f);
-			_year.Modulate = new Color(_year.Modulate.R, _year.Modulate.G, _year.Modulate.B, 0f);
+			MegaLabel name = _name;
+			Color selfModulate = _name.SelfModulate;
+			selfModulate.A = 0f;
+			name.SelfModulate = selfModulate;
+			MegaLabel year = _year;
+			selfModulate = _year.Modulate;
+			selfModulate.A = 0f;
+			year.Modulate = selfModulate;
 			_labelTween.TweenProperty(_name, "self_modulate:a", 1f, 1.0);
 			_labelTween.TweenProperty(_name, "position:y", 28f, 1.0).From(-36f).SetEase(Tween.EaseType.Out)
 				.SetTrans(Tween.TransitionType.Cubic);

@@ -37,6 +37,6 @@ public sealed class BlackHolePower : PowerModel
 	private async Task DealDamageToAllEnemies()
 	{
 		Flash();
-		await CreatureCmd.Damage(new BlockingPlayerChoiceContext(), base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner, null);
+		await CreatureCmd.Damage(new BlockingPlayerChoiceContext(), base.CombatState.HittableEnemies, base.Amount, ValueProp.Unpowered, base.Owner);
 	}
 }

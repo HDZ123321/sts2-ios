@@ -70,7 +70,7 @@ public class ActionExecutor
 	/// </summary>
 	public void Pause()
 	{
-		if (!NonInteractiveMode.IsActive)
+		if (!NonInteractiveMode.AutoSlayerCheck())
 		{
 			_logger.Debug("Pausing queue");
 			_isPaused = true;

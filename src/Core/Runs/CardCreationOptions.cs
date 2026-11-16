@@ -18,25 +18,17 @@ namespace MegaCrit.Sts2.Core.Runs;
 public record CardCreationOptions
 {
 	/// <summary>
-	/// The card pool from which rewards will be pulled.
-	/// Either <see cref="P:MegaCrit.Sts2.Core.Runs.CardCreationOptions.CardPools" /> must be non-empty or <see cref="P:MegaCrit.Sts2.Core.Runs.CardCreationOptions.CustomCardPool" /> must be non-null.
+	/// The card pools from which rewards will be pulled.
 	/// </summary>
 	public IReadOnlyCollection<CardPoolModel> CardPools => _cardPools;
 
 	/// <summary>
 	/// The filter to apply to the card pool when generating rewards.
-	/// We use this instead of <see cref="P:MegaCrit.Sts2.Core.Runs.CardCreationOptions.CustomCardPool" /> because it allows effects that modify the available card
-	/// pools (like <see cref="T:MegaCrit.Sts2.Core.Models.Relics.PrismaticGem" />) to properly apply the same filter.
+	/// We use this instead of a custom card pool because it allows effects that modify the available card pools (like
+	/// <see cref="T:MegaCrit.Sts2.Core.Models.Relics.PrismaticGem" />) to properly apply the same filter.
 	/// WARNING: This cannot be serialized, so don't use this when adding extra rewards to combat rewards.
 	/// </summary>
 	public Func<CardModel, bool>? CardPoolFilter { get; private set; }
-
-	/// <summary>
-	/// The card pool from which rewards will be pulled.
-	/// Either <see cref="P:MegaCrit.Sts2.Core.Runs.CardCreationOptions.CardPools" /> must be non-empty or <see cref="P:MegaCrit.Sts2.Core.Runs.CardCreationOptions.CustomCardPool" /> must be non-null.
-	/// WARNING: This cannot be serialized, so don't use this when adding extra rewards to combat rewards.
-	/// </summary>
-	public IEnumerable<CardModel>? CustomCardPool { get; private set; }
 
 	/// <summary>
 	/// The source from which this reward is being generated from.
@@ -78,20 +70,6 @@ public record CardCreationOptions
 		Source = source;
 		RarityOdds = rarityOdds;
 		CardPoolFilter = cardPoolFilter;
-	}
-
-	/// <summary>
-	/// Constructor which takes a custom card pool.
-	/// </summary>
-	/// <param name="customCardPool">The list of cards from which rewards will be generated.</param>
-	/// <param name="source">The purpose for which the rewards are being generated.</param>
-	/// <param name="rarityOdds">The odds to apply when rolling card rarities.</param>
-	public CardCreationOptions(IEnumerable<CardModel> customCardPool, CardCreationSource source, CardRarityOddsType rarityOdds)
-	{
-		CustomCardPool = customCardPool;
-		Source = source;
-		RarityOdds = rarityOdds;
-		AssertUniformOddsIfSingleRarityPool();
 	}
 
 	/// <summary>
@@ -140,19 +118,6 @@ public record CardCreationOptions
 	}
 
 	/// <summary>
-	/// Generates an instance of CardCreationOptions which should be used when generating rewards for events or relics.
-	/// This uses CardRarityOddsType.RegularEncounter to generate card rarities, meaning that common cards will be much
-	/// more likely to show up than rare ones.
-	/// DO NOT use this if your custom pool only contains cards of specific rarities! CardRarityOddsType.RegularEncounter
-	/// rolls for rarity, and if it lands on a rarity that your pool does not contain, then it will break. In that
-	/// situation, use ForEventWithUniformOdds instead.
-	/// </summary>
-	public static CardCreationOptions ForNonCombatWithDefaultOdds(IEnumerable<CardModel> customCardPool)
-	{
-		return new CardCreationOptions(customCardPool, CardCreationSource.Other, CardRarityOddsType.RegularEncounter).WithFlags(CardCreationFlags.NoUpgradeRoll);
-	}
-
-	/// <summary>
 	/// Generates an instance of CardCreationOptions which can be used when generating rewards for events or relics.
 	/// This uses CardRarityOddsType.Uniform to generate card rarities, meaning that all cards in the pool will have an
 	/// even chance of being rolled.
@@ -167,42 +132,28 @@ public record CardCreationOptions
 	/// </summary>
 	public IEnumerable<CardModel> GetPossibleCards(Player player)
 	{
-		IEnumerable<CardModel> enumerable = ((CardPools.Count <= 0) ? CustomCardPool : (from c in CardPools.SelectMany((CardPoolModel p) => p.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint))
+		return from c in CardPools.SelectMany((CardPoolModel p) => p.GetUnlockedCards(player.UnlockState, player.RunState.CardMultiplayerConstraint))
 			where CardPoolFilter == null || CardPoolFilter(c)
-			select c));
-		if (enumerable == null)
-		{
-			throw new InvalidOperationException("Tried to get possible cards from CardCreationOptions but neither the pool nor custom pool were set!");
-		}
-		return enumerable;
-	}
-
-	/// <summary>
-	/// Sets the custom pool on this instance of CardCreationOptions.
-	/// </summary>
-	/// <param name="customPool">The custom pool to use when rolling rewards.</param>
-	/// <param name="rarityOdds">
-	/// The new rarity odds to use when rolling rewards.
-	/// If there is only one rarity in the new custom pool, you should pass Uniform to this.
-	/// </param>
-	public CardCreationOptions WithCustomPool(IEnumerable<CardModel> customPool, CardRarityOddsType? rarityOdds = null)
-	{
-		CustomCardPool = customPool.ToArray();
-		_cardPools.Clear();
-		RarityOdds = rarityOdds ?? RarityOdds;
-		AssertUniformOddsIfSingleRarityPool();
-		return this;
+			select c;
 	}
 
 	/// <summary>
 	/// Sets the card pool on this instance of CardCreationOptions.
 	/// </summary>
-	public CardCreationOptions WithCardPools(IEnumerable<CardPoolModel> pools, Func<CardModel, bool>? cardPoolFilter = null)
+	public CardCreationOptions WithCardPools(IEnumerable<CardPoolModel> pools)
 	{
+		List<CardPoolModel> collection = pools.ToList();
 		_cardPools.Clear();
-		_cardPools.AddRange(pools);
-		CardPoolFilter = cardPoolFilter;
-		CustomCardPool = null;
+		_cardPools.AddRange(collection);
+		return this;
+	}
+
+	/// <summary>
+	/// Sets the card pool filter on this instance of CardCreationOptions.
+	/// </summary>
+	public CardCreationOptions WithFilter(Func<CardModel, bool> filter)
+	{
+		CardPoolFilter = filter;
 		return this;
 	}
 
@@ -215,46 +166,32 @@ public record CardCreationOptions
 		return this;
 	}
 
+	/// <summary>
+	/// Sets the rarity odds on this instance of CardCreationOptions.
+	/// </summary>
+	public CardCreationOptions WithRarityOdds(CardRarityOddsType rarityOdds)
+	{
+		RarityOdds = rarityOdds;
+		return this;
+	}
+
 	public CardCreationOptions WithRngOverride(Rng rng)
 	{
 		RngOverride = rng;
 		return this;
 	}
 
-	private void AssertUniformOddsIfSingleRarityPool()
-	{
-		if (CustomCardPool != null && RarityOdds != CardRarityOddsType.Uniform)
-		{
-			CardModel first = CustomCardPool.FirstOrDefault();
-			if (first != null && CustomCardPool.All((CardModel c) => c.Rarity == first.Rarity))
-			{
-				throw new InvalidOperationException($"You have passed a custom card pool with only one rarity to {"CardCreationOptions"} and a rarity odds of {RarityOdds}! This is invalid - card pools with only one rarity must use Uniform rarity odds.");
-			}
-		}
-	}
-
 	public CardRarity? TryGetSingleRarityInPool()
 	{
-		if (CustomCardPool != null)
+		List<CardModel> source = CardPools.SelectMany((CardPoolModel c) => c.AllCards).ToList();
+		if (CardPoolFilter != null)
 		{
-			CardModel first = CustomCardPool.FirstOrDefault();
-			if (first != null && CustomCardPool.All((CardModel c) => c.Rarity == first.Rarity))
-			{
-				return first.Rarity;
-			}
+			source = source.Where((CardModel c) => CardPoolFilter(c)).ToList();
 		}
-		else
+		CardModel first = source.FirstOrDefault();
+		if (first != null && source.All((CardModel c) => c.Rarity == first.Rarity))
 		{
-			List<CardModel> source = CardPools.SelectMany((CardPoolModel c) => c.AllCards).ToList();
-			if (CardPoolFilter != null)
-			{
-				source = source.Where((CardModel c) => CardPoolFilter(c)).ToList();
-			}
-			CardModel first2 = source.FirstOrDefault();
-			if (first2 != null && source.All((CardModel c) => c.Rarity == first2.Rarity))
-			{
-				return first2.Rarity;
-			}
+			return first.Rarity;
 		}
 		return null;
 	}
@@ -262,7 +199,7 @@ public record CardCreationOptions
 	[CompilerGenerated]
 	public override int GetHashCode()
 	{
-		return ((((((EqualityComparer<Type>.Default.GetHashCode(EqualityContract) * -1521134295 + EqualityComparer<List<CardPoolModel>>.Default.GetHashCode(_cardPools)) * -1521134295 + EqualityComparer<Func<CardModel, bool>>.Default.GetHashCode(CardPoolFilter)) * -1521134295 + EqualityComparer<IEnumerable<CardModel>>.Default.GetHashCode(CustomCardPool)) * -1521134295 + EqualityComparer<CardCreationSource>.Default.GetHashCode(Source)) * -1521134295 + EqualityComparer<CardRarityOddsType>.Default.GetHashCode(RarityOdds)) * -1521134295 + EqualityComparer<CardCreationFlags>.Default.GetHashCode(Flags)) * -1521134295 + EqualityComparer<Rng>.Default.GetHashCode(RngOverride);
+		return (((((EqualityComparer<Type>.Default.GetHashCode(EqualityContract) * -1521134295 + EqualityComparer<List<CardPoolModel>>.Default.GetHashCode(_cardPools)) * -1521134295 + EqualityComparer<Func<CardModel, bool>>.Default.GetHashCode(CardPoolFilter)) * -1521134295 + EqualityComparer<CardCreationSource>.Default.GetHashCode(Source)) * -1521134295 + EqualityComparer<CardRarityOddsType>.Default.GetHashCode(RarityOdds)) * -1521134295 + EqualityComparer<CardCreationFlags>.Default.GetHashCode(Flags)) * -1521134295 + EqualityComparer<Rng>.Default.GetHashCode(RngOverride);
 	}
 
 	[CompilerGenerated]
@@ -270,7 +207,7 @@ public record CardCreationOptions
 	{
 		if ((object)this != other)
 		{
-			if ((object)other != null && EqualityContract == other.EqualityContract && EqualityComparer<List<CardPoolModel>>.Default.Equals(_cardPools, other._cardPools) && EqualityComparer<Func<CardModel, bool>>.Default.Equals(CardPoolFilter, other.CardPoolFilter) && EqualityComparer<IEnumerable<CardModel>>.Default.Equals(CustomCardPool, other.CustomCardPool) && EqualityComparer<CardCreationSource>.Default.Equals(Source, other.Source) && EqualityComparer<CardRarityOddsType>.Default.Equals(RarityOdds, other.RarityOdds) && EqualityComparer<CardCreationFlags>.Default.Equals(Flags, other.Flags))
+			if ((object)other != null && EqualityContract == other.EqualityContract && EqualityComparer<List<CardPoolModel>>.Default.Equals(_cardPools, other._cardPools) && EqualityComparer<Func<CardModel, bool>>.Default.Equals(CardPoolFilter, other.CardPoolFilter) && EqualityComparer<CardCreationSource>.Default.Equals(Source, other.Source) && EqualityComparer<CardRarityOddsType>.Default.Equals(RarityOdds, other.RarityOdds) && EqualityComparer<CardCreationFlags>.Default.Equals(Flags, other.Flags))
 			{
 				return EqualityComparer<Rng>.Default.Equals(RngOverride, other.RngOverride);
 			}
@@ -284,7 +221,6 @@ public record CardCreationOptions
 	{
 		_cardPools = original._cardPools;
 		CardPoolFilter = original.CardPoolFilter;
-		CustomCardPool = original.CustomCardPool;
 		Source = original.Source;
 		RarityOdds = original.RarityOdds;
 		Flags = original.Flags;

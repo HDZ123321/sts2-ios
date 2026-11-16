@@ -179,6 +179,11 @@ public sealed class NCardLibrary : NSubmenu
 		public static readonly StringName _necrobinderFilter = "_necrobinderFilter";
 
 		/// <summary>
+		/// Cached name for the '_foolFilter' field.
+		/// </summary>
+		public static readonly StringName _foolFilter = "_foolFilter";
+
+		/// <summary>
 		/// Cached name for the '_colorlessFilter' field.
 		/// </summary>
 		public static readonly StringName _colorlessFilter = "_colorlessFilter";
@@ -344,6 +349,8 @@ public sealed class NCardLibrary : NSubmenu
 
 	private NCardPoolFilter _necrobinderFilter;
 
+	private NCardPoolFilter _foolFilter;
+
 	private NCardPoolFilter _colorlessFilter;
 
 	private NCardPoolFilter _ancientsFilter;
@@ -440,6 +447,7 @@ public sealed class NCardLibrary : NSubmenu
 		_defectFilter = GetNode<NCardPoolFilter>("%DefectPool");
 		_regentFilter = GetNode<NCardPoolFilter>("%RegentPool");
 		_necrobinderFilter = GetNode<NCardPoolFilter>("%NecrobinderPool");
+		_foolFilter = GetNode<NCardPoolFilter>("%FoolPool");
 		_colorlessFilter = GetNode<NCardPoolFilter>("%ColorlessPool");
 		_ancientsFilter = GetNode<NCardPoolFilter>("%AncientsPool");
 		_miscPoolFilter = GetNode<NCardPoolFilter>("%MiscPool");
@@ -449,6 +457,7 @@ public sealed class NCardLibrary : NSubmenu
 		_defectFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
 		_regentFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
 		_necrobinderFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
+		_foolFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
 		_colorlessFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
 		_ancientsFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
 		_miscPoolFilter.Connect(NCardPoolFilter.SignalName.Toggled, callable);
@@ -457,6 +466,7 @@ public sealed class NCardLibrary : NSubmenu
 		_poolFilters.Add(_defectFilter, (CardModel c) => c.Pool is DefectCardPool);
 		_poolFilters.Add(_regentFilter, (CardModel c) => c.Pool is RegentCardPool);
 		_poolFilters.Add(_necrobinderFilter, (CardModel c) => c.Pool is NecrobinderCardPool);
+		_poolFilters.Add(_foolFilter, (CardModel c) => c.Pool is FoolCardPool);
 		_poolFilters.Add(_colorlessFilter, (CardModel c) => c.Pool is ColorlessCardPool);
 		_poolFilters.Add(_ancientsFilter, (CardModel c) => c.Rarity == CardRarity.Ancient);
 		_poolFilters.Add(_miscPoolFilter, delegate(CardModel c)
@@ -566,6 +576,7 @@ public sealed class NCardLibrary : NSubmenu
 		_cardPoolFilters.Add(ModelDb.Character<Defect>(), _defectFilter);
 		_cardPoolFilters.Add(ModelDb.Character<Necrobinder>(), _necrobinderFilter);
 		_cardPoolFilters.Add(ModelDb.Character<Regent>(), _regentFilter);
+		_cardPoolFilters.Add(ModelDb.Character<Fool>(), _foolFilter);
 		UnlockState unlockState = SaveManager.Instance.GenerateUnlockStateFromProgress();
 		foreach (KeyValuePair<CharacterModel, NCardPoolFilter> cardPoolFilter in _cardPoolFilters)
 		{
@@ -596,6 +607,10 @@ public sealed class NCardLibrary : NSubmenu
 		_necrobinderFilter.Connect(Control.SignalName.FocusEntered, Callable.From(delegate
 		{
 			_lastHoveredControl = _necrobinderFilter;
+		}));
+		_foolFilter.Connect(Control.SignalName.FocusEntered, Callable.From(delegate
+		{
+			_lastHoveredControl = _foolFilter;
 		}));
 		_colorlessFilter.Connect(Control.SignalName.FocusEntered, Callable.From(delegate
 		{
@@ -769,7 +784,7 @@ public sealed class NCardLibrary : NSubmenu
 		_alphabetSorter.IsDescending = true;
 		_viewUpgrades.IsTicked = false;
 		_viewStats.IsTicked = false;
-		_viewMultiplayerCards.IsTicked = true;
+		_viewMultiplayerCards.IsTicked = _runState == null || _runState.Players.Count > 1;
 		ToggleShowStats(_viewStats);
 		ToggleShowUpgrades(_viewUpgrades);
 		UpdateFilter();
@@ -1356,6 +1371,11 @@ public sealed class NCardLibrary : NSubmenu
 			_necrobinderFilter = VariantUtils.ConvertTo<NCardPoolFilter>(in value);
 			return true;
 		}
+		if (name == PropertyName._foolFilter)
+		{
+			_foolFilter = VariantUtils.ConvertTo<NCardPoolFilter>(in value);
+			return true;
+		}
 		if (name == PropertyName._colorlessFilter)
 		{
 			_colorlessFilter = VariantUtils.ConvertTo<NCardPoolFilter>(in value);
@@ -1533,6 +1553,11 @@ public sealed class NCardLibrary : NSubmenu
 			value = VariantUtils.CreateFrom(in _necrobinderFilter);
 			return true;
 		}
+		if (name == PropertyName._foolFilter)
+		{
+			value = VariantUtils.CreateFrom(in _foolFilter);
+			return true;
+		}
 		if (name == PropertyName._colorlessFilter)
 		{
 			value = VariantUtils.CreateFrom(in _colorlessFilter);
@@ -1682,6 +1707,7 @@ public sealed class NCardLibrary : NSubmenu
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._defectFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._regentFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._necrobinderFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._foolFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._colorlessFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._ancientsFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._miscPoolFilter, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1724,6 +1750,7 @@ public sealed class NCardLibrary : NSubmenu
 		info.AddProperty(PropertyName._defectFilter, Variant.From(in _defectFilter));
 		info.AddProperty(PropertyName._regentFilter, Variant.From(in _regentFilter));
 		info.AddProperty(PropertyName._necrobinderFilter, Variant.From(in _necrobinderFilter));
+		info.AddProperty(PropertyName._foolFilter, Variant.From(in _foolFilter));
 		info.AddProperty(PropertyName._colorlessFilter, Variant.From(in _colorlessFilter));
 		info.AddProperty(PropertyName._ancientsFilter, Variant.From(in _ancientsFilter));
 		info.AddProperty(PropertyName._miscPoolFilter, Variant.From(in _miscPoolFilter));
@@ -1785,109 +1812,113 @@ public sealed class NCardLibrary : NSubmenu
 		{
 			_necrobinderFilter = value7.As<NCardPoolFilter>();
 		}
-		if (info.TryGetProperty(PropertyName._colorlessFilter, out var value8))
+		if (info.TryGetProperty(PropertyName._foolFilter, out var value8))
 		{
-			_colorlessFilter = value8.As<NCardPoolFilter>();
+			_foolFilter = value8.As<NCardPoolFilter>();
 		}
-		if (info.TryGetProperty(PropertyName._ancientsFilter, out var value9))
+		if (info.TryGetProperty(PropertyName._colorlessFilter, out var value9))
 		{
-			_ancientsFilter = value9.As<NCardPoolFilter>();
+			_colorlessFilter = value9.As<NCardPoolFilter>();
 		}
-		if (info.TryGetProperty(PropertyName._miscPoolFilter, out var value10))
+		if (info.TryGetProperty(PropertyName._ancientsFilter, out var value10))
 		{
-			_miscPoolFilter = value10.As<NCardPoolFilter>();
+			_ancientsFilter = value10.As<NCardPoolFilter>();
 		}
-		if (info.TryGetProperty(PropertyName._typeSorter, out var value11))
+		if (info.TryGetProperty(PropertyName._miscPoolFilter, out var value11))
 		{
-			_typeSorter = value11.As<NCardViewSortButton>();
+			_miscPoolFilter = value11.As<NCardPoolFilter>();
 		}
-		if (info.TryGetProperty(PropertyName._attackFilter, out var value12))
+		if (info.TryGetProperty(PropertyName._typeSorter, out var value12))
 		{
-			_attackFilter = value12.As<NCardTypeTickbox>();
+			_typeSorter = value12.As<NCardViewSortButton>();
 		}
-		if (info.TryGetProperty(PropertyName._skillFilter, out var value13))
+		if (info.TryGetProperty(PropertyName._attackFilter, out var value13))
 		{
-			_skillFilter = value13.As<NCardTypeTickbox>();
+			_attackFilter = value13.As<NCardTypeTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._powerFilter, out var value14))
+		if (info.TryGetProperty(PropertyName._skillFilter, out var value14))
 		{
-			_powerFilter = value14.As<NCardTypeTickbox>();
+			_skillFilter = value14.As<NCardTypeTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._otherTypeFilter, out var value15))
+		if (info.TryGetProperty(PropertyName._powerFilter, out var value15))
 		{
-			_otherTypeFilter = value15.As<NCardTypeTickbox>();
+			_powerFilter = value15.As<NCardTypeTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._raritySorter, out var value16))
+		if (info.TryGetProperty(PropertyName._otherTypeFilter, out var value16))
 		{
-			_raritySorter = value16.As<NCardViewSortButton>();
+			_otherTypeFilter = value16.As<NCardTypeTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._commonFilter, out var value17))
+		if (info.TryGetProperty(PropertyName._raritySorter, out var value17))
 		{
-			_commonFilter = value17.As<NCardRarityTickbox>();
+			_raritySorter = value17.As<NCardViewSortButton>();
 		}
-		if (info.TryGetProperty(PropertyName._uncommonFilter, out var value18))
+		if (info.TryGetProperty(PropertyName._commonFilter, out var value18))
 		{
-			_uncommonFilter = value18.As<NCardRarityTickbox>();
+			_commonFilter = value18.As<NCardRarityTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._rareFilter, out var value19))
+		if (info.TryGetProperty(PropertyName._uncommonFilter, out var value19))
 		{
-			_rareFilter = value19.As<NCardRarityTickbox>();
+			_uncommonFilter = value19.As<NCardRarityTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._otherFilter, out var value20))
+		if (info.TryGetProperty(PropertyName._rareFilter, out var value20))
 		{
-			_otherFilter = value20.As<NCardRarityTickbox>();
+			_rareFilter = value20.As<NCardRarityTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._costSorter, out var value21))
+		if (info.TryGetProperty(PropertyName._otherFilter, out var value21))
 		{
-			_costSorter = value21.As<NCardViewSortButton>();
+			_otherFilter = value21.As<NCardRarityTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._zeroFilter, out var value22))
+		if (info.TryGetProperty(PropertyName._costSorter, out var value22))
 		{
-			_zeroFilter = value22.As<NCardCostTickbox>();
+			_costSorter = value22.As<NCardViewSortButton>();
 		}
-		if (info.TryGetProperty(PropertyName._oneFilter, out var value23))
+		if (info.TryGetProperty(PropertyName._zeroFilter, out var value23))
 		{
-			_oneFilter = value23.As<NCardCostTickbox>();
+			_zeroFilter = value23.As<NCardCostTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._twoFilter, out var value24))
+		if (info.TryGetProperty(PropertyName._oneFilter, out var value24))
 		{
-			_twoFilter = value24.As<NCardCostTickbox>();
+			_oneFilter = value24.As<NCardCostTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._threePlusFilter, out var value25))
+		if (info.TryGetProperty(PropertyName._twoFilter, out var value25))
 		{
-			_threePlusFilter = value25.As<NCardCostTickbox>();
+			_twoFilter = value25.As<NCardCostTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._xFilter, out var value26))
+		if (info.TryGetProperty(PropertyName._threePlusFilter, out var value26))
 		{
-			_xFilter = value26.As<NCardCostTickbox>();
+			_threePlusFilter = value26.As<NCardCostTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._alphabetSorter, out var value27))
+		if (info.TryGetProperty(PropertyName._xFilter, out var value27))
 		{
-			_alphabetSorter = value27.As<NCardViewSortButton>();
+			_xFilter = value27.As<NCardCostTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._viewMultiplayerCards, out var value28))
+		if (info.TryGetProperty(PropertyName._alphabetSorter, out var value28))
 		{
-			_viewMultiplayerCards = value28.As<NLibraryStatTickbox>();
+			_alphabetSorter = value28.As<NCardViewSortButton>();
 		}
-		if (info.TryGetProperty(PropertyName._viewStats, out var value29))
+		if (info.TryGetProperty(PropertyName._viewMultiplayerCards, out var value29))
 		{
-			_viewStats = value29.As<NLibraryStatTickbox>();
+			_viewMultiplayerCards = value29.As<NLibraryStatTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._viewUpgrades, out var value30))
+		if (info.TryGetProperty(PropertyName._viewStats, out var value30))
 		{
-			_viewUpgrades = value30.As<NLibraryStatTickbox>();
+			_viewStats = value30.As<NLibraryStatTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._cardCountLabel, out var value31))
+		if (info.TryGetProperty(PropertyName._viewUpgrades, out var value31))
 		{
-			_cardCountLabel = value31.As<MegaRichTextLabel>();
+			_viewUpgrades = value31.As<NLibraryStatTickbox>();
 		}
-		if (info.TryGetProperty(PropertyName._noResultsLabel, out var value32))
+		if (info.TryGetProperty(PropertyName._cardCountLabel, out var value32))
 		{
-			_noResultsLabel = value32.As<MegaRichTextLabel>();
+			_cardCountLabel = value32.As<MegaRichTextLabel>();
 		}
-		if (info.TryGetProperty(PropertyName._lastHoveredControl, out var value33))
+		if (info.TryGetProperty(PropertyName._noResultsLabel, out var value33))
 		{
-			_lastHoveredControl = value33.As<Control>();
+			_noResultsLabel = value33.As<MegaRichTextLabel>();
+		}
+		if (info.TryGetProperty(PropertyName._lastHoveredControl, out var value34))
+		{
+			_lastHoveredControl = value34.As<Control>();
 		}
 	}
 

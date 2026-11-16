@@ -32,7 +32,7 @@ public sealed class UnmovablePower : PowerModel
 		{
 			return 1m;
 		}
-		int num = CombatManager.Instance.History.Entries.OfType<BlockGainedEntry>().Count((BlockGainedEntry e) => e.HappenedThisTurn(base.CombatState) && e.Actor == target && e.Props.IsCardOrMonsterMove() && e.CardPlay != cardPlay);
+		int num = CombatManager.Instance.History.Entries.OfType<BlockGainedEntry>().Count((BlockGainedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay != null && e.CardPlay.Player.Creature == base.Owner && e.Props.IsCardOrMonsterMove() && e.CardPlay != cardPlay);
 		if (num >= base.Amount)
 		{
 			return 1m;

@@ -24,7 +24,7 @@ public class GlassOrb : OrbModel
 
 	public override async Task BeforeTurnEndOrbTrigger(PlayerChoiceContext choiceContext)
 	{
-		await Passive(choiceContext, null);
+		await TriggerPassive(choiceContext, null);
 	}
 
 	public override async Task Passive(PlayerChoiceContext choiceContext, Creature? target)
@@ -33,7 +33,7 @@ public class GlassOrb : OrbModel
 		decimal passiveVal = PassiveVal;
 		if (!(passiveVal <= 0m))
 		{
-			Trigger();
+			ActivatePassive();
 			PlayPassiveSfx();
 			_passiveVal = Math.Max(0m, _passiveVal - 1m);
 			await CreatureCmd.Damage(choiceContext, targets, passiveVal, ValueProp.Unpowered, base.Owner.Creature);
@@ -47,6 +47,7 @@ public class GlassOrb : OrbModel
 		{
 			return Array.Empty<Creature>();
 		}
+		ActivateEvoke(enemies.ToArray());
 		await CreatureCmd.Damage(playerChoiceContext, enemies, EvokeVal, ValueProp.Unpowered, base.Owner.Creature);
 		return enemies;
 	}

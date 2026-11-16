@@ -14,11 +14,7 @@ public sealed class Fuel : CardModel
 
 	public override IEnumerable<CardKeyword> CanonicalKeywords => new global::_003C_003Ez__ReadOnlySingleElementList<CardKeyword>(CardKeyword.Exhaust);
 
-	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[2]
-	{
-		new EnergyVar(1),
-		new CardsVar(1)
-	});
+	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new EnergyVar(1));
 
 	public Fuel()
 		: base(0, CardType.Skill, CardRarity.Token, TargetType.Self)
@@ -28,11 +24,10 @@ public sealed class Fuel : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		await PlayerCmd.GainEnergy(base.DynamicVars.Energy.BaseValue, base.Owner);
-		await CardPileCmd.Draw(choiceContext, base.DynamicVars.Cards.BaseValue, base.Owner);
 	}
 
 	protected override void OnUpgrade()
 	{
-		base.DynamicVars.Cards.UpgradeValueBy(1m);
+		base.DynamicVars.Energy.UpgradeValueBy(1m);
 	}
 }

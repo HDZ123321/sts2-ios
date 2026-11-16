@@ -57,7 +57,7 @@ public class CrystalSphereGold : CrystalSphereItem
 		_isBig = isBig;
 	}
 
-	public override Reward? ToReward(Player owner, Rng rng)
+	public override Reward ToReward(Player owner, Rng rng)
 	{
 		return new GoldReward(Amount, owner).SetRng(rng);
 	}

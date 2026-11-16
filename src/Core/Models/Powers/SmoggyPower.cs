@@ -38,7 +38,7 @@ public sealed class SmoggyPower : PowerModel
 
 	public override async Task AfterCardEnteredCombat(CardModel card)
 	{
-		if (card.Owner == base.Owner.Player && card.Affliction == null && card.Type == CardType.Skill && CombatManager.Instance.History.CardPlaysStarted.Any((CardPlayStartedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Card.Type == CardType.Skill && e.CardPlay.Card.Owner.Creature == base.Owner))
+		if (card.Owner == base.Owner.Player && card.Affliction == null && card.Type == CardType.Skill && CombatManager.Instance.History.CardPlaysStarted.Any((CardPlayStartedEntry e) => e.HappenedThisTurn(base.CombatState) && e.CardPlay.Card.Type == CardType.Skill && e.CardPlay.Player == base.Owner.Player))
 		{
 			await CardCmd.Afflict<Smog>(card, 1m);
 		}

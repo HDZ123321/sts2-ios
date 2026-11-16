@@ -12,14 +12,6 @@ public static class Controller
 
 	public static readonly StringName rightBumper = "controller_right_bumper";
 
-	public static readonly StringName dPadNorth = "controller_d_pad_north";
-
-	public static readonly StringName dPadSouth = "controller_d_pad_south";
-
-	public static readonly StringName dPadEast = "controller_d_pad_east";
-
-	public static readonly StringName dPadWest = "controller_d_pad_west";
-
 	public static readonly StringName faceButtonNorth = "controller_face_button_north";
 
 	public static readonly StringName faceButtonSouth = "controller_face_button_south";
@@ -32,21 +24,38 @@ public static class Controller
 
 	public static readonly StringName selectButton = "controller_select_button";
 
-	public static readonly StringName joystickPress = "controller_joystick_press";
+	public static readonly StringName dPadUp = "controller_d_pad_up";
 
-	public static readonly StringName joystickLeft = "controller_joystick_left";
+	public static readonly StringName dPadDown = "controller_d_pad_down";
 
-	public static readonly StringName joystickRight = "controller_joystick_right";
+	public static readonly StringName dPadLeft = "controller_d_pad_left";
 
-	public static readonly StringName joystickUp = "controller_joystick_up";
+	public static readonly StringName dPadRight = "controller_d_pad_right";
 
-	public static readonly StringName joystickDown = "controller_joystick_down";
+	public static readonly StringName lStickPress = "controller_l_stick_press";
+
+	public static readonly StringName lStickLeft = "controller_l_stick_left";
+
+	public static readonly StringName lStickRight = "controller_l_stick_right";
+
+	public static readonly StringName lStickUp = "controller_l_stick_up";
+
+	public static readonly StringName lStickDown = "controller_l_stick_down";
+
+	public static readonly StringName rStickLeft = "controller_r_stick_left";
+
+	public static readonly StringName rStickRight = "controller_r_stick_right";
+
+	public static readonly StringName rStickUp = "controller_r_stick_up";
+
+	public static readonly StringName rStickDown = "controller_r_stick_down";
 
 	public static readonly StringName ps4Touchpad = "ui_controller_touch_pad";
 
-	public static StringName[] AllControllerInputs => new StringName[20]
+	public static StringName[] AllControllerInputs => new StringName[24]
 	{
-		dPadEast, dPadNorth, dPadSouth, dPadWest, faceButtonEast, faceButtonNorth, faceButtonSouth, faceButtonWest, joystickDown, joystickLeft,
-		joystickPress, joystickRight, joystickUp, leftBumper, leftTrigger, rightBumper, rightTrigger, selectButton, startButton, ps4Touchpad
+		dPadRight, dPadUp, dPadDown, dPadLeft, faceButtonEast, faceButtonNorth, faceButtonSouth, faceButtonWest, lStickDown, lStickLeft,
+		lStickPress, lStickRight, lStickUp, leftBumper, leftTrigger, rightBumper, rightTrigger, selectButton, startButton, ps4Touchpad,
+		rStickLeft, rStickRight, rStickUp, rStickDown
 	};
 }

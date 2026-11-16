@@ -1,7 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Ascension;
@@ -40,15 +38,14 @@ public sealed class Rocket : MonsterModel
 
 	public override float DeathAnimLengthOverride => 2.5f;
 
-	private NKaiserCrabBossBackground Background
+	public NKaiserCrabBossBackground? Background
 	{
 		get
 		{
 			AssertMutable();
 			if (_background == null)
 			{
-				Control control = NCombatRoom.Instance?.Background ?? NBestiary.Instance?.Layout ?? throw new InvalidOperationException();
-				_background = control.GetNode<NKaiserCrabBossBackground>("%KaiserCrab");
+				_background = (NCombatRoom.Instance?.Background ?? NBestiary.Instance?.Layout)?.GetNode<NKaiserCrabBossBackground>("%KaiserCrab");
 			}
 			return _background;
 		}
@@ -58,21 +55,34 @@ public sealed class Rocket : MonsterModel
 
 	public override int MaxInitialHp => MinInitialHp;
 
-	private int TargetingReticleDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 4, 3);
+	private int CalculatingDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 4, 3);
 
-	private int PrecisionBeamDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 20, 18);
+	private int PreciseSmashDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 20, 18);
 
-	private int LaserDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 35, 31);
+	private int RocketClawDamage => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 35, 31) + (AscensionHelper.IsDread() ? 5 : 0);
 
 	private int ChargeUpStrengthGain => AscensionHelper.GetValueIfAscension(AscensionLevel.DeadlyEnemies, 3, 2);
+
+	private int PlatingAmount
+	{
+		get
+		{
+			if (!AscensionHelper.IsDread())
+			{
+				return 0;
+			}
+			return 14;
+		}
+	}
 
 	protected override MonsterMoveStateMachine GenerateMoveStateMachine()
 	{
 		List<MonsterState> list = new List<MonsterState>();
-		MoveState moveState = new MoveState("TARGETING_RETICLE_MOVE", TargetingReticleMove, new SingleAttackIntent(TargetingReticleDamage));
-		MoveState moveState2 = new MoveState("PRECISION_BEAM_MOVE", PrecisionBeamMove, new SingleAttackIntent(PrecisionBeamDamage));
+		MoveState moveState = new MoveState("CALCULATING_MOVE", CalculatingMove, new SingleAttackIntent(CalculatingDamage));
+		MoveState moveState2 = new MoveState("PRECISE_SMASH_MOVE", PreciseSmashMove, new SingleAttackIntent(PreciseSmashDamage));
+		MoveState item = new MoveState("PRECISE_SMASH_MOVE_2", PreciseSmashMove, new SingleAttackIntent(PreciseSmashDamage));
 		MoveState moveState3 = new MoveState("CHARGE_UP_MOVE", ChargeUpMove, new BuffIntent());
-		MoveState moveState4 = new MoveState("LASER_MOVE", LaserMove, new SingleAttackIntent(LaserDamage));
+		MoveState moveState4 = new MoveState("ROCKET_CLAW_MOVE", RocketClawMove, new SingleAttackIntent(RocketClawDamage));
 		MoveState moveState5 = new MoveState("RECHARGE_MOVE", RechargeMove, new SleepIntent());
 		moveState.FollowUpState = moveState2;
 		moveState2.FollowUpState = moveState3;
@@ -81,6 +91,7 @@ public sealed class Rocket : MonsterModel
 		moveState5.FollowUpState = moveState;
 		list.Add(moveState);
 		list.Add(moveState2);
+		list.Add(item);
 		list.Add(moveState3);
 		list.Add(moveState4);
 		list.Add(moveState5);
@@ -93,7 +104,11 @@ public sealed class Rocket : MonsterModel
 		await PowerCmd.Apply<SurroundedPower>(new ThrowingPlayerChoiceContext(), base.CombatState.GetOpponentsOf(base.Creature), 1m, base.Creature, null);
 		await PowerCmd.Apply<BackAttackRightPower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
 		await PowerCmd.Apply<CrabRagePower>(new ThrowingPlayerChoiceContext(), base.Creature, 1m, base.Creature, null);
-		Background.SetVisible(visible: true);
+		if (PlatingAmount > 0)
+		{
+			await PowerCmd.Apply<PlatingPower>(new ThrowingPlayerChoiceContext(), base.Creature, PlatingAmount, base.Creature, null);
+		}
+		Background?.SetVisible(visible: true);
 	}
 
 	public override Task AfterCurrentHpChanged(Creature creature, decimal delta)
@@ -102,7 +117,7 @@ public sealed class Rocket : MonsterModel
 		{
 			return Task.CompletedTask;
 		}
-		Background.PlayHurtAnim(NKaiserCrabBossBackground.ArmSide.Right);
+		Background?.PlayHurtAnim(NKaiserCrabBossBackground.ArmSide.Right);
 		return Task.CompletedTask;
 	}
 
@@ -113,10 +128,10 @@ public sealed class Rocket : MonsterModel
 			return Task.CompletedTask;
 		}
 		NAudioManager.Instance.PlayOneShot(DeathSfx);
-		Background.PlayArmDeathAnim(NKaiserCrabBossBackground.ArmSide.Right);
+		Background?.PlayArmDeathAnim(NKaiserCrabBossBackground.ArmSide.Right);
 		if (CombatManager.Instance.IsOverOrEnding)
 		{
-			Background.PlayBodyDeathAnim();
+			Background?.PlayBodyDeathAnim();
 			NRunMusicController.Instance?.UpdateMusicParameter("kaiser_crab_progress", 5f);
 		}
 		else
@@ -131,20 +146,20 @@ public sealed class Rocket : MonsterModel
 		SfxCmd.StopLoop(base.Creature, "event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_buff");
 	}
 
-	private async Task TargetingReticleMove(IReadOnlyList<Creature> targets)
+	private async Task CalculatingMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_attack_snap");
-		await Background.PlayAttackAnim(NKaiserCrabBossBackground.ArmSide.Right, "attack", 0.35f);
-		await DamageCmd.Attack(TargetingReticleDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
+		await (Background?.PlayAttackAnim(NKaiserCrabBossBackground.ArmSide.Right, "attack", 0.35f) ?? Task.CompletedTask);
+		await DamageCmd.Attack(CalculatingDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
 			.WithHitFx("vfx/vfx_attack_slash")
 			.Execute(null);
 	}
 
-	private async Task PrecisionBeamMove(IReadOnlyList<Creature> targets)
+	private async Task PreciseSmashMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_attack_slam");
-		await Background.PlayAttackAnim(NKaiserCrabBossBackground.ArmSide.Right, "attack_med", 0.5f);
-		await DamageCmd.Attack(PrecisionBeamDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
+		await (Background?.PlayAttackAnim(NKaiserCrabBossBackground.ArmSide.Right, "attack_med", 0.5f) ?? Task.CompletedTask);
+		await DamageCmd.Attack(PreciseSmashDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
 			.WithHitFx("vfx/vfx_heavy_blunt", null, "heavy_attack.mp3")
 			.WithHitVfxSpawnedAtBase()
 			.Execute(null);
@@ -153,16 +168,16 @@ public sealed class Rocket : MonsterModel
 	private async Task ChargeUpMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.PlayLoop(base.Creature, "event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_buff");
-		await Background.PlayRightSideChargeUpAnim(0.7f);
+		await (Background?.PlayRightSideChargeUpAnim(0.7f) ?? Task.CompletedTask);
 		await PowerCmd.Apply<StrengthPower>(new ThrowingPlayerChoiceContext(), base.Creature, ChargeUpStrengthGain, base.Creature, null);
 	}
 
-	private async Task LaserMove(IReadOnlyList<Creature> targets)
+	private async Task RocketClawMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.StopLoop(base.Creature, "event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_buff");
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_rocket");
-		await Background.PlayRightSideHeavy(0.5f);
-		await DamageCmd.Attack(LaserDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
+		await (Background?.PlayRightSideHeavy(0.5f) ?? Task.CompletedTask);
+		await DamageCmd.Attack(RocketClawDamage).FromMonster(this).WithAttackerFx(null, AttackSfx)
 			.WithHitFx("vfx/vfx_attack_blunt")
 			.Execute(null);
 	}
@@ -170,6 +185,6 @@ public sealed class Rocket : MonsterModel
 	private async Task RechargeMove(IReadOnlyList<Creature> targets)
 	{
 		SfxCmd.Play("event:/sfx/enemy/enemy_attacks/kaiser_crab/kaiser_crab_right_regrow");
-		await Background.PlayRightRecharge(0.5f);
+		await (Background?.PlayRightRecharge(0.5f) ?? Task.CompletedTask);
 	}
 }

@@ -12,7 +12,7 @@ namespace MegaCrit.Sts2.Core.Models.Cards;
 
 public sealed class Resonance : CardModel
 {
-	public override int CanonicalStarCost => 3;
+	public override int CanonicalStarCost => 2;
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new PowerVar<StrengthPower>(1m));
 

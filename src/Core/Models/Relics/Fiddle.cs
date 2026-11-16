@@ -12,7 +12,7 @@ public sealed class Fiddle : RelicModel
 
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlySingleElementList<DynamicVar>(new CardsVar(2));
 
-	public override decimal ModifyHandDrawLate(Player player, decimal count)
+	public override decimal ModifyHandDraw(Player player, decimal count)
 	{
 		if (player != base.Owner)
 		{

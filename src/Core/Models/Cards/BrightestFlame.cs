@@ -12,7 +12,7 @@ public sealed class BrightestFlame : CardModel
 {
 	protected override IEnumerable<DynamicVar> CanonicalVars => new global::_003C_003Ez__ReadOnlyArray<DynamicVar>(new DynamicVar[3]
 	{
-		new MaxHpVar(1m),
+		new MaxHpVar(2m),
 		new EnergyVar(2),
 		new CardsVar(2)
 	});
@@ -28,7 +28,7 @@ public sealed class BrightestFlame : CardModel
 	{
 		await PlayerCmd.GainEnergy(base.DynamicVars.Energy.IntValue, base.Owner);
 		await CardPileCmd.Draw(choiceContext, base.DynamicVars.Cards.BaseValue, base.Owner);
-		await CreatureCmd.LoseMaxHp(choiceContext, base.Owner.Creature, base.DynamicVars.MaxHp.BaseValue, isFromCard: true);
+		await CreatureCmd.LoseMaxHp(choiceContext, base.Owner.Creature, base.DynamicVars.MaxHp.BaseValue, this);
 	}
 
 	protected override void OnUpgrade()

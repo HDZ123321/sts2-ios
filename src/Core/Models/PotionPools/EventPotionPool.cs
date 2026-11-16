@@ -9,8 +9,9 @@ public sealed class EventPotionPool : PotionPoolModel
 
 	protected override IEnumerable<PotionModel> GenerateAllPotions()
 	{
-		return new global::_003C_003Ez__ReadOnlyArray<PotionModel>(new PotionModel[2]
+		return new global::_003C_003Ez__ReadOnlyArray<PotionModel>(new PotionModel[3]
 		{
+			ModelDb.Potion<Ambergris>(),
 			ModelDb.Potion<FoulPotion>(),
 			ModelDb.Potion<GlowwaterPotion>()
 		});

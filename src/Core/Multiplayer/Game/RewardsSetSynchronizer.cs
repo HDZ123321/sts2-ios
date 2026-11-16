@@ -116,12 +116,17 @@ public class RewardsSetSynchronizer : IDisposable
 
 	private Player LocalPlayer => _playerCollection.GetPlayer(_localPlayerId);
 
+	/// <summary>
+	/// Called when we skip all rewards just before leaving the room.
+	/// </summary>
+	public event Action? RewardsSkippedDuringRoomExit;
+
 	public RewardsSetSynchronizer(RunLocationTargetedMessageBuffer messageBuffer, INetGameService netService, IPlayerCollection playerCollection, ulong localPlayerId)
 	{
 		_netService = netService;
 		_playerCollection = playerCollection;
 		_localPlayerId = localPlayerId;
-		foreach (Player player in playerCollection.Players)
+		for (int i = 0; i < playerCollection.Players.Count; i++)
 		{
 			_rewardStates.Add(new PlayerRewardState
 			{
@@ -142,6 +147,14 @@ public class RewardsSetSynchronizer : IDisposable
 
 	private PlayerRewardState GetRewardStateForPlayer(Player player)
 	{
+		for (int i = _rewardStates.Count; i <= _playerCollection.GetPlayerSlotIndex(player); i++)
+		{
+			_rewardStates.Add(new PlayerRewardState
+			{
+				rewardsStack = new List<RewardsSetState>(),
+				bufferedMessages = new List<BufferedMessage>()
+			});
+		}
 		return _rewardStates[_playerCollection.GetPlayerSlotIndex(player)];
 	}
 
@@ -255,9 +268,8 @@ public class RewardsSetSynchronizer : IDisposable
 
 	/// <summary>
 	/// Called when a remote player skips the remaining the rewards in a set.
-	/// This is NOT called when the player skips post-combat rewards. <see cref="M:MegaCrit.Sts2.Core.Multiplayer.Game.RewardsSetSynchronizer.BeforeLeavingRoom" /> handles that case.
-	/// This is only called if a player explicitly hits the "skip" button, which can only occur if the rewards are a
-	/// non-room reward (e.g. Orrery).
+	/// Occurs both when leaving a room as a result of <see cref="M:MegaCrit.Sts2.Core.Multiplayer.Game.RewardsSetSynchronizer.BeforeLeavingRoom" /> and pressing the skip button on
+	/// non-terminal rewards.
 	/// </summary>
 	public void HandleRewardSetSkippedMessage(RewardSetSkippedMessage message, ulong senderId)
 	{
@@ -395,23 +407,28 @@ public class RewardsSetSynchronizer : IDisposable
 	}
 
 	/// <summary>
-	/// Skips all remaining rewards for all players.
+	/// Skips all remaining rewards for the local player.
 	/// </summary>
 	public void BeforeLeavingRoom()
 	{
-		for (int i = 0; i < _rewardStates.Count; i++)
+		PlayerRewardState rewardStateForPlayer = GetRewardStateForPlayer(LocalPlayer);
+		if (rewardStateForPlayer.rewardsStack.Count > 0)
 		{
-			PlayerRewardState playerRewardState = _rewardStates[i];
-			if (playerRewardState.rewardsStack.Count > 0)
-			{
-				_logger.Debug($"Skipping remaining rewards for player {_playerCollection.Players[i].NetId} because we're exiting the room");
-			}
-			for (int num = playerRewardState.rewardsStack.Count - 1; num >= 0; num--)
-			{
-				SkipRewardsSet(playerRewardState.rewardsStack[num]);
-			}
-			playerRewardState.rewardsStack.Clear();
+			_logger.Debug($"Skipping remaining rewards for local player {LocalPlayer.NetId} because we're exiting the room");
 		}
+		for (int num = rewardStateForPlayer.rewardsStack.Count - 1; num >= 0; num--)
+		{
+			RewardsSetState rewardsSetState = rewardStateForPlayer.rewardsStack[num];
+			SkipRewardsSet(rewardStateForPlayer.rewardsStack[num]);
+			RewardSetSkippedMessage message = new RewardSetSkippedMessage
+			{
+				location = _messageBuffer.CurrentLocation,
+				setId = rewardsSetState.set.Id
+			};
+			_netService.SendMessage(message);
+		}
+		rewardStateForPlayer.rewardsStack.Clear();
+		this.RewardsSkippedDuringRoomExit?.Invoke();
 	}
 
 	/// <summary>

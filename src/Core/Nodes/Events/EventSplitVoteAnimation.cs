@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -16,9 +15,9 @@ namespace MegaCrit.Sts2.Core.Nodes.Events;
 /// </summary>
 public class EventSplitVoteAnimation
 {
-	private NEventLayout _eventLayout;
+	private readonly NEventLayout _eventLayout;
 
-	private IRunState _runState;
+	private readonly IRunState _runState;
 
 	private int _ticks;
 
@@ -46,7 +45,7 @@ public class EventSplitVoteAnimation
 		{
 			return;
 		}
-		Rng rng = new Rng((uint)HashCode.Combine(_runState.Rng.Seed, _runState.ActFloor));
+		Rng rng = new Rng(_runState.Rng.Seed + (ulong)_runState.ActFloor);
 		_ticks = rng.NextInt(12, 18);
 		float num = rng.NextFloat(0.05f, 0.3f);
 		_winner = rng.NextItem(chosenButton.VoteContainer.Players);
@@ -57,7 +56,7 @@ public class EventSplitVoteAnimation
 		Tween tween = _eventLayout.CreateTween();
 		tween.TweenMethod(Callable.From<float>(TickSplitVoteAnimation), 0f, 1f, 1.2000000476837158).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
 		tween.TweenInterval(num);
-		if (await tween.AwaitFinished(_eventLayout))
+		if (await tween.AwaitFinished(_eventLayout) == TweenOutcome.Finished)
 		{
 			chosenButton.VoteContainer.BouncePlayers();
 		}

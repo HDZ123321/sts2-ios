@@ -11,7 +11,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.TestSupport;
 
-namespace MegaCrit.Sts2.Core.Nodes.Vfx;
+namespace MegaCrit.Sts2.Core.Nodes.Vfx.Ui;
 
 [ScriptPath("res://src/Core/Nodes/Vfx/Ui/NPowerAppliedBuffVfx.cs")]
 public class NPowerAppliedBuffVfx : Node2D
@@ -55,14 +55,14 @@ public class NPowerAppliedBuffVfx : Node2D
 	{
 	}
 
-	public static readonly string scenePath = SceneHelper.GetScenePath("vfx/ui/vfx_buff_applied");
+	private static readonly string _scenePath = SceneHelper.GetScenePath("vfx/ui/vfx_buff_applied");
 
 	[Export(PropertyHint.None, "")]
 	private Array<GpuParticles2D> _particles = new Array<GpuParticles2D>();
 
 	private CancellationTokenSource? _cts;
 
-	public static IEnumerable<string> AssetPaths => new global::_003C_003Ez__ReadOnlySingleElementList<string>(scenePath);
+	public static IEnumerable<string> AssetPaths => new global::_003C_003Ez__ReadOnlySingleElementList<string>(_scenePath);
 
 	public override void _ExitTree()
 	{
@@ -75,7 +75,7 @@ public class NPowerAppliedBuffVfx : Node2D
 		{
 			return null;
 		}
-		NPowerAppliedBuffVfx nPowerAppliedBuffVfx = PreloadManager.Cache.GetScene(scenePath).Instantiate<NPowerAppliedBuffVfx>(PackedScene.GenEditState.Disabled);
+		NPowerAppliedBuffVfx nPowerAppliedBuffVfx = PreloadManager.Cache.GetScene(_scenePath).Instantiate<NPowerAppliedBuffVfx>(PackedScene.GenEditState.Disabled);
 		nPowerAppliedBuffVfx.GlobalPosition = globalPosition;
 		return nPowerAppliedBuffVfx;
 	}
@@ -88,9 +88,9 @@ public class NPowerAppliedBuffVfx : Node2D
 	private async Task PlaySequence()
 	{
 		_cts = new CancellationTokenSource();
-		for (int i = 0; i < _particles.Count; i++)
+		foreach (GpuParticles2D particle in _particles)
 		{
-			_particles[i].Restart();
+			particle.Restart();
 		}
 		await Cmd.Wait(2f, _cts.Token);
 		this.QueueFreeSafely();

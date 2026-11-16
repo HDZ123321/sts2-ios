@@ -9,22 +9,7 @@ namespace MegaCrit.Sts2.Core.Assets;
 
 public class AssetLoadingSession
 {
-	/// <summary>
-	/// How many threaded load requests may be in flight at once. A loaded resource is not
-	/// finalised until the next frame, so this number is also the peak count of fully decoded
-	/// scenes and textures the session holds at the same time. 512 was measured on desktop and
-	/// bought nothing (482/475/453 ms against 501 ms for 128, all inside the noise), while on a
-	/// phone it quadruples that peak right when iOS is deciding whether to keep the app alive.
-	/// </summary>
 	private const int _batchSize = 128;
-
-	/// <summary>
-	/// How many frames the session may stay idle before it logs its progress again. Logging every
-	/// single frame allocates a formatted string 60 times a second for the whole duration of a
-	/// multi-second preload, which shows up as garbage-collection pressure right when the player is
-	/// waiting for the first screen.
-	/// </summary>
-	private const int _statusLogIntervalFrames = 60;
 
 	private readonly string _name;
 
@@ -65,27 +50,9 @@ public class AssetLoadingSession
 
 	private int _totalLoaded;
 
-	/// <summary>
-	/// How many VFX scenes may be in flight at once. They used to be loaded strictly one
-	/// at a time because concurrent loading was blamed for "Another resource is loaded from
-	/// path" errors on shared ext_resources, but that serialised 92 scenes into a tail that
-	/// cost four times more than every other asset in the same preload combined. The window
-	/// is a desktop win only: mobile keeps the serial shape it last ran cleanly with, because
-	/// the shared-ext_resource race has never been re-verified on that platform.
-	/// </summary>
-	private static readonly int _vfxConcurrency = OS.HasFeature("mobile") ? 1 : 6;
+	private bool _vfxLoading;
 
-	private readonly Queue<string> _vfxInFlight = new Queue<string>();
-
-	private int _framesSinceStatusLog;
-
-	/// <summary>
-	/// Timestamps (in stopwatch milliseconds) marking when the parallel asset phase
-	/// drained, so the completion log can split the total into "assets" and "vfx".
-	/// </summary>
-	private long _assetsDrainedAtMs = -1L;
-
-	private int _vfxLoaded;
+	private string? _currentVfxPath;
 
 	public Task<bool> Task => _completionSource.Task;
 
@@ -108,7 +75,7 @@ public class AssetLoadingSession
 			}
 		}
 		_stopwatch.Start();
-		Log.Info($"Preloading '{name}' assets... count={_toLoad.Count} vfx={_vfxScenes.Count} batch={_batchSize} vfx_window={_vfxConcurrency}");
+		Log.Info($"Preloading '{name}' assets... count={_toLoad.Count} vfx={_vfxScenes.Count}");
 	}
 
 	private AssetLoadingSession()
@@ -141,24 +108,12 @@ public class AssetLoadingSession
 		CheckLoadingStatus();
 		if (_toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0)
 		{
-			if (_assetsDrainedAtMs < 0L)
-			{
-				_assetsDrainedAtMs = _stopwatch.ElapsedMilliseconds;
-			}
 			ProcessVfxQueue();
 		}
-		bool flag = _toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0 && _vfxScenes.Count == 0 && _vfxInFlight.Count == 0;
-		_framesSinceStatusLog++;
-		if (flag || _framesSinceStatusLog >= _statusLogIntervalFrames)
+		Log.Debug($"Preloading '{_name}' Process: toLoad={_toLoad.Count} loading={_loading.Count} finalizing={_finalizing.Count} vfx={_vfxScenes.Count}");
+		if (_toLoad.Count == 0 && _loading.Count == 0 && _finalizing.Count == 0 && _vfxScenes.Count == 0 && !_vfxLoading)
 		{
-			_framesSinceStatusLog = 0;
-			Log.Debug($"Preloading '{_name}' Process: toLoad={_toLoad.Count} loading={_loading.Count} finalizing={_finalizing.Count} vfx={_vfxScenes.Count}");
-		}
-		if (flag)
-		{
-			long assetsOnlyMs = ((_assetsDrainedAtMs >= 0L) ? _assetsDrainedAtMs : _stopwatch.ElapsedMilliseconds);
-			long peakStatic = (long)Performance.GetMonitor(Performance.Monitor.MemoryStatic);
-			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} vfx={_vfxLoaded} asset_phase={assetsOnlyMs:N0}ms vfx_phase={_stopwatch.ElapsedMilliseconds - assetsOnlyMs:N0}ms time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms static_mem={peakStatic / 1048576L}MB");
+			Log.Info($"Preloading '{_name}' Complete: assets={_totalLoaded} time_elapsed={_stopwatch.ElapsedMilliseconds:N0}ms");
 			_stopwatch.Stop();
 			_completionSource.TrySetResult(result: true);
 		}
@@ -171,45 +126,33 @@ public class AssetLoadingSession
 	/// </summary>
 	private void ProcessVfxQueue()
 	{
-		int count = _vfxInFlight.Count;
-		for (int i = 0; i < count; i++)
+		if (_vfxLoading)
 		{
-			if (!_vfxInFlight.TryDequeue(out string current))
-			{
-				Log.Error("Failed to dequeue in-flight VFX scene!");
-				break;
-			}
-			switch (ResourceLoader.LoadThreadedGetStatus(current))
+			switch (ResourceLoader.LoadThreadedGetStatus(_currentVfxPath))
 			{
 			case ResourceLoader.ThreadLoadStatus.Loaded:
-				AddToCache(ResourceLoader.LoadThreadedGet(current), current);
-				_vfxLoaded++;
-				break;
-			case ResourceLoader.ThreadLoadStatus.InProgress:
-				_vfxInFlight.Enqueue(current);
+				AddToCache(ResourceLoader.LoadThreadedGet(_currentVfxPath), _currentVfxPath);
+				_vfxLoading = false;
 				break;
 			case ResourceLoader.ThreadLoadStatus.InvalidResource:
 			case ResourceLoader.ThreadLoadStatus.Failed:
-				Log.Error("Failed to load VFX scene: " + current);
-				break;
-			default:
-				Log.Error("Failed to load VFX scene: " + current);
+				Log.Error("Failed to load VFX scene: " + _currentVfxPath);
+				_vfxLoading = false;
 				break;
 			}
+			return;
 		}
 		string result;
-		while (_vfxInFlight.Count < _vfxConcurrency && _vfxScenes.TryDequeue(out result))
+		while (_vfxScenes.TryDequeue(out result))
 		{
-			if (_cache.ContainsKey(result))
+			if (!_cache.ContainsKey(result))
 			{
-				continue;
-			}
-			if (ResourceLoader.LoadThreadedRequest(result, "", useSubThreads: false, ResourceLoader.CacheMode.Reuse) == Error.Ok)
-			{
-				_vfxInFlight.Enqueue(result);
-			}
-			else
-			{
+				if (ResourceLoader.LoadThreadedRequest(result, "", useSubThreads: false, ResourceLoader.CacheMode.Reuse) == Error.Ok)
+				{
+					_currentVfxPath = result;
+					_vfxLoading = true;
+					break;
+				}
 				Log.Error("Error requesting VFX load for path: " + result);
 			}
 		}
@@ -238,13 +181,14 @@ public class AssetLoadingSession
 			return;
 		}
 		_totalLoaded++;
+		_assetCache?.CancelPendingDispose(resource);
 		_cache[path] = resource;
 	}
 
 	private void ProcessLoadingQueue()
 	{
 		string result;
-		while (_loading.Count < _batchSize && _toLoad.TryDequeue(out result))
+		while (_loading.Count < 128 && _toLoad.TryDequeue(out result))
 		{
 			if (!_cache.ContainsKey(result))
 			{

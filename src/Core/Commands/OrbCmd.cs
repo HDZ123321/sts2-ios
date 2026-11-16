@@ -152,12 +152,19 @@ public static class OrbCmd
 		}
 	}
 
-	public static async Task Passive(PlayerChoiceContext choiceContext, OrbModel orb, Creature? target)
+	public static async Task Passive(PlayerChoiceContext choiceContext, OrbModel orb, Creature? target, bool countAffectedByHooks = false)
 	{
 		if (!CombatManager.Instance.IsOverOrEnding)
 		{
 			choiceContext.PushModel(orb);
-			await orb.Passive(choiceContext, target);
+			if (!countAffectedByHooks)
+			{
+				await orb.Passive(choiceContext, target);
+			}
+			else
+			{
+				await orb.TriggerPassive(choiceContext, target);
+			}
 			choiceContext.PopModel(orb);
 		}
 	}

@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
 using MegaCrit.Sts2.Core.Random;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace MegaCrit.Sts2.Core.Models.Relics;
 
@@ -51,7 +52,7 @@ public sealed class WhisperingEarring : RelicModel
 		}
 		Flash();
 		bool flag;
-		using (CardSelectCmd.PushSelector(new VakuuCardSelector()))
+		using (RunManager.Instance.CardSelectorStack.PushSelector(base.Owner, new VakuuCardSelector()))
 		{
 			int cardsPlayed = 0;
 			int startTurn = base.Owner.PlayerCombatState.TurnNumber;

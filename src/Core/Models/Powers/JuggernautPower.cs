@@ -23,7 +23,7 @@ public sealed class JuggernautPower : PowerModel
 			{
 				Creature target = base.Owner.Player.RunState.Rng.CombatTargets.NextItem(hittableEnemies);
 				Flash();
-				await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), target, base.Amount, ValueProp.Unpowered, base.Owner, null);
+				await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), target, base.Amount, ValueProp.Unpowered, base.Owner);
 			}
 		}
 	}

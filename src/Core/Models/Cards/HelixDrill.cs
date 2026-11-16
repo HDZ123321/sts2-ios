@@ -23,7 +23,7 @@ public sealed class HelixDrill : CardModel
 		new DamageVar(3m, ValueProp.Move),
 		new CalculationBaseVar(0m),
 		new CalculationExtraVar(1m),
-		new CalculatedVar("CalculatedHits").WithMultiplier(delegate(CardModel card, Creature? _)
+		new CalculatedHitCountVar("CalculatedHits").WithMultiplier(delegate(CardModel card, Creature? _)
 		{
 			if (card.Pile == null)
 			{
@@ -32,9 +32,10 @@ public sealed class HelixDrill : CardModel
 			int num = (from e in CombatManager.Instance.History.Entries.OfType<EnergySpentEntry>()
 				where e.HappenedThisTurn(card.CombatState) && e.Actor.Player == card.Owner
 				select e).Sum((EnergySpentEntry c) => c.Amount);
-			if (card.Pile.Type == PileType.Play)
+			CardPlay currentCardPlay = CombatManager.Instance.History.Entries.OfType<CardPlayStartedEntry>().LastOrDefault((CardPlayStartedEntry e) => e.HappenedThisTurn(card.CombatState) && e.Actor.Player == card.Owner && e.CardPlay.Card == card)?.CardPlay;
+			if (currentCardPlay != null && !CombatManager.Instance.History.Entries.OfType<CardPlayFinishedEntry>().Any((CardPlayFinishedEntry e) => e.HappenedThisTurn(card.CombatState) && e.Actor.Player == card.Owner && e.CardPlay == currentCardPlay))
 			{
-				num -= card.EnergyCost.GetWithModifiers(CostModifiers.All);
+				num -= currentCardPlay.Resources.EnergySpent;
 			}
 			return num;
 		})
@@ -50,7 +51,7 @@ public sealed class HelixDrill : CardModel
 	protected override async Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
 	{
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
-		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).WithHitCount((int)((CalculatedVar)base.DynamicVars["CalculatedHits"]).Calculate(cardPlay.Target)).FromCard(this)
+		await DamageCmd.Attack(base.DynamicVars.Damage.BaseValue).WithHitCount((int)((CalculatedVar)base.DynamicVars["CalculatedHits"]).Calculate(cardPlay.Target)).FromCard(this, cardPlay)
 			.Targeting(cardPlay.Target)
 			.WithHitFx("vfx/vfx_attack_slash")
 			.Execute(choiceContext);

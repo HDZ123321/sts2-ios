@@ -23,7 +23,7 @@ public sealed class RegentCardPool : CardPoolModel
 
 	protected override CardModel[] GenerateAllCards()
 	{
-		return new CardModel[88]
+		return new CardModel[91]
 		{
 			ModelDb.Card<Alignment>(),
 			ModelDb.Card<Arsenal>(),
@@ -42,6 +42,7 @@ public sealed class RegentCardPool : CardPoolModel
 			ModelDb.Card<CollisionCourse>(),
 			ModelDb.Card<Comet>(),
 			ModelDb.Card<Conqueror>(),
+			ModelDb.Card<Constellation>(),
 			ModelDb.Card<Convergence>(),
 			ModelDb.Card<CosmicIndifference>(),
 			ModelDb.Card<CrashLanding>(),
@@ -86,6 +87,7 @@ public sealed class RegentCardPool : CardPoolModel
 			ModelDb.Card<ParticleWall>(),
 			ModelDb.Card<Patter>(),
 			ModelDb.Card<PhotonCut>(),
+			ModelDb.Card<Plot>(),
 			ModelDb.Card<PillarOfCreation>(),
 			ModelDb.Card<Prophesize>(),
 			ModelDb.Card<Quasar>(),
@@ -109,6 +111,7 @@ public sealed class RegentCardPool : CardPoolModel
 			ModelDb.Card<Terraforming>(),
 			ModelDb.Card<TheSealedThrone>(),
 			ModelDb.Card<TheSmith>(),
+			ModelDb.Card<Tutor>(),
 			ModelDb.Card<Tyranny>(),
 			ModelDb.Card<Venerate>(),
 			ModelDb.Card<VoidForm>(),

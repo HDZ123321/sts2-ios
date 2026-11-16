@@ -21,6 +21,8 @@ public class NetReplayGameService : INetGameService
 
 	public PlatformType Platform => PlatformType.None;
 
+	public PeerVersionInfo LocalVersion { get; } = PeerVersionInfo.LocalDefault();
+
 	public event Action<NetErrorInfo>? Disconnected;
 
 	public NetReplayGameService(ulong netId)

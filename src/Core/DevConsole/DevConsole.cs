@@ -144,6 +144,36 @@ public class DevConsole
 		return GetCompletionResultsFromTokens(text, possibleTokens, inputBuffer);
 	}
 
+	/// <summary>
+	/// Calculates the inline ghost-text suffix to display for the given input and completion result,
+	/// or null when no ghost text should be shown.
+	///
+	/// Ghost text is a gray inline overlay rendered after the user's typed text, so it only makes
+	/// sense when the completion extends the input (prefix match). Fuzzy completions legitimately
+	/// replace the typed token instead of extending it (e.g. "relic sarig" -&gt; "relic KUSARIGAMA "),
+	/// so no ghost text is shown for them. This is expected, not a bug.
+	///
+	/// IMPORTANT: The space padding requires the input buffer and ghost-text label to share the SAME
+	/// MONOSPACE FONT (currently Source Code Pro). Since both start at x=0, we pad with spaces so the
+	/// ghost text sits after the user's input instead of overlaying it. If the font is changed to a
+	/// variable-width one, this alignment breaks.
+	/// </summary>
+	public static string? CalculateGhostText(string inputText, CompletionResult result)
+	{
+		if (result.Candidates.Count != 1 || string.IsNullOrEmpty(result.CommonPrefix))
+		{
+			return null;
+		}
+		string commonPrefix = result.CommonPrefix;
+		if (!commonPrefix.StartsWith(inputText, StringComparison.OrdinalIgnoreCase))
+		{
+			return null;
+		}
+		string text = commonPrefix.Substring(inputText.Length);
+		string text2 = new string(' ', inputText.Length);
+		return text2 + text;
+	}
+
 	private static CompletionResult GetCompletionResultsFromTokens(string partialToken, List<string> possibleTokens, string originalInput)
 	{
 		List<string> list = new List<string>();
@@ -292,7 +322,14 @@ public class DevConsole
 		if (_commands.TryGetValue(cmdName.ToLowerInvariant(), out AbstractConsoleCmd value))
 		{
 			Log.Info("DevConsole: " + cmdName + " " + string.Join(" ", args));
-			return value.Process(player, args);
+			if (!value.DebugOnly)
+			{
+				return value.Process(player, args);
+			}
+			RunManager.Instance.DebugOnlyGetState()?.ExtraFields.MarkDebugToolUsed();
+			CmdResult result = value.Process(player, args);
+			RunManager.Instance.DebugOnlyGetState()?.ExtraFields.MarkDebugToolUsed();
+			return result;
 		}
 		return new CmdResult(success: false, "The command '" + cmdName + "' does not exist.\nYou can use the 'help' to get a list of all possible commands.\n");
 	}

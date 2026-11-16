@@ -1,8 +1,6 @@
-using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -59,6 +57,11 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		public static readonly StringName InitializeRelics = "InitializeRelics";
 
 		/// <summary>
+		/// Cached name for the 'RefreshNavigation' method.
+		/// </summary>
+		public static readonly StringName RefreshNavigation = "RefreshNavigation";
+
+		/// <summary>
 		/// Cached name for the 'SpawnEmptyChestVfx' method.
 		/// </summary>
 		public static readonly StringName SpawnEmptyChestVfx = "SpawnEmptyChestVfx";
@@ -95,14 +98,14 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	public new class PropertyName : Control.PropertyName
 	{
 		/// <summary>
-		/// Cached name for the 'SingleplayerRelicHolder' property.
-		/// </summary>
-		public static readonly StringName SingleplayerRelicHolder = "SingleplayerRelicHolder";
-
-		/// <summary>
 		/// Cached name for the 'DefaultFocusedControl' property.
 		/// </summary>
 		public static readonly StringName DefaultFocusedControl = "DefaultFocusedControl";
+
+		/// <summary>
+		/// Cached name for the '_relicContainer' field.
+		/// </summary>
+		public static readonly StringName _relicContainer = "_relicContainer";
 
 		/// <summary>
 		/// Cached name for the '_fightBackstop' field.
@@ -142,7 +145,11 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	{
 	}
 
+	private const int _maxRelics = 6;
+
 	private const ulong _noSelectionTimeMsec = 200uL;
+
+	private Control _relicContainer;
 
 	private Control _fightBackstop;
 
@@ -154,11 +161,9 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 
 	private CancellationTokenSource _cts = new CancellationTokenSource();
 
-	private readonly List<NTreasureRoomRelicHolder> _multiplayerHolders = new List<NTreasureRoomRelicHolder>();
+	private readonly List<Control> _holderLayouts = new List<Control>();
 
 	private List<NTreasureRoomRelicHolder> _holdersInUse = new List<NTreasureRoomRelicHolder>();
-
-	private readonly TaskCompletionSource _relicPickingBeganTaskCompletionSource = new TaskCompletionSource();
 
 	private readonly TaskCompletionSource _relicPickingCompleteTaskCompletionSource = new TaskCompletionSource();
 
@@ -168,7 +173,7 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 
 	private bool _isEmptyChest;
 
-	public NTreasureRoomRelicHolder SingleplayerRelicHolder { get; private set; }
+	public IReadOnlyList<NTreasureRoomRelicHolder> HoldersInUse => _holdersInUse;
 
 	public Control? DefaultFocusedControl
 	{
@@ -186,15 +191,8 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	{
 		_fightBackstop = GetNode<Control>("%FightBackstop");
 		_hands = GetNode<NHandImageCollection>("%HandsContainer");
-		Control node = GetNode<Control>("Container");
-		SingleplayerRelicHolder = node.GetNode<NTreasureRoomRelicHolder>("%SingleplayerRelicHolder");
-		foreach (NTreasureRoomRelicHolder item in node.GetChildren().OfType<NTreasureRoomRelicHolder>())
-		{
-			if (item != SingleplayerRelicHolder)
-			{
-				_multiplayerHolders.Add(item);
-			}
-		}
+		_relicContainer = GetNode<Control>("Container");
+		_holderLayouts.AddRange(_relicContainer.GetChildren().OfType<Control>().ToList());
 		Control fightBackstop = _fightBackstop;
 		Color modulate = _fightBackstop.Modulate;
 		modulate.A = 0f;
@@ -234,82 +232,56 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		if (currentRelics == null || currentRelics.Count == 0)
 		{
 			_isEmptyChest = true;
-			SingleplayerRelicHolder.Visible = false;
-			foreach (NTreasureRoomRelicHolder multiplayerHolder in _multiplayerHolders)
+			foreach (Control holderLayout in _holderLayouts)
 			{
-				multiplayerHolder.Visible = false;
+				holderLayout.Visible = false;
 			}
 			SpawnEmptyChestVfx();
 			return;
 		}
-		if (currentRelics.Count == 1)
+		for (int i = 0; i < _holderLayouts.Count; i++)
 		{
-			SingleplayerRelicHolder.Initialize(currentRelics[0], _runState);
-			SingleplayerRelicHolder.Visible = true;
-			SingleplayerRelicHolder.Index = 0;
-			SingleplayerRelicHolder.Connect(NClickableControl.SignalName.Released, Callable.From<NTreasureRoomRelicHolder>(delegate
+			if (i == currentRelics.Count - 1)
 			{
-				PickRelic(SingleplayerRelicHolder);
-			}));
-			int num = 1;
-			List<NTreasureRoomRelicHolder> list = new List<NTreasureRoomRelicHolder>(num);
-			CollectionsMarshal.SetCount(list, num);
-			Span<NTreasureRoomRelicHolder> span = CollectionsMarshal.AsSpan(list);
-			int index = 0;
-			span[index] = SingleplayerRelicHolder;
-			_holdersInUse = list;
-			{
-				foreach (NTreasureRoomRelicHolder multiplayerHolder2 in _multiplayerHolders)
-				{
-					multiplayerHolder2.Visible = false;
-				}
-				return;
-			}
-		}
-		SingleplayerRelicHolder.Visible = false;
-		for (int num2 = 0; num2 < _multiplayerHolders.Count; num2++)
-		{
-			NTreasureRoomRelicHolder holder = _multiplayerHolders[num2];
-			if (num2 < currentRelics.Count)
-			{
-				holder.Visible = true;
-				holder.Relic.Model = currentRelics[num2];
-				holder.Initialize(currentRelics[num2], _runState);
+				_holderLayouts[i].Visible = true;
+				_holdersInUse = _holderLayouts[i].GetChildren().OfType<NTreasureRoomRelicHolder>().ToList();
 			}
 			else
 			{
-				holder.Visible = false;
+				_holderLayouts[i].Visible = false;
 			}
-			holder.Index = num2;
-			holder.Connect(NClickableControl.SignalName.Released, Callable.From<NTreasureRoomRelicHolder>(delegate
-			{
-				PickRelic(holder);
-			}));
-			_holdersInUse.Add(holder);
-			holder.VoteContainer.RefreshPlayerVotes();
 		}
-		for (int num3 = 0; num3 < _holdersInUse.Count; num3++)
+		for (int j = 0; j < _holdersInUse.Count; j++)
 		{
-			_holdersInUse[num3].SetFocusMode(FocusModeEnum.All);
-			_holdersInUse[num3].FocusNeighborTop = _holdersInUse[num3].GetPath();
-			_holdersInUse[num3].FocusNeighborBottom = _holdersInUse[num3].GetPath();
-			NTreasureRoomRelicHolder nTreasureRoomRelicHolder = _holdersInUse[num3];
+			NTreasureRoomRelicHolder nTreasureRoomRelicHolder = _holdersInUse[j];
+			nTreasureRoomRelicHolder.Initialize(currentRelics[j], _runState);
+			nTreasureRoomRelicHolder.Index = j;
+			nTreasureRoomRelicHolder.Connect(NClickableControl.SignalName.Released, Callable.From<NTreasureRoomRelicHolder>(PickRelic));
+			nTreasureRoomRelicHolder.VoteContainer.RefreshPlayerVotes();
+		}
+		RefreshNavigation();
+	}
+
+	private void RefreshNavigation()
+	{
+		for (int i = 0; i < _holdersInUse.Count; i++)
+		{
+			_holdersInUse[i].SetFocusMode(FocusModeEnum.All);
+			_holdersInUse[i].FocusNeighborTop = _holdersInUse[i].GetPath();
+			_holdersInUse[i].FocusNeighborBottom = _holdersInUse[i].GetPath();
+			NTreasureRoomRelicHolder nTreasureRoomRelicHolder = _holdersInUse[i];
 			NodePath path;
-			if (num3 <= 0)
+			if (i <= 0)
 			{
 				List<NTreasureRoomRelicHolder> holdersInUse = _holdersInUse;
 				path = holdersInUse[holdersInUse.Count - 1].GetPath();
 			}
 			else
 			{
-				path = _holdersInUse[num3 - 1].GetPath();
+				path = _holdersInUse[i - 1].GetPath();
 			}
 			nTreasureRoomRelicHolder.FocusNeighborLeft = path;
-			_holdersInUse[num3].FocusNeighborRight = ((num3 < _holdersInUse.Count - 1) ? _holdersInUse[num3 + 1].GetPath() : _holdersInUse[0].GetPath());
-		}
-		if (currentRelics.Count == 2)
-		{
-			_multiplayerHolders[1].Position = _multiplayerHolders[3].Position;
+			_holdersInUse[i].FocusNeighborRight = ((i < _holdersInUse.Count - 1) ? _holdersInUse[i + 1].GetPath() : _holdersInUse[0].GetPath());
 		}
 	}
 
@@ -333,32 +305,20 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	{
 		if (isEnabled)
 		{
-			SingleplayerRelicHolder.Enable();
+			foreach (NTreasureRoomRelicHolder item in _holdersInUse)
 			{
-				foreach (NTreasureRoomRelicHolder multiplayerHolder in _multiplayerHolders)
-				{
-					multiplayerHolder.Enable();
-				}
-				return;
+				item.Enable();
 			}
+			return;
 		}
-		SingleplayerRelicHolder.Disable();
-		foreach (NTreasureRoomRelicHolder multiplayerHolder2 in _multiplayerHolders)
+		foreach (NTreasureRoomRelicHolder item2 in _holdersInUse)
 		{
-			multiplayerHolder2.Disable();
+			item2.Disable();
 		}
 	}
 
 	/// <summary>
-	/// Await this to know when relic picking begins.
-	/// </summary>
-	public Task RelicPickingBegan()
-	{
-		return _relicPickingBeganTaskCompletionSource.Task;
-	}
-
-	/// <summary>
-	/// Await this to know when to hide the screen.
+	/// Await this to know when relic picking finishes.
 	/// </summary>
 	public Task RelicPickingFinished()
 	{
@@ -368,14 +328,12 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	/// <summary>
 	/// Animates in the relic collection.
 	/// </summary>
-	/// <param name="chestVisual">Chest visual to fade out.</param>
-	public void AnimIn(Node chestVisual)
+	public void AnimIn()
 	{
 		base.Visible = true;
 		base.Modulate = Colors.Transparent;
 		Tween tween = CreateTween().SetParallel();
 		tween.TweenProperty(this, "modulate", Colors.White, 0.4);
-		tween.TweenProperty(chestVisual, "modulate", StsColors.halfTransparentWhite, 0.4);
 		if (_isEmptyChest)
 		{
 			LocalContext.GetMe(_runState)?.Relics.OfType<SilverCrucible>().FirstOrDefault()?.Flash();
@@ -408,13 +366,11 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	/// <summary>
 	/// Animates out the relic collection, after relic picking is done.
 	/// </summary>
-	/// <param name="chestVisual">Chest visual to fade back in.</param>
-	public void AnimOut(Node chestVisual)
+	public void AnimOut()
 	{
 		base.Modulate = Colors.White;
 		Tween tween = CreateTween().Parallel();
 		tween.TweenProperty(this, "modulate", StsColors.transparentWhite, 0.3);
-		tween.TweenProperty(chestVisual, "modulate", Colors.White, 0.3);
 		tween.TweenCallback(Callable.From(() => base.Visible = false));
 		NRun.Instance.ScreenStateTracker.SetIsInSharedRelicPickingScreen(isInSharedRelicPicking: false);
 	}
@@ -427,18 +383,15 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		}
 	}
 
-	private void OnRelicsAwarded(List<RelicPickingResult> results)
+	private void OnRelicsAwarded(List<RelicPickingResult> results, bool isFinished)
 	{
-		TaskHelper.RunSafely(AnimateRelicAwards(results));
+		TaskHelper.RunSafely(AnimateRelicAwards(results, isFinished));
 	}
 
-	private async Task AnimateRelicAwards(List<RelicPickingResult> results)
+	private async Task AnimateRelicAwards(List<RelicPickingResult> results, bool isFinished)
 	{
-		foreach (NTreasureRoomRelicHolder item in _holdersInUse)
-		{
-			item.SetFocusMode(FocusModeEnum.None);
-		}
-		_relicPickingBeganTaskCompletionSource.SetResult();
+		CancellationToken ct = _cts.Token;
+		SetSelectionEnabled(isEnabled: false);
 		foreach (Player player in _runState.Players)
 		{
 			TreasureRoomRelicSynchronizer.PlayerVote playerVote = RunManager.Instance.TreasureRoomRelicSynchronizer.GetPlayerVote(player);
@@ -453,28 +406,48 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		results.Sort((RelicPickingResult r1, RelicPickingResult r2) => r1.type.CompareTo(r2.type));
 		foreach (RelicPickingResult result in results)
 		{
-			NTreasureRoomRelicHolder holder = _holdersInUse.First((NTreasureRoomRelicHolder h) => h.Relic.Model == result.relic);
+			NTreasureRoomRelicHolder holder = _holdersInUse[result.relicIndex];
 			holder.AnimateAwayVotes();
-			if (relicPickingResultType.HasValue && result.type != relicPickingResultType)
+			if (relicPickingResultType.HasValue && result.type != relicPickingResultType && result.type != RelicPickingResultType.Skipped)
 			{
-				await Cmd.Wait(0.5f, _cts.Token);
+				await Cmd.Wait(0.5f, ct);
 			}
 			if (result.type == RelicPickingResultType.FoughtOver)
 			{
-				holder.ZIndex = 1;
+				Node parent = _fightBackstop.GetParent();
+				holder.Reparent(parent);
+				parent.MoveChildSafely(holder, _fightBackstop.GetIndex() + 1);
 				_fightBackstop.Visible = true;
 				Tween tween = CreateTween();
 				tween.TweenProperty(holder, "global_position", (_fightBackstop.Size - holder.Size) * 0.5f, 0.25).SetTrans(Tween.TransitionType.Back).SetEase(Tween.EaseType.In);
 				tween.TweenProperty(_fightBackstop, "modulate:a", 1f, 0.25);
 				_hands.BeforeFightStarted(result.fight.playersInvolved);
-				await tween.AwaitFinished(_cts.Token);
-				await Cmd.Wait(1f, _cts.Token);
+				if (await tween.AwaitFinished(this, ct) != TweenOutcome.Finished)
+				{
+					return;
+				}
+				await Cmd.Wait(1f, ct);
 				await _hands.DoFight(result, holder);
+				if (HasBeenRemoved())
+				{
+					return;
+				}
 				tween = CreateTween();
 				tween.TweenProperty(_fightBackstop, "modulate:a", 0f, 0.25);
-				await tween.AwaitFinished(_cts.Token);
+				if (await tween.AwaitFinished(this, ct) != TweenOutcome.Finished)
+				{
+					return;
+				}
 				_fightBackstop.Visible = false;
-				holder.ZIndex = 0;
+			}
+			else if (result.type == RelicPickingResultType.Skipped)
+			{
+				if (_runState.Players.Count > 1)
+				{
+					Tween tween2 = CreateTween().Parallel();
+					tween2.TweenProperty(holder, "modulate", StsColors.transparentWhite, 0.3);
+					tasksToWait.Add(tween2.AwaitFinished(this));
+				}
 			}
 			else if (result.type != RelicPickingResultType.Skipped)
 			{
@@ -482,7 +455,7 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 				if (hand != null)
 				{
 					tasksToWait.Add(TaskHelper.RunSafely(hand.GrabRelic(holder)));
-					await Cmd.Wait(0.25f, _cts.Token);
+					await Cmd.Wait(0.25f, ct);
 				}
 			}
 			relicPickingResultType = result.type;
@@ -490,13 +463,16 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		await Task.WhenAll(tasksToWait);
 		if (tasksToWait.Count == 0 && _runState.Players.Count > 1)
 		{
-			await Cmd.Wait(0.7f, _cts.Token);
+			await Cmd.Wait(0.7f, ct);
+		}
+		if (HasBeenRemoved())
+		{
+			return;
 		}
 		foreach (RelicPickingResult result2 in results)
 		{
-			NTreasureRoomRelicHolder nTreasureRoomRelicHolder = _holdersInUse.First((NTreasureRoomRelicHolder h) => h.Relic.Model == result2.relic);
+			NTreasureRoomRelicHolder nTreasureRoomRelicHolder = _holdersInUse[result2.relicIndex];
 			RelicModel relic = result2.relic.ToMutable();
-			nTreasureRoomRelicHolder.Disable();
 			if (result2.type != RelicPickingResultType.Skipped)
 			{
 				TaskHelper.RunSafely(RelicCmd.Obtain(relic, result2.player));
@@ -517,7 +493,30 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 				}
 			}
 		}
-		_relicPickingCompleteTaskCompletionSource.SetResult();
+		if (isFinished)
+		{
+			_relicPickingCompleteTaskCompletionSource.SetResult();
+			return;
+		}
+		foreach (RelicPickingResult result3 in results)
+		{
+			_holdersInUse.RemoveAt(result3.relicIndex);
+		}
+		for (int num = 0; num < _holdersInUse.Count; num++)
+		{
+			_holdersInUse[num].Index = num;
+		}
+		RefreshNavigation();
+		DefaultFocusedControl?.TryGrabFocus();
+		SetSelectionEnabled(isEnabled: true);
+		bool HasBeenRemoved()
+		{
+			if (this.IsValid())
+			{
+				return !IsInsideTree();
+			}
+			return true;
+		}
 	}
 
 	private void RefreshVotes()
@@ -536,24 +535,19 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	internal static List<MethodInfo> GetGodotMethodList()
 	{
-		List<MethodInfo> list = new List<MethodInfo>(10);
+		List<MethodInfo> list = new List<MethodInfo>(11);
 		list.Add(new MethodInfo(MethodName._Ready, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._EnterTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName._ExitTree, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.InitializeRelics, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.RefreshNavigation, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SpawnEmptyChestVfx, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.SetSelectionEnabled, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Bool, "isEnabled", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false)
 		}, null));
-		list.Add(new MethodInfo(MethodName.AnimIn, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Object, "chestVisual", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node"), exported: false)
-		}, null));
-		list.Add(new MethodInfo(MethodName.AnimOut, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
-		{
-			new PropertyInfo(Variant.Type.Object, "chestVisual", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Node"), exported: false)
-		}, null));
+		list.Add(new MethodInfo(MethodName.AnimIn, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
+		list.Add(new MethodInfo(MethodName.AnimOut, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, null, null));
 		list.Add(new MethodInfo(MethodName.PickRelic, new PropertyInfo(Variant.Type.Nil, "", PropertyHint.None, "", PropertyUsageFlags.Default, exported: false), MethodFlags.Normal, new List<PropertyInfo>
 		{
 			new PropertyInfo(Variant.Type.Object, "holder", PropertyHint.None, "", PropertyUsageFlags.Default, new StringName("Control"), exported: false)
@@ -590,6 +584,12 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 			ret = default(godot_variant);
 			return true;
 		}
+		if (method == MethodName.RefreshNavigation && args.Count == 0)
+		{
+			RefreshNavigation();
+			ret = default(godot_variant);
+			return true;
+		}
 		if (method == MethodName.SpawnEmptyChestVfx && args.Count == 0)
 		{
 			SpawnEmptyChestVfx();
@@ -602,15 +602,15 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.AnimIn && args.Count == 1)
+		if (method == MethodName.AnimIn && args.Count == 0)
 		{
-			AnimIn(VariantUtils.ConvertTo<Node>(in args[0]));
+			AnimIn();
 			ret = default(godot_variant);
 			return true;
 		}
-		if (method == MethodName.AnimOut && args.Count == 1)
+		if (method == MethodName.AnimOut && args.Count == 0)
 		{
-			AnimOut(VariantUtils.ConvertTo<Node>(in args[0]));
+			AnimOut();
 			ret = default(godot_variant);
 			return true;
 		}
@@ -649,6 +649,10 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 		{
 			return true;
 		}
+		if (method == MethodName.RefreshNavigation)
+		{
+			return true;
+		}
 		if (method == MethodName.SpawnEmptyChestVfx)
 		{
 			return true;
@@ -680,9 +684,9 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool SetGodotClassPropertyValue(in godot_string_name name, in godot_variant value)
 	{
-		if (name == PropertyName.SingleplayerRelicHolder)
+		if (name == PropertyName._relicContainer)
 		{
-			SingleplayerRelicHolder = VariantUtils.ConvertTo<NTreasureRoomRelicHolder>(in value);
+			_relicContainer = VariantUtils.ConvertTo<Control>(in value);
 			return true;
 		}
 		if (name == PropertyName._fightBackstop)
@@ -722,14 +726,14 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	[EditorBrowsable(EditorBrowsableState.Never)]
 	protected override bool GetGodotClassPropertyValue(in godot_string_name name, out godot_variant value)
 	{
-		if (name == PropertyName.SingleplayerRelicHolder)
-		{
-			value = VariantUtils.CreateFrom<NTreasureRoomRelicHolder>(SingleplayerRelicHolder);
-			return true;
-		}
 		if (name == PropertyName.DefaultFocusedControl)
 		{
 			value = VariantUtils.CreateFrom<Control>(DefaultFocusedControl);
+			return true;
+		}
+		if (name == PropertyName._relicContainer)
+		{
+			value = VariantUtils.CreateFrom(in _relicContainer);
 			return true;
 		}
 		if (name == PropertyName._fightBackstop)
@@ -774,13 +778,13 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	internal static List<PropertyInfo> GetGodotPropertyList()
 	{
 		List<PropertyInfo> list = new List<PropertyInfo>();
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._relicContainer, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._fightBackstop, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._fightLabel, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._emptyVfxTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._hands, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Int, PropertyName._openedTicks, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName._isEmptyChest, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
-		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.SingleplayerRelicHolder, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName.DefaultFocusedControl, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
 	}
@@ -790,7 +794,7 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	protected override void SaveGodotObjectData(GodotSerializationInfo info)
 	{
 		base.SaveGodotObjectData(info);
-		info.AddProperty(PropertyName.SingleplayerRelicHolder, Variant.From<NTreasureRoomRelicHolder>(SingleplayerRelicHolder));
+		info.AddProperty(PropertyName._relicContainer, Variant.From(in _relicContainer));
 		info.AddProperty(PropertyName._fightBackstop, Variant.From(in _fightBackstop));
 		info.AddProperty(PropertyName._fightLabel, Variant.From(in _fightLabel));
 		info.AddProperty(PropertyName._emptyVfxTween, Variant.From(in _emptyVfxTween));
@@ -804,9 +808,9 @@ public class NTreasureRoomRelicCollection : Control, IScreenContext
 	protected override void RestoreGodotObjectData(GodotSerializationInfo info)
 	{
 		base.RestoreGodotObjectData(info);
-		if (info.TryGetProperty(PropertyName.SingleplayerRelicHolder, out var value))
+		if (info.TryGetProperty(PropertyName._relicContainer, out var value))
 		{
-			SingleplayerRelicHolder = value.As<NTreasureRoomRelicHolder>();
+			_relicContainer = value.As<Control>();
 		}
 		if (info.TryGetProperty(PropertyName._fightBackstop, out var value2))
 		{

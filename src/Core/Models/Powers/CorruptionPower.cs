@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.HoverTips;
@@ -24,16 +25,23 @@ public sealed class CorruptionPower : PowerModel
 		return true;
 	}
 
-	public override (PileType, CardPilePosition) ModifyCardPlayResultPileTypeAndPosition(CardModel card, bool isAutoPlay, ResourceInfo resources, PileType pileType, CardPilePosition position)
+	public override CardLocation ModifyCardPlayResultLocation(CardModel card, bool isAutoPlay, ResourceInfo resources, CardLocation location)
 	{
 		if (card.Owner.Creature != base.Owner)
 		{
-			return (pileType, position);
+			return location;
 		}
 		if (card.Type != CardType.Skill)
 		{
-			return (pileType, position);
+			return location;
 		}
-		return (PileType.Exhaust, position);
+		location.pileType = PileType.Exhaust;
+		return location;
+	}
+
+	public override Task AfterModifyingCardPlayResultLocation(CardModel card, CardLocation cardLocation)
+	{
+		Flash();
+		return Task.CompletedTask;
 	}
 }

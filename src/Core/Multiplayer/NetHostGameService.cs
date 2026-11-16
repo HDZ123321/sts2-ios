@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Multiplayer;
 using MegaCrit.Sts2.Core.Logging;
+using MegaCrit.Sts2.Core.Multiplayer.Connection;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Multiplayer.Quality;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
@@ -10,14 +11,21 @@ using MegaCrit.Sts2.Core.Multiplayer.Transport;
 using MegaCrit.Sts2.Core.Multiplayer.Transport.ENet;
 using MegaCrit.Sts2.Core.Multiplayer.Transport.Steam;
 using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Multiplayer;
 
-public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameService, INetGameService
+public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameService, INetGameService, IHandshakeHandler
 {
 	private NetHost? _netHost;
 
-	private readonly NetMessageBus _messageBus = new NetMessageBus();
+	private readonly PacketReader _reader = new PacketReader();
+
+	private readonly PacketWriter _writer = new PacketWriter();
+
+	private readonly NetMessageBus _messageBus;
+
+	private readonly HandshakeManager _handshakeManager;
 
 	private readonly NetQualityTracker _qualityTracker;
 
@@ -25,13 +33,15 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 
 	public bool IsConnected => _netHost?.IsConnected ?? false;
 
-	public IReadOnlyList<NetClientData> ConnectedPeers => _connectedPeers;
-
 	public ulong NetId => (_netHost ?? throw new InvalidOperationException("Tried to get NetId while not connected!")).NetId;
 
 	public bool IsGameLoading => _qualityTracker.IsGameLoading;
 
+	public IReadOnlyList<NetClientData> ConnectedPeers => _connectedPeers;
+
 	public PlatformType Platform { get; private set; }
+
+	public PeerVersionInfo LocalVersion { get; }
 
 	public NetHost? NetHost => _netHost;
 
@@ -43,8 +53,13 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 
 	public event Action<ulong, NetErrorInfo>? ClientDisconnected;
 
-	public NetHostGameService()
+	public event Action<ulong, NetErrorInfo>? ClientConnectionFailed;
+
+	public NetHostGameService(PeerVersionInfo versionInfo)
 	{
+		LocalVersion = versionInfo;
+		_messageBus = new NetMessageBus(_reader, _writer);
+		_handshakeManager = new HandshakeManager(this, versionInfo, _writer);
 		_qualityTracker = new NetQualityTracker(this);
 	}
 
@@ -58,6 +73,13 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 		SteamHost steamHost = (SteamHost)(_netHost = new SteamHost(this));
 		Platform = PlatformType.Steam;
 		return steamHost.StartHost(maxClients);
+	}
+
+	public Task<NetErrorInfo?> StartTestHost(AbstractTestNetHost host, int maxClients)
+	{
+		_netHost = host;
+		Platform = PlatformType.None;
+		return host.StartHost(maxClients);
 	}
 
 	public void Update()
@@ -119,17 +141,64 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 
 	public void OnPacketReceived(ulong senderId, byte[] packetBytes, NetTransferMode mode, int channel)
 	{
-		if (!_messageBus.TryDeserializeMessage(packetBytes, out INetMessage message, out ulong? overrideSenderId))
+		if (_handshakeManager.IsHandshaking(senderId))
 		{
-			Log.Error($"Tried to deserialize packet of size {packetBytes.Length} as message, but we were not able to!");
+			_reader.Reset(packetBytes);
+			_handshakeManager.HandshakeMessageReceived(senderId, _reader);
 			return;
 		}
-		if (message.ShouldBroadcast)
+		int num = _connectedPeers.FindIndex((NetClientData p) => p.peerId == senderId);
+		INetMessage message;
+		ulong? overrideSenderId;
+		if (num < 0)
 		{
-			BroadcastMessage(message, senderId, channel, overrideSenderId.Value);
+			Log.Warn($"Received {packetBytes.Length} bytes from unknown peer {senderId}!");
 		}
-		senderId = overrideSenderId ?? senderId;
-		_messageBus.SendMessageToAllHandlers(message, senderId);
+		else if (_messageBus.TryDeserializeMessage(packetBytes, out message, out overrideSenderId))
+		{
+			if (message.ShouldBroadcast)
+			{
+				BroadcastMessage(message, senderId, channel, overrideSenderId.Value);
+			}
+			senderId = overrideSenderId.GetValueOrDefault(senderId);
+			_messageBus.SendMessageToAllHandlers(message, senderId);
+		}
+	}
+
+	public void HandshakeSucceeded(ulong senderId, PeerVersionInfo versionInfo)
+	{
+		_connectedPeers.Add(new NetClientData
+		{
+			peerId = senderId,
+			readyForBroadcasting = false,
+			versionInfo = versionInfo
+		});
+		_qualityTracker.OnPeerConnected(senderId);
+		this.ClientConnected?.Invoke(senderId);
+	}
+
+	public void HandshakeFailed(ulong senderId, NetErrorInfo info)
+	{
+		this.ClientConnectionFailed?.Invoke(senderId, info);
+		DisconnectClient(senderId, info.GetReason(), now: false, DebugReasonForPeer(info));
+	}
+
+	/// <summary>
+	/// Text sent alongside a disconnection, which the peer renders in a BBCode popup. Plain ASCII, under 100
+	/// characters, no square brackets.
+	/// </summary>
+	private string? DebugReasonForPeer(NetErrorInfo info)
+	{
+		if (info.GetReason() != NetError.VersionMismatch)
+		{
+			return null;
+		}
+		ConnectionFailureExtraInfo connectionExtraInfo = info.ConnectionExtraInfo;
+		if (connectionExtraInfo != null && connectionExtraInfo.remoteInfo.version == connectionExtraInfo.localInfo.version)
+		{
+			return null;
+		}
+		return "Different game versions. They are on " + LocalVersion.version + ". Update the game to play together.";
 	}
 
 	private void BroadcastMessage<T>(T message, ulong excludePeerId, int channel, ulong overrideSenderId) where T : INetMessage
@@ -162,9 +231,19 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 		}
 	}
 
-	public void DisconnectClient(ulong peerId, NetError reason, bool now = false)
+	public PeerVersionInfo? GetVersionInfoForPeer(ulong peerId)
 	{
-		_netHost.DisconnectClient(peerId, reason, now);
+		int num = _connectedPeers.FindIndex((NetClientData p) => p.peerId == peerId);
+		if (num < 0)
+		{
+			return null;
+		}
+		return _connectedPeers[num].versionInfo;
+	}
+
+	public void DisconnectClient(ulong peerId, NetError reason, bool now = false, string? debugReason = null)
+	{
+		_netHost.DisconnectClient(peerId, reason, now, debugReason);
 	}
 
 	public void Disconnect(NetError reason, bool now = false)
@@ -182,22 +261,29 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 		this.Disconnected?.Invoke(info);
 	}
 
+	public void SendHandshakeMessage(ulong peerId, PacketWriter writer)
+	{
+		_netHost.SendMessageToClient(peerId, _writer.Buffer, _writer.BytePosition, NetTransferMode.Reliable, NetTransferMode.Reliable.ToChannelId());
+	}
+
 	public void OnPeerConnected(ulong peerId)
 	{
-		_connectedPeers.Add(new NetClientData
-		{
-			peerId = peerId,
-			readyForBroadcasting = false
-		});
-		_qualityTracker.OnPeerConnected(peerId);
-		this.ClientConnected?.Invoke(peerId);
+		_handshakeManager.BeginHandshakeFor(peerId);
 	}
 
 	public void OnPeerDisconnected(ulong peerId, NetErrorInfo info)
 	{
-		_connectedPeers.RemoveAll((NetClientData p) => p.peerId == peerId);
+		int num = _connectedPeers.RemoveAll((NetClientData p) => p.peerId == peerId);
 		_qualityTracker.OnPeerDisconnected(peerId);
-		this.ClientDisconnected?.Invoke(peerId, info);
+		if (num > 0)
+		{
+			this.ClientDisconnected?.Invoke(peerId, info);
+		}
+		if (_handshakeManager.IsHandshaking(peerId))
+		{
+			_handshakeManager.AbortHandshake(peerId);
+			this.ClientConnectionFailed?.Invoke(peerId, info);
+		}
 	}
 
 	public ConnectionStats? GetStatsForPeer(ulong peerId)
@@ -217,6 +303,6 @@ public class NetHostGameService : INetHostHandler, INetHandler, INetHostGameServ
 
 	public string? GetRawLobbyIdentifier()
 	{
-		return _netHost?.GetRawLobbyIdentifier();
+		return NetHost?.GetRawLobbyIdentifier();
 	}
 }

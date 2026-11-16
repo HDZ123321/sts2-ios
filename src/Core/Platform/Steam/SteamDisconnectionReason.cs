@@ -4,7 +4,7 @@ public enum SteamDisconnectionReason
 {
 	None = 0,
 	AppGeneric = 1000,
-	AppInternalError = 1017,
+	AppInternalError = 1202,
 	AppException = 2000,
 	LocalMin = 3000,
 	RunningInOfflineMode = 3001,

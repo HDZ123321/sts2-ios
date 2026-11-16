@@ -1,6 +1,8 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Globalization;
+using System.IO.Hashing;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.RegularExpressions.Generated;
 using MegaCrit.Sts2.Core.Localization;
@@ -10,6 +12,9 @@ namespace MegaCrit.Sts2.Core.Helpers;
 
 public static class StringHelper
 {
+	[ThreadStatic]
+	private static byte[]? _stringHashCache;
+
 	/// <remarks>
 	/// Pattern:<br />
 	/// <code>([A-Za-z0-9]|\\G(?!^))([A-Z])</code><br />
@@ -124,12 +129,28 @@ public static class StringHelper
 	///
 	/// This is NOT guaranteed to be unique or cryptographically safe or anything like that. Its only guarantee is
 	/// to be deterministic.
-	///
-	/// Algorithm lifted from https://andrewlock.net/why-is-string-gethashcode-different-each-time-i-run-my-program-in-net-core/
 	/// </summary>
 	/// <param name="str">String to hash.</param>
 	/// <returns>Hash value.</returns>
-	public static int GetDeterministicHashCode(string str)
+	public static ulong GetDeterministicHashCode(string str)
+	{
+		if (_stringHashCache == null)
+		{
+			_stringHashCache = new byte[1024];
+		}
+		int byteCount = Encoding.UTF8.GetByteCount(str);
+		if (byteCount > _stringHashCache.Length)
+		{
+			_stringHashCache = new byte[(int)Math.Round((double)byteCount * 1.5)];
+		}
+		byteCount = Encoding.UTF8.GetBytes(str, _stringHashCache);
+		return XxHash64.HashToUInt64(_stringHashCache.AsSpan().Slice(0, byteCount), 0L);
+	}
+
+	/// <summary>
+	/// This should not be used for any new code. It is for backwards compatibility only.
+	/// </summary>
+	public static int GetDeterministicHashCodeOld(string str)
 	{
 		int num = 352654597;
 		int num2 = num;

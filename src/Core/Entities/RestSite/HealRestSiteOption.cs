@@ -38,10 +38,7 @@ public sealed class HealRestSiteOption : RestSiteOption
 		get
 		{
 			LocString description = base.Description;
-			HealVar dynamicVar = new HealVar(GetBaseHealAmount(base.Owner.Creature))
-			{
-				PreviewValue = GetHealAmount(base.Owner)
-			};
+			HealVar dynamicVar = new HealVar(GetBaseHealAmount(base.Owner.Creature));
 			description.Add("Character", base.Owner.Character.Id.Entry);
 			description.Add(dynamicVar);
 			IReadOnlyList<LocString> source = Hook.ModifyExtraRestSiteHealText(base.Owner.RunState, base.Owner, Array.Empty<LocString>());

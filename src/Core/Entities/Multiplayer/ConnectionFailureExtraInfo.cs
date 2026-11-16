@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using MegaCrit.Sts2.Core.Multiplayer;
 
 namespace MegaCrit.Sts2.Core.Entities.Multiplayer;
 
@@ -7,15 +9,27 @@ namespace MegaCrit.Sts2.Core.Entities.Multiplayer;
 /// </summary>
 public record ConnectionFailureExtraInfo
 {
-	/// <summary>
-	/// The mods that the host has that we are missing on our end.
-	/// Only set on ConnectionFailureReason.ModMismatch.
-	/// </summary>
-	public List<string>? missingModsOnLocal;
+	public PeerVersionInfo localInfo;
 
-	/// <summary>
-	/// The mods that we have that are missing on the host's end.
-	/// Only set on ConnectionFailureReason.ModMismatch.
-	/// </summary>
-	public List<string>? missingModsOnHost;
+	public PeerVersionInfo remoteInfo;
+
+	public bool localIsHost;
+
+	public List<string> GetMissingModsOnLocal(bool nonGameplay)
+	{
+		if (!nonGameplay)
+		{
+			return remoteInfo.gameplayAffectingMods?.Except(localInfo.gameplayAffectingMods ?? new List<string>()).ToList() ?? new List<string>();
+		}
+		return remoteInfo.otherMods?.Except(localInfo.otherMods ?? new List<string>()).ToList() ?? new List<string>();
+	}
+
+	public List<string> GetMissingModsOnRemote(bool nonGameplay)
+	{
+		if (!nonGameplay)
+		{
+			return localInfo.gameplayAffectingMods?.Except(remoteInfo.gameplayAffectingMods ?? new List<string>()).ToList() ?? new List<string>();
+		}
+		return localInfo.otherMods?.Except(remoteInfo.otherMods ?? new List<string>()).ToList() ?? new List<string>();
+	}
 }

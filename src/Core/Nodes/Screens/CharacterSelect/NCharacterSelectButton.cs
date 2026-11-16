@@ -191,6 +191,11 @@ public class NCharacterSelectButton : NButton
 		public static readonly StringName _lock = "_lock";
 
 		/// <summary>
+		/// Cached name for the '_rotating' field.
+		/// </summary>
+		public static readonly StringName _rotating = "_rotating";
+
+		/// <summary>
 		/// Cached name for the '_outlineLocal' field.
 		/// </summary>
 		public static readonly StringName _outlineLocal = "_outlineLocal";
@@ -249,6 +254,11 @@ public class NCharacterSelectButton : NButton
 		/// Cached name for the '_hsvTween' field.
 		/// </summary>
 		public static readonly StringName _hsvTween = "_hsvTween";
+
+		/// <summary>
+		/// Cached name for the '_rotatingTween' field.
+		/// </summary>
+		public static readonly StringName _rotatingTween = "_rotatingTween";
 	}
 
 	/// <summary>
@@ -258,11 +268,11 @@ public class NCharacterSelectButton : NButton
 	{
 	}
 
-	private static readonly StringName _v = new StringName("v");
+	private static readonly StringName _h = new StringName("h");
 
 	private static readonly StringName _s = new StringName("s");
 
-	private static readonly StringName _h = new StringName("h");
+	private static readonly StringName _v = new StringName("v");
 
 	private static readonly string _playerIconScenePath = SceneHelper.GetScenePath("screens/char_select/char_select_player_icon");
 
@@ -273,6 +283,8 @@ public class NCharacterSelectButton : NButton
 	private TextureRect _iconAdd;
 
 	private TextureRect _lock;
+
+	private TextureRect _rotating;
 
 	private Control _outlineLocal;
 
@@ -324,6 +336,8 @@ public class NCharacterSelectButton : NButton
 
 	private const float _notSelectedValue = 0.4f;
 
+	private Tween? _rotatingTween;
+
 	public static IEnumerable<string> AssetPaths => new global::_003C_003Ez__ReadOnlyArray<string>(new string[2] { _playerIconScenePath, _unlockedIconPath });
 
 	public bool IsRandom { get; private set; }
@@ -342,11 +356,13 @@ public class NCharacterSelectButton : NButton
 		_icon = GetNode<TextureRect>("%Icon");
 		_iconAdd = GetNode<TextureRect>("%IconAdd");
 		_lock = GetNode<TextureRect>("%Lock");
+		_rotating = GetNode<TextureRect>("%Rotating");
 		_outlineLocal = GetNode<Control>("%OutlineLocal");
 		_outlineRemote = GetNode<Control>("%OutlineRemote");
 		_outlineMixed = GetNode<Control>("%OutlineMixed");
 		_shadow = GetNode<Control>("%Shadow");
 		_playerIconContainer = GetNode<Control>("%PlayerIconContainer");
+		_rotating.Visible = false;
 		_hsv = (ShaderMaterial)_icon.Material;
 		_hsv.SetShaderParameter(_s, 0.2f);
 		_hsv.SetShaderParameter(_v, 0.4f);
@@ -360,13 +376,9 @@ public class NCharacterSelectButton : NButton
 		UnlockState unlockState = SaveManager.Instance.GenerateUnlockStateFromProgress();
 		if (character is RandomCharacter)
 		{
-			IsRandom = true;
-			_isLocked = ModelDb.AllCharacters.Any((CharacterModel c) => !unlockState.Characters.Contains(c));
+			throw new InvalidOperationException("You should use InitAsRandom or InitAsRotating for the random character!");
 		}
-		else
-		{
-			_isLocked = !unlockState.Characters.Contains(_character);
-		}
+		_isLocked = !unlockState.Characters.Contains(_character);
 		if (_isLocked)
 		{
 			_icon.Texture = character.CharacterSelectLockedIcon;
@@ -378,6 +390,40 @@ public class NCharacterSelectButton : NButton
 		}
 	}
 
+	/// <summary>
+	/// The button is locked unless the local player has unlocked every character.
+	/// Most of the time, the caller should hide the button in this case, but in the special case of multiplayer where
+	/// one person has unlocked random but not other players, the locked button will be shown.
+	/// </summary>
+	public void InitAsRandom(ICharacterSelectButtonDelegate del)
+	{
+		_delegate = del;
+		_character = ModelDb.Character<RandomCharacter>();
+		UnlockState unlockState = SaveManager.Instance.GenerateUnlockStateFromProgress();
+		IsRandom = true;
+		_isLocked = ModelDb.AllCharacters.Any((CharacterModel c) => !unlockState.Characters.Contains(c));
+		_icon.Texture = (_isLocked ? _character.CharacterSelectLockedIcon : _character.CharacterSelectIcon);
+		_lock.Visible = _isLocked;
+	}
+
+	/// <summary>
+	/// This function assumes that the button is always unlocked. Call InitAsRotatingLocked to show it as locked.
+	/// </summary>
+	public void InitAsRotating(CharacterModel resolved, ICharacterSelectButtonDelegate del)
+	{
+		_delegate = del;
+		_character = ModelDb.Character<RotatingCharacter>();
+		IsRandom = true;
+		_isLocked = false;
+		_icon.Texture = resolved.CharacterSelectIcon;
+		_lock.Visible = false;
+		_rotating.Visible = true;
+		_rotatingTween = CreateTween();
+		_rotatingTween.TweenProperty(_rotating, "rotation", (float)Math.PI * 2f, 10.0).From(0f).SetTrans(Tween.TransitionType.Linear);
+		_rotatingTween.SetLoops();
+		_rotatingTween.Pause();
+	}
+
 	protected override void OnFocus()
 	{
 		if (!_isSelected)
@@ -386,6 +432,7 @@ public class NCharacterSelectButton : NButton
 			base.Scale = _hoverScale;
 			_hsv.SetShaderParameter(_s, 1f);
 			_hsv.SetShaderParameter(_v, 1.1f);
+			_rotatingTween?.Play();
 			if (_isLocked)
 			{
 				HoverTip hoverTip = new HoverTip(new LocString("main_menu_ui", "CHARACTER_SELECT.locked.title"), _character.GetUnlockText());
@@ -404,6 +451,10 @@ public class NCharacterSelectButton : NButton
 		_hoverTween?.Kill();
 		_hoverTween = CreateTween().SetParallel();
 		_hoverTween.TweenProperty(this, "scale", Vector2.One, 0.5).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Expo);
+		if (!_isSelected)
+		{
+			_rotatingTween?.Pause();
+		}
 		NHoverTipSet.Remove(this);
 		AnimateSaturationToCurrentState(_hoverTween);
 	}
@@ -511,7 +562,8 @@ public class NCharacterSelectButton : NButton
 		{
 			_hoverTween?.Kill();
 			_isSelected = true;
-			_delegate.SelectCharacter(this, _character);
+			_rotatingTween?.Play();
+			_delegate.SelectCharacter(this);
 			RefreshState();
 		}
 	}
@@ -523,6 +575,10 @@ public class NCharacterSelectButton : NButton
 	{
 		_isSelected = false;
 		RefreshState();
+		if (!base.IsFocused)
+		{
+			_rotatingTween?.Pause();
+		}
 	}
 
 	private void RefreshState()
@@ -974,6 +1030,11 @@ public class NCharacterSelectButton : NButton
 			_lock = VariantUtils.ConvertTo<TextureRect>(in value);
 			return true;
 		}
+		if (name == PropertyName._rotating)
+		{
+			_rotating = VariantUtils.ConvertTo<TextureRect>(in value);
+			return true;
+		}
 		if (name == PropertyName._outlineLocal)
 		{
 			_outlineLocal = VariantUtils.ConvertTo<Control>(in value);
@@ -1034,6 +1095,11 @@ public class NCharacterSelectButton : NButton
 			_hsvTween = VariantUtils.ConvertTo<Tween>(in value);
 			return true;
 		}
+		if (name == PropertyName._rotatingTween)
+		{
+			_rotatingTween = VariantUtils.ConvertTo<Tween>(in value);
+			return true;
+		}
 		return base.SetGodotClassPropertyValue(in name, in value);
 	}
 
@@ -1073,6 +1139,11 @@ public class NCharacterSelectButton : NButton
 		if (name == PropertyName._lock)
 		{
 			value = VariantUtils.CreateFrom(in _lock);
+			return true;
+		}
+		if (name == PropertyName._rotating)
+		{
+			value = VariantUtils.CreateFrom(in _rotating);
 			return true;
 		}
 		if (name == PropertyName._outlineLocal)
@@ -1135,6 +1206,11 @@ public class NCharacterSelectButton : NButton
 			value = VariantUtils.CreateFrom(in _hsvTween);
 			return true;
 		}
+		if (name == PropertyName._rotatingTween)
+		{
+			value = VariantUtils.CreateFrom(in _rotatingTween);
+			return true;
+		}
 		return base.GetGodotClassPropertyValue(in name, out value);
 	}
 
@@ -1150,6 +1226,7 @@ public class NCharacterSelectButton : NButton
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._icon, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._iconAdd, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._lock, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._rotating, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._outlineLocal, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._outlineRemote, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._outlineMixed, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
@@ -1163,6 +1240,7 @@ public class NCharacterSelectButton : NButton
 		list.Add(new PropertyInfo(Variant.Type.Int, PropertyName._state, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._hoverTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._hsvTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
+		list.Add(new PropertyInfo(Variant.Type.Object, PropertyName._rotatingTween, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.IsLocked, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		list.Add(new PropertyInfo(Variant.Type.Bool, PropertyName.IsSelected, PropertyHint.None, "", PropertyUsageFlags.ScriptVariable, exported: false));
 		return list;
@@ -1177,6 +1255,7 @@ public class NCharacterSelectButton : NButton
 		info.AddProperty(PropertyName._icon, Variant.From(in _icon));
 		info.AddProperty(PropertyName._iconAdd, Variant.From(in _iconAdd));
 		info.AddProperty(PropertyName._lock, Variant.From(in _lock));
+		info.AddProperty(PropertyName._rotating, Variant.From(in _rotating));
 		info.AddProperty(PropertyName._outlineLocal, Variant.From(in _outlineLocal));
 		info.AddProperty(PropertyName._outlineRemote, Variant.From(in _outlineRemote));
 		info.AddProperty(PropertyName._outlineMixed, Variant.From(in _outlineMixed));
@@ -1189,6 +1268,7 @@ public class NCharacterSelectButton : NButton
 		info.AddProperty(PropertyName._state, Variant.From(in _state));
 		info.AddProperty(PropertyName._hoverTween, Variant.From(in _hoverTween));
 		info.AddProperty(PropertyName._hsvTween, Variant.From(in _hsvTween));
+		info.AddProperty(PropertyName._rotatingTween, Variant.From(in _rotatingTween));
 	}
 
 	/// <inheritdoc />
@@ -1212,53 +1292,61 @@ public class NCharacterSelectButton : NButton
 		{
 			_lock = value4.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._outlineLocal, out var value5))
+		if (info.TryGetProperty(PropertyName._rotating, out var value5))
 		{
-			_outlineLocal = value5.As<Control>();
+			_rotating = value5.As<TextureRect>();
 		}
-		if (info.TryGetProperty(PropertyName._outlineRemote, out var value6))
+		if (info.TryGetProperty(PropertyName._outlineLocal, out var value6))
 		{
-			_outlineRemote = value6.As<Control>();
+			_outlineLocal = value6.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._outlineMixed, out var value7))
+		if (info.TryGetProperty(PropertyName._outlineRemote, out var value7))
 		{
-			_outlineMixed = value7.As<Control>();
+			_outlineRemote = value7.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._shadow, out var value8))
+		if (info.TryGetProperty(PropertyName._outlineMixed, out var value8))
 		{
-			_shadow = value8.As<Control>();
+			_outlineMixed = value8.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._playerIconContainer, out var value9))
+		if (info.TryGetProperty(PropertyName._shadow, out var value9))
 		{
-			_playerIconContainer = value9.As<Control>();
+			_shadow = value9.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._hsv, out var value10))
+		if (info.TryGetProperty(PropertyName._playerIconContainer, out var value10))
 		{
-			_hsv = value10.As<ShaderMaterial>();
+			_playerIconContainer = value10.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._isLocked, out var value11))
+		if (info.TryGetProperty(PropertyName._hsv, out var value11))
 		{
-			_isLocked = value11.As<bool>();
+			_hsv = value11.As<ShaderMaterial>();
 		}
-		if (info.TryGetProperty(PropertyName._currentOutline, out var value12))
+		if (info.TryGetProperty(PropertyName._isLocked, out var value12))
 		{
-			_currentOutline = value12.As<Control>();
+			_isLocked = value12.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._isSelected, out var value13))
+		if (info.TryGetProperty(PropertyName._currentOutline, out var value13))
 		{
-			_isSelected = value13.As<bool>();
+			_currentOutline = value13.As<Control>();
 		}
-		if (info.TryGetProperty(PropertyName._state, out var value14))
+		if (info.TryGetProperty(PropertyName._isSelected, out var value14))
 		{
-			_state = value14.As<State>();
+			_isSelected = value14.As<bool>();
 		}
-		if (info.TryGetProperty(PropertyName._hoverTween, out var value15))
+		if (info.TryGetProperty(PropertyName._state, out var value15))
 		{
-			_hoverTween = value15.As<Tween>();
+			_state = value15.As<State>();
 		}
-		if (info.TryGetProperty(PropertyName._hsvTween, out var value16))
+		if (info.TryGetProperty(PropertyName._hoverTween, out var value16))
 		{
-			_hsvTween = value16.As<Tween>();
+			_hoverTween = value16.As<Tween>();
+		}
+		if (info.TryGetProperty(PropertyName._hsvTween, out var value17))
+		{
+			_hsvTween = value17.As<Tween>();
+		}
+		if (info.TryGetProperty(PropertyName._rotatingTween, out var value18))
+		{
+			_rotatingTween = value18.As<Tween>();
 		}
 	}
 }

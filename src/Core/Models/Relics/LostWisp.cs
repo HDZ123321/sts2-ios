@@ -21,7 +21,7 @@ public sealed class LostWisp : RelicModel
 		if (cardPlay.Card.Owner == base.Owner && CombatManager.Instance.IsInProgress && cardPlay.Card.Type == CardType.Power)
 		{
 			Flash();
-			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.HittableEnemies, base.DynamicVars.Damage.BaseValue, base.DynamicVars.Damage.Props, base.Owner.Creature, null);
+			await CreatureCmd.Damage(choiceContext, base.Owner.Creature.CombatState.HittableEnemies, base.DynamicVars.Damage.BaseValue, base.DynamicVars.Damage.Props, base.Owner.Creature);
 		}
 	}
 }

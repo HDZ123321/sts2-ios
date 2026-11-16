@@ -26,7 +26,7 @@ public class DivinityStance : WatcherStanceModel
 		return base.OnEnterStance(ctx, player, source);
 	}
 
-	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource)
+	public override decimal ModifyDamageMultiplicative(Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? cardSource, CardPlay? cardPlay)
 	{
 		if (dealer == base.Owner.Creature && !props.HasFlag(ValueProp.Unpowered))
 		{

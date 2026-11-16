@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace MegaCrit.Sts2.Core.Random;
 
@@ -62,20 +63,20 @@ public sealed class MegaRandom
 	private ulong _s3;
 
 	/// <summary>
-	/// Initializes a new instance with a seed from the default seed source.
-	/// </summary>
-	public MegaRandom()
-	{
-		Reinitialise(0uL);
-	}
-
-	/// <summary>
 	/// Initializes a new instance with the provided seed.
 	/// </summary>
 	/// <param name="seed">Seed value.</param>
 	public MegaRandom(ulong seed)
 	{
 		Reinitialise(seed);
+	}
+
+	/// <summary>
+	/// Initializes a new instance from a serialized instance.
+	/// </summary>
+	public MegaRandom(SerializableRng serializable)
+	{
+		Reinitialise(serializable);
 	}
 
 	/// <summary>
@@ -101,6 +102,17 @@ public sealed class MegaRandom
 		_s1 = Splitmix64(ref seed);
 		_s2 = Splitmix64(ref seed);
 		_s3 = Splitmix64(ref seed);
+	}
+
+	/// <summary>
+	/// Initializes the RNG state from a serializable object round-tripped from ToSerializable.
+	/// </summary>
+	public void Reinitialise(SerializableRng serializable)
+	{
+		_s0 = serializable.state0;
+		_s1 = serializable.state1;
+		_s2 = serializable.state2;
+		_s3 = serializable.state3;
 	}
 
 	/// <summary>
@@ -289,5 +301,13 @@ public sealed class MegaRandom
 	private long NextInner(long maxValue)
 	{
 		return (long)(NextDouble() * (double)maxValue);
+	}
+
+	public void FillSerializableState(SerializableRng rng)
+	{
+		rng.state0 = _s0;
+		rng.state1 = _s1;
+		rng.state2 = _s2;
+		rng.state3 = _s3;
 	}
 }

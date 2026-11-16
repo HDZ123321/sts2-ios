@@ -8,6 +8,12 @@ namespace MegaCrit.Sts2.Core.Helpers;
 public static class TaskHelper
 {
 	/// <summary>
+	/// Raised when a fire-and-forget task faults. Nothing awaits these tasks, so the fault is otherwise only a log
+	/// line. The test harness subscribes to fail the owning test; see UnobservedAsyncFaultGate.
+	/// </summary>
+	public static event Action<Exception>? UnobservedFault;
+
+	/// <summary>
 	/// Runs a task without awaiting it.
 	/// Prefer using this over calling the task-returning method and then discarding the task, as that causes exceptions
 	/// not to be logged.
@@ -27,6 +33,7 @@ public static class TaskHelper
 		{
 			if (!(ex is OperationCanceledException))
 			{
+				TaskHelper.UnobservedFault?.Invoke(ex);
 				Log.Error(ex.ToString());
 				SentryService.CaptureException(ex);
 			}

@@ -10,6 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 using Godot;
 using MegaCrit.Sts2.Core.Achievements;
 using MegaCrit.Sts2.Core.ControllerInput;
+using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Relics;
 using MegaCrit.Sts2.Core.Entities.Rngs;
 using MegaCrit.Sts2.Core.Localization;
@@ -52,7 +53,8 @@ namespace MegaCrit.Sts2.Core.Saves;
 	typeof(SnakeCaseJsonStringEnumConverter<CardCreationSource>),
 	typeof(SnakeCaseJsonStringEnumConverter<CardRarityOddsType>),
 	typeof(SnakeCaseJsonStringEnumConverter<ControllerMappingType>),
-	typeof(SnakeCaseJsonStringEnumConverter<BadgeRarity>)
+	typeof(SnakeCaseJsonStringEnumConverter<BadgeRarity>),
+	typeof(SnakeCaseJsonStringEnumConverter<BlitzMerchantEntryType>)
 }, UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip, GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(NullLeaderboardFile))]
 [JsonSerializable(typeof(SerializableRun))]
@@ -85,6 +87,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	private JsonTypeInfo<Vector2I>? _Vector2I;
 
 	private JsonTypeInfo<ControllerMappingType>? _ControllerMappingType;
+
+	private JsonTypeInfo<BlitzMerchantEntryType>? _BlitzMerchantEntryType;
 
 	private JsonTypeInfo<RelicRarity>? _RelicRarity;
 
@@ -136,6 +140,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private JsonTypeInfo<AncientChoiceHistoryEntry>? _AncientChoiceHistoryEntry;
 
+	private JsonTypeInfo<BlitzMerchantHistoryEntry>? _BlitzMerchantHistoryEntry;
+
 	private JsonTypeInfo<CardChoiceHistoryEntry>? _CardChoiceHistoryEntry;
 
 	private JsonTypeInfo<CardEnchantmentHistoryEntry>? _CardEnchantmentHistoryEntry;
@@ -181,6 +187,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	private JsonTypeInfo<SerializablePlayerMapDrawings>? _SerializablePlayerMapDrawings;
 
 	private JsonTypeInfo<MigratingData>? _MigratingData;
+
+	private JsonTypeInfo<PendingDreadWinStreakResult>? _PendingDreadWinStreakResult;
 
 	private JsonTypeInfo<PrefsSave>? _PrefsSave;
 
@@ -248,6 +256,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private JsonTypeInfo<SerializableProgress>? _SerializableProgress;
 
+	private JsonTypeInfo<SerializableRng>? _SerializableRng;
+
 	private JsonTypeInfo<SerializableRun>? _SerializableRun;
 
 	private JsonTypeInfo<SerializableUnlockedAchievement>? _SerializableUnlockedAchievement;
@@ -264,9 +274,9 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private JsonTypeInfo<Dictionary<RelicRarity, List<ModelId>>>? _DictionaryRelicRarityListModelId;
 
-	private JsonTypeInfo<Dictionary<PlayerRngType, int>>? _DictionaryPlayerRngTypeInt32;
+	private JsonTypeInfo<Dictionary<PlayerRngType, SerializableRng>>? _DictionaryPlayerRngTypeSerializableRng;
 
-	private JsonTypeInfo<Dictionary<RunRngType, int>>? _DictionaryRunRngTypeInt32;
+	private JsonTypeInfo<Dictionary<RunRngType, SerializableRng>>? _DictionaryRunRngTypeSerializableRng;
 
 	private JsonTypeInfo<Dictionary<string, object>>? _DictionaryStringObject;
 
@@ -299,6 +309,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	private JsonTypeInfo<List<NullMultiplayerName>>? _ListNullMultiplayerName;
 
 	private JsonTypeInfo<List<AncientChoiceHistoryEntry>>? _ListAncientChoiceHistoryEntry;
+
+	private JsonTypeInfo<List<BlitzMerchantHistoryEntry>>? _ListBlitzMerchantHistoryEntry;
 
 	private JsonTypeInfo<List<CardChoiceHistoryEntry>>? _ListCardChoiceHistoryEntry;
 
@@ -406,8 +418,6 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private JsonTypeInfo<string>? _String;
 
-	private JsonTypeInfo<uint>? _UInt32;
-
 	private JsonTypeInfo<ulong>? _UInt64;
 
 	private static readonly JsonSerializerOptions s_defaultOptions = new JsonSerializerOptions
@@ -432,7 +442,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			(JsonConverter)new SnakeCaseJsonStringEnumConverter<CardCreationSource>(),
 			(JsonConverter)new SnakeCaseJsonStringEnumConverter<CardRarityOddsType>(),
 			(JsonConverter)new SnakeCaseJsonStringEnumConverter<ControllerMappingType>(),
-			(JsonConverter)new SnakeCaseJsonStringEnumConverter<BadgeRarity>()
+			(JsonConverter)new SnakeCaseJsonStringEnumConverter<BadgeRarity>(),
+			(JsonConverter)new SnakeCaseJsonStringEnumConverter<BlitzMerchantEntryType>()
 		},
 		IncludeFields = true,
 		ReadCommentHandling = JsonCommentHandling.Skip,
@@ -473,6 +484,11 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
 	public JsonTypeInfo<ControllerMappingType> ControllerMappingType => _ControllerMappingType ?? (_ControllerMappingType = (JsonTypeInfo<ControllerMappingType>)base.Options.GetTypeInfo(typeof(ControllerMappingType)));
+
+	/// <summary>
+	/// Defines the source generated JSON serialization contract metadata for a given type.
+	/// </summary>
+	public JsonTypeInfo<BlitzMerchantEntryType> BlitzMerchantEntryType => _BlitzMerchantEntryType ?? (_BlitzMerchantEntryType = (JsonTypeInfo<BlitzMerchantEntryType>)base.Options.GetTypeInfo(typeof(BlitzMerchantEntryType)));
 
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
@@ -602,6 +618,11 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
+	public JsonTypeInfo<BlitzMerchantHistoryEntry> BlitzMerchantHistoryEntry => _BlitzMerchantHistoryEntry ?? (_BlitzMerchantHistoryEntry = (JsonTypeInfo<BlitzMerchantHistoryEntry>)base.Options.GetTypeInfo(typeof(BlitzMerchantHistoryEntry)));
+
+	/// <summary>
+	/// Defines the source generated JSON serialization contract metadata for a given type.
+	/// </summary>
 	public JsonTypeInfo<CardChoiceHistoryEntry> CardChoiceHistoryEntry => _CardChoiceHistoryEntry ?? (_CardChoiceHistoryEntry = (JsonTypeInfo<CardChoiceHistoryEntry>)base.Options.GetTypeInfo(typeof(CardChoiceHistoryEntry)));
 
 	/// <summary>
@@ -713,6 +734,11 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
 	public JsonTypeInfo<MigratingData> MigratingData => _MigratingData ?? (_MigratingData = (JsonTypeInfo<MigratingData>)base.Options.GetTypeInfo(typeof(MigratingData)));
+
+	/// <summary>
+	/// Defines the source generated JSON serialization contract metadata for a given type.
+	/// </summary>
+	public JsonTypeInfo<PendingDreadWinStreakResult> PendingDreadWinStreakResult => _PendingDreadWinStreakResult ?? (_PendingDreadWinStreakResult = (JsonTypeInfo<PendingDreadWinStreakResult>)base.Options.GetTypeInfo(typeof(PendingDreadWinStreakResult)));
 
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
@@ -882,6 +908,11 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
+	public JsonTypeInfo<SerializableRng> SerializableRng => _SerializableRng ?? (_SerializableRng = (JsonTypeInfo<SerializableRng>)base.Options.GetTypeInfo(typeof(SerializableRng)));
+
+	/// <summary>
+	/// Defines the source generated JSON serialization contract metadata for a given type.
+	/// </summary>
 	public JsonTypeInfo<SerializableRun> SerializableRun => _SerializableRun ?? (_SerializableRun = (JsonTypeInfo<SerializableRun>)base.Options.GetTypeInfo(typeof(SerializableRun)));
 
 	/// <summary>
@@ -922,12 +953,12 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
-	public JsonTypeInfo<Dictionary<PlayerRngType, int>> DictionaryPlayerRngTypeInt32 => _DictionaryPlayerRngTypeInt32 ?? (_DictionaryPlayerRngTypeInt32 = (JsonTypeInfo<Dictionary<PlayerRngType, int>>)base.Options.GetTypeInfo(typeof(Dictionary<PlayerRngType, int>)));
+	public JsonTypeInfo<Dictionary<PlayerRngType, SerializableRng>> DictionaryPlayerRngTypeSerializableRng => _DictionaryPlayerRngTypeSerializableRng ?? (_DictionaryPlayerRngTypeSerializableRng = (JsonTypeInfo<Dictionary<PlayerRngType, SerializableRng>>)base.Options.GetTypeInfo(typeof(Dictionary<PlayerRngType, SerializableRng>)));
 
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
-	public JsonTypeInfo<Dictionary<RunRngType, int>> DictionaryRunRngTypeInt32 => _DictionaryRunRngTypeInt32 ?? (_DictionaryRunRngTypeInt32 = (JsonTypeInfo<Dictionary<RunRngType, int>>)base.Options.GetTypeInfo(typeof(Dictionary<RunRngType, int>)));
+	public JsonTypeInfo<Dictionary<RunRngType, SerializableRng>> DictionaryRunRngTypeSerializableRng => _DictionaryRunRngTypeSerializableRng ?? (_DictionaryRunRngTypeSerializableRng = (JsonTypeInfo<Dictionary<RunRngType, SerializableRng>>)base.Options.GetTypeInfo(typeof(Dictionary<RunRngType, SerializableRng>)));
 
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
@@ -1008,6 +1039,11 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
 	public JsonTypeInfo<List<AncientChoiceHistoryEntry>> ListAncientChoiceHistoryEntry => _ListAncientChoiceHistoryEntry ?? (_ListAncientChoiceHistoryEntry = (JsonTypeInfo<List<AncientChoiceHistoryEntry>>)base.Options.GetTypeInfo(typeof(List<AncientChoiceHistoryEntry>)));
+
+	/// <summary>
+	/// Defines the source generated JSON serialization contract metadata for a given type.
+	/// </summary>
+	public JsonTypeInfo<List<BlitzMerchantHistoryEntry>> ListBlitzMerchantHistoryEntry => _ListBlitzMerchantHistoryEntry ?? (_ListBlitzMerchantHistoryEntry = (JsonTypeInfo<List<BlitzMerchantHistoryEntry>>)base.Options.GetTypeInfo(typeof(List<BlitzMerchantHistoryEntry>)));
 
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
@@ -1277,11 +1313,6 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	/// <summary>
 	/// Defines the source generated JSON serialization contract metadata for a given type.
 	/// </summary>
-	public JsonTypeInfo<uint> UInt32 => _UInt32 ?? (_UInt32 = (JsonTypeInfo<uint>)base.Options.GetTypeInfo(typeof(uint)));
-
-	/// <summary>
-	/// Defines the source generated JSON serialization contract metadata for a given type.
-	/// </summary>
 	public JsonTypeInfo<ulong> UInt64 => _UInt64 ?? (_UInt64 = (JsonTypeInfo<ulong>)base.Options.GetTypeInfo(typeof(ulong)));
 
 	/// <summary>
@@ -1465,6 +1496,16 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<ControllerMappingType> jsonTypeInfo))
 		{
 			jsonTypeInfo = JsonMetadataServices.CreateValueInfo<ControllerMappingType>(options, JsonMetadataServices.GetEnumConverter<ControllerMappingType>(options));
+		}
+		jsonTypeInfo.OriginatingResolver = this;
+		return jsonTypeInfo;
+	}
+
+	private JsonTypeInfo<BlitzMerchantEntryType> Create_BlitzMerchantEntryType(JsonSerializerOptions options)
+	{
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<BlitzMerchantEntryType> jsonTypeInfo))
+		{
+			jsonTypeInfo = JsonMetadataServices.CreateValueInfo<BlitzMerchantEntryType>(options, JsonMetadataServices.GetEnumConverter<BlitzMerchantEntryType>(options));
 		}
 		jsonTypeInfo.OriginatingResolver = this;
 		return jsonTypeInfo;
@@ -3061,6 +3102,95 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		return array;
 	}
 
+	private JsonTypeInfo<BlitzMerchantHistoryEntry> Create_BlitzMerchantHistoryEntry(JsonSerializerOptions options)
+	{
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<BlitzMerchantHistoryEntry> jsonTypeInfo))
+		{
+			JsonObjectInfoValues<BlitzMerchantHistoryEntry> objectInfo = new JsonObjectInfoValues<BlitzMerchantHistoryEntry>
+			{
+				ObjectCreator = () => default(BlitzMerchantHistoryEntry),
+				ObjectWithParameterizedConstructorCreator = null,
+				PropertyMetadataInitializer = (JsonSerializerContext _) => BlitzMerchantHistoryEntryPropInit(options),
+				ConstructorParameterMetadataInitializer = null,
+				ConstructorAttributeProviderFactory = () => typeof(BlitzMerchantHistoryEntry).GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Array.Empty<Type>(), null),
+				SerializeHandler = null
+			};
+			jsonTypeInfo = JsonMetadataServices.CreateObjectInfo(options, objectInfo);
+			jsonTypeInfo.NumberHandling = null;
+		}
+		jsonTypeInfo.OriginatingResolver = this;
+		return jsonTypeInfo;
+	}
+
+	private static JsonPropertyInfo[] BlitzMerchantHistoryEntryPropInit(JsonSerializerOptions options)
+	{
+		JsonPropertyInfo[] array = new JsonPropertyInfo[3];
+		JsonPropertyInfoValues<BlitzMerchantEntryType> propertyInfo = new JsonPropertyInfoValues<BlitzMerchantEntryType>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(BlitzMerchantHistoryEntry),
+			Converter = null,
+			Getter = (object obj) => ((BlitzMerchantHistoryEntry)obj).Type,
+			Setter = delegate(object obj, BlitzMerchantEntryType value)
+			{
+				Unsafe.Unbox<BlitzMerchantHistoryEntry>(obj).Type = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "Type",
+			JsonPropertyName = "type",
+			AttributeProviderFactory = () => typeof(BlitzMerchantHistoryEntry).GetProperty("Type", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(BlitzMerchantEntryType), Array.Empty<Type>(), null)
+		};
+		array[0] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo);
+		JsonPropertyInfoValues<bool> propertyInfo2 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(BlitzMerchantHistoryEntry),
+			Converter = null,
+			Getter = (object obj) => ((BlitzMerchantHistoryEntry)obj).wasPicked,
+			Setter = delegate(object obj, bool value)
+			{
+				Unsafe.Unbox<BlitzMerchantHistoryEntry>(obj).wasPicked = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "wasPicked",
+			JsonPropertyName = "was_picked",
+			AttributeProviderFactory = () => typeof(BlitzMerchantHistoryEntry).GetField("wasPicked", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[1] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo2);
+		JsonPropertyInfoValues<ModelId> propertyInfo3 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(BlitzMerchantHistoryEntry),
+			Converter = null,
+			Getter = (object obj) => ((BlitzMerchantHistoryEntry)obj).modelId,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				Unsafe.Unbox<BlitzMerchantHistoryEntry>(obj).modelId = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "modelId",
+			JsonPropertyName = "model_id",
+			AttributeProviderFactory = () => typeof(BlitzMerchantHistoryEntry).GetField("modelId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[2] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo3);
+		return array;
+	}
+
 	private JsonTypeInfo<CardChoiceHistoryEntry> Create_CardChoiceHistoryEntry(JsonSerializerOptions options)
 	{
 		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<CardChoiceHistoryEntry> jsonTypeInfo))
@@ -3642,7 +3772,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] PlayerMapPointHistoryEntryPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[33];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[35];
 		JsonPropertyInfoValues<ulong> propertyInfo = new JsonPropertyInfoValues<ulong>
 		{
 			IsProperty = true,
@@ -4031,7 +4161,30 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		array[17] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo18);
 		array[17].IsGetNullable = false;
 		array[17].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo19 = new JsonPropertyInfoValues<List<ModelId>>
+		JsonPropertyInfoValues<List<BlitzMerchantHistoryEntry>> propertyInfo19 = new JsonPropertyInfoValues<List<BlitzMerchantHistoryEntry>>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PlayerMapPointHistoryEntry),
+			Converter = null,
+			Getter = (object obj) => ((PlayerMapPointHistoryEntry)obj).BlitzMerchantChoices,
+			Setter = delegate(object obj, List<BlitzMerchantHistoryEntry>? value)
+			{
+				((PlayerMapPointHistoryEntry)obj).BlitzMerchantChoices = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BlitzMerchantChoices",
+			JsonPropertyName = "blitz_merchant_choices",
+			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("BlitzMerchantChoices", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<BlitzMerchantHistoryEntry>), Array.Empty<Type>(), null)
+		};
+		array[18] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo19);
+		array[18].IsGetNullable = false;
+		array[18].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo20 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4051,10 +4204,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "potion_discarded",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("PotionDiscarded", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[18] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo19);
-		array[18].IsGetNullable = false;
-		array[18].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo20 = new JsonPropertyInfoValues<List<ModelId>>
+		array[19] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo20);
+		array[19].IsGetNullable = false;
+		array[19].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo21 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4074,10 +4227,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "potion_used",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("PotionUsed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[19] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo20);
-		array[19].IsGetNullable = false;
-		array[19].IsSetNullable = false;
-		JsonPropertyInfoValues<List<SerializableCard>> propertyInfo21 = new JsonPropertyInfoValues<List<SerializableCard>>
+		array[20] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo21);
+		array[20].IsGetNullable = false;
+		array[20].IsSetNullable = false;
+		JsonPropertyInfoValues<List<SerializableCard>> propertyInfo22 = new JsonPropertyInfoValues<List<SerializableCard>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4097,10 +4250,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "cards_removed",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("CardsRemoved", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<SerializableCard>), Array.Empty<Type>(), null)
 		};
-		array[20] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo21);
-		array[20].IsGetNullable = false;
-		array[20].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo22 = new JsonPropertyInfoValues<List<ModelId>>
+		array[21] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo22);
+		array[21].IsGetNullable = false;
+		array[21].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo23 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4120,10 +4273,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "relics_removed",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("RelicsRemoved", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[21] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo22);
-		array[21].IsGetNullable = false;
-		array[21].IsSetNullable = false;
-		JsonPropertyInfoValues<List<CardEnchantmentHistoryEntry>> propertyInfo23 = new JsonPropertyInfoValues<List<CardEnchantmentHistoryEntry>>
+		array[22] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo23);
+		array[22].IsGetNullable = false;
+		array[22].IsSetNullable = false;
+		JsonPropertyInfoValues<List<CardEnchantmentHistoryEntry>> propertyInfo24 = new JsonPropertyInfoValues<List<CardEnchantmentHistoryEntry>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4143,10 +4296,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "cards_enchanted",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("CardsEnchanted", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<CardEnchantmentHistoryEntry>), Array.Empty<Type>(), null)
 		};
-		array[22] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo23);
-		array[22].IsGetNullable = false;
-		array[22].IsSetNullable = false;
-		JsonPropertyInfoValues<List<CardTransformationHistoryEntry>> propertyInfo24 = new JsonPropertyInfoValues<List<CardTransformationHistoryEntry>>
+		array[23] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo24);
+		array[23].IsGetNullable = false;
+		array[23].IsSetNullable = false;
+		JsonPropertyInfoValues<List<CardTransformationHistoryEntry>> propertyInfo25 = new JsonPropertyInfoValues<List<CardTransformationHistoryEntry>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4166,10 +4319,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "cards_transformed",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("CardsTransformed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<CardTransformationHistoryEntry>), Array.Empty<Type>(), null)
 		};
-		array[23] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo24);
-		array[23].IsGetNullable = false;
-		array[23].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo25 = new JsonPropertyInfoValues<List<ModelId>>
+		array[24] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo25);
+		array[24].IsGetNullable = false;
+		array[24].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo26 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4189,10 +4342,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "upgraded_cards",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("UpgradedCards", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[24] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo25);
-		array[24].IsGetNullable = false;
-		array[24].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo26 = new JsonPropertyInfoValues<List<ModelId>>
+		array[25] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo26);
+		array[25].IsGetNullable = false;
+		array[25].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo27 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4212,10 +4365,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "downgraded_cards",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("DowngradedCards", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[25] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo26);
-		array[25].IsGetNullable = false;
-		array[25].IsSetNullable = false;
-		JsonPropertyInfoValues<List<EventOptionHistoryEntry>> propertyInfo27 = new JsonPropertyInfoValues<List<EventOptionHistoryEntry>>
+		array[26] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo27);
+		array[26].IsGetNullable = false;
+		array[26].IsSetNullable = false;
+		JsonPropertyInfoValues<List<EventOptionHistoryEntry>> propertyInfo28 = new JsonPropertyInfoValues<List<EventOptionHistoryEntry>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4235,10 +4388,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "event_choices",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("EventChoices", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<EventOptionHistoryEntry>), Array.Empty<Type>(), null)
 		};
-		array[26] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo27);
-		array[26].IsGetNullable = false;
-		array[26].IsSetNullable = false;
-		JsonPropertyInfoValues<List<string>> propertyInfo28 = new JsonPropertyInfoValues<List<string>>
+		array[27] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo28);
+		array[27].IsGetNullable = false;
+		array[27].IsSetNullable = false;
+		JsonPropertyInfoValues<List<string>> propertyInfo29 = new JsonPropertyInfoValues<List<string>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4258,10 +4411,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "rest_site_choices",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("RestSiteChoices", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<string>), Array.Empty<Type>(), null)
 		};
-		array[27] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo28);
-		array[27].IsGetNullable = false;
-		array[27].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo29 = new JsonPropertyInfoValues<List<ModelId>>
+		array[28] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo29);
+		array[28].IsGetNullable = false;
+		array[28].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo30 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4281,10 +4434,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "bought_relics",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("BoughtRelics", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[28] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo29);
-		array[28].IsGetNullable = false;
-		array[28].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo30 = new JsonPropertyInfoValues<List<ModelId>>
+		array[29] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo30);
+		array[29].IsGetNullable = false;
+		array[29].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo31 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4304,10 +4457,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "bought_potions",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("BoughtPotions", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[29] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo30);
-		array[29].IsGetNullable = false;
-		array[29].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo31 = new JsonPropertyInfoValues<List<ModelId>>
+		array[30] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo31);
+		array[30].IsGetNullable = false;
+		array[30].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo32 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4327,10 +4480,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "bought_colorless",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("BoughtColorless", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[30] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo31);
-		array[30].IsGetNullable = false;
-		array[30].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo32 = new JsonPropertyInfoValues<List<ModelId>>
+		array[31] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo32);
+		array[31].IsGetNullable = false;
+		array[31].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo33 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4350,10 +4503,31 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "completed_quests",
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("CompletedQuests", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[31] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo32);
-		array[31].IsGetNullable = false;
-		array[31].IsSetNullable = false;
-		JsonPropertyInfoValues<bool> propertyInfo33 = new JsonPropertyInfoValues<bool>
+		array[32] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo33);
+		array[32].IsGetNullable = false;
+		array[32].IsSetNullable = false;
+		JsonPropertyInfoValues<bool> propertyInfo34 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PlayerMapPointHistoryEntry),
+			Converter = null,
+			Getter = (object obj) => ((PlayerMapPointHistoryEntry)obj).IsAffectedByFurCoat,
+			Setter = delegate(object obj, bool value)
+			{
+				((PlayerMapPointHistoryEntry)obj).IsAffectedByFurCoat = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "IsAffectedByFurCoat",
+			JsonPropertyName = "is_affected_by_fur_coat",
+			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("IsAffectedByFurCoat", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[33] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo34);
+		JsonPropertyInfoValues<bool> propertyInfo35 = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4370,7 +4544,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(PlayerMapPointHistoryEntry).GetProperty("WasMugged", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[32] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo33);
+		array[34] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo35);
 		return array;
 	}
 
@@ -4385,19 +4559,20 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 				{
 					PlatformType = (PlatformType)args[0],
 					GameMode = (GameMode)args[1],
-					Win = (bool)args[2],
-					Seed = (string)args[3],
-					StartTime = (long)args[4],
-					RunTime = (float)args[5],
-					Ascension = (int)args[6],
-					BuildId = (string)args[7],
-					WasAbandoned = (bool)args[8],
-					KilledByEncounter = (ModelId)args[9],
-					KilledByEvent = (ModelId)args[10],
-					Players = (List<RunHistoryPlayer>)args[11],
-					Acts = (List<ModelId>)args[12],
-					Modifiers = (List<SerializableModifier>)args[13],
-					MapPointHistory = (List<List<MapPointHistoryEntry>>)args[14]
+					IsCustomGame = (bool)args[2],
+					Win = (bool)args[3],
+					Seed = (string)args[4],
+					StartTime = (long)args[5],
+					RunTime = (float)args[6],
+					Ascension = (int)args[7],
+					BuildId = (string)args[8],
+					WasAbandoned = (bool)args[9],
+					KilledByEncounter = (ModelId)args[10],
+					KilledByEvent = (ModelId)args[11],
+					Players = (List<RunHistoryPlayer>)args[12],
+					Acts = (List<ModelId>)args[13],
+					Modifiers = (List<SerializableModifier>)args[14],
+					MapPointHistory = (List<List<MapPointHistoryEntry>>)args[15]
 				},
 				PropertyMetadataInitializer = (JsonSerializerContext _) => RunHistoryPropInit(options),
 				ConstructorParameterMetadataInitializer = RunHistoryCtorParamInit,
@@ -4413,7 +4588,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] RunHistoryPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[16];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[17];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -4484,6 +4659,27 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			IsVirtual = false,
 			DeclaringType = typeof(RunHistory),
 			Converter = null,
+			Getter = (object obj) => ((RunHistory)obj).IsCustomGame,
+			Setter = delegate
+			{
+				throw new InvalidOperationException("Setting init-only properties is not supported in source generation mode.");
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "IsCustomGame",
+			JsonPropertyName = "is_custom_game",
+			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("IsCustomGame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[3] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo4);
+		JsonPropertyInfoValues<bool> propertyInfo5 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(RunHistory),
+			Converter = null,
 			Getter = (object obj) => ((RunHistory)obj).Win,
 			Setter = delegate
 			{
@@ -4497,8 +4693,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "win",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Win", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[3] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo4);
-		JsonPropertyInfoValues<string> propertyInfo5 = new JsonPropertyInfoValues<string>
+		array[4] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo5);
+		JsonPropertyInfoValues<string> propertyInfo6 = new JsonPropertyInfoValues<string>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4518,10 +4714,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "seed",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Seed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
 		};
-		array[4] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo5);
-		array[4].IsGetNullable = false;
-		array[4].IsSetNullable = false;
-		JsonPropertyInfoValues<long> propertyInfo6 = new JsonPropertyInfoValues<long>
+		array[5] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo6);
+		array[5].IsGetNullable = false;
+		array[5].IsSetNullable = false;
+		JsonPropertyInfoValues<long> propertyInfo7 = new JsonPropertyInfoValues<long>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4541,8 +4737,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "start_time",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("StartTime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(long), Array.Empty<Type>(), null)
 		};
-		array[5] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo6);
-		JsonPropertyInfoValues<float> propertyInfo7 = new JsonPropertyInfoValues<float>
+		array[6] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo7);
+		JsonPropertyInfoValues<float> propertyInfo8 = new JsonPropertyInfoValues<float>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4562,8 +4758,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "run_time",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("RunTime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(float), Array.Empty<Type>(), null)
 		};
-		array[6] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo7);
-		JsonPropertyInfoValues<int> propertyInfo8 = new JsonPropertyInfoValues<int>
+		array[7] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo8);
+		JsonPropertyInfoValues<int> propertyInfo9 = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4583,8 +4779,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "ascension",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Ascension", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[7] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo8);
-		JsonPropertyInfoValues<string> propertyInfo9 = new JsonPropertyInfoValues<string>
+		array[8] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo9);
+		JsonPropertyInfoValues<string> propertyInfo10 = new JsonPropertyInfoValues<string>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4604,10 +4800,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "build_id",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("BuildId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
 		};
-		array[8] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo9);
-		array[8].IsGetNullable = false;
-		array[8].IsSetNullable = false;
-		JsonPropertyInfoValues<bool> propertyInfo10 = new JsonPropertyInfoValues<bool>
+		array[9] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo10);
+		array[9].IsGetNullable = false;
+		array[9].IsSetNullable = false;
+		JsonPropertyInfoValues<bool> propertyInfo11 = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4627,8 +4823,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "was_abandoned",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("WasAbandoned", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[9] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo10);
-		JsonPropertyInfoValues<ModelId> propertyInfo11 = new JsonPropertyInfoValues<ModelId>
+		array[10] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo11);
+		JsonPropertyInfoValues<ModelId> propertyInfo12 = new JsonPropertyInfoValues<ModelId>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4648,10 +4844,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "killed_by_encounter",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("KilledByEncounter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
 		};
-		array[10] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo11);
-		array[10].IsGetNullable = false;
-		array[10].IsSetNullable = false;
-		JsonPropertyInfoValues<ModelId> propertyInfo12 = new JsonPropertyInfoValues<ModelId>
+		array[11] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo12);
+		array[11].IsGetNullable = false;
+		array[11].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo13 = new JsonPropertyInfoValues<ModelId>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4671,10 +4867,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "killed_by_event",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("KilledByEvent", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
 		};
-		array[11] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo12);
-		array[11].IsGetNullable = false;
-		array[11].IsSetNullable = false;
-		JsonPropertyInfoValues<List<RunHistoryPlayer>> propertyInfo13 = new JsonPropertyInfoValues<List<RunHistoryPlayer>>
+		array[12] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo13);
+		array[12].IsGetNullable = false;
+		array[12].IsSetNullable = false;
+		JsonPropertyInfoValues<List<RunHistoryPlayer>> propertyInfo14 = new JsonPropertyInfoValues<List<RunHistoryPlayer>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4694,10 +4890,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "players",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Players", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<RunHistoryPlayer>), Array.Empty<Type>(), null)
 		};
-		array[12] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo13);
-		array[12].IsGetNullable = false;
-		array[12].IsSetNullable = false;
-		JsonPropertyInfoValues<List<ModelId>> propertyInfo14 = new JsonPropertyInfoValues<List<ModelId>>
+		array[13] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo14);
+		array[13].IsGetNullable = false;
+		array[13].IsSetNullable = false;
+		JsonPropertyInfoValues<List<ModelId>> propertyInfo15 = new JsonPropertyInfoValues<List<ModelId>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4717,10 +4913,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "acts",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Acts", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<ModelId>), Array.Empty<Type>(), null)
 		};
-		array[13] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo14);
-		array[13].IsGetNullable = false;
-		array[13].IsSetNullable = false;
-		JsonPropertyInfoValues<List<SerializableModifier>> propertyInfo15 = new JsonPropertyInfoValues<List<SerializableModifier>>
+		array[14] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo15);
+		array[14].IsGetNullable = false;
+		array[14].IsSetNullable = false;
+		JsonPropertyInfoValues<List<SerializableModifier>> propertyInfo16 = new JsonPropertyInfoValues<List<SerializableModifier>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4740,10 +4936,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "modifiers",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("Modifiers", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<SerializableModifier>), Array.Empty<Type>(), null)
 		};
-		array[14] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo15);
-		array[14].IsGetNullable = false;
-		array[14].IsSetNullable = false;
-		JsonPropertyInfoValues<List<List<MapPointHistoryEntry>>> propertyInfo16 = new JsonPropertyInfoValues<List<List<MapPointHistoryEntry>>>
+		array[15] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo16);
+		array[15].IsGetNullable = false;
+		array[15].IsSetNullable = false;
+		JsonPropertyInfoValues<List<List<MapPointHistoryEntry>>> propertyInfo17 = new JsonPropertyInfoValues<List<List<MapPointHistoryEntry>>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -4763,15 +4959,15 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "map_point_history",
 			AttributeProviderFactory = () => typeof(RunHistory).GetProperty("MapPointHistory", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<List<MapPointHistoryEntry>>), Array.Empty<Type>(), null)
 		};
-		array[15] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo16);
-		array[15].IsGetNullable = false;
-		array[15].IsSetNullable = false;
+		array[16] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo17);
+		array[16].IsGetNullable = false;
+		array[16].IsSetNullable = false;
 		return array;
 	}
 
 	private static JsonParameterInfoValues[] RunHistoryCtorParamInit()
 	{
-		return new JsonParameterInfoValues[15]
+		return new JsonParameterInfoValues[16]
 		{
 			new JsonParameterInfoValues
 			{
@@ -4791,7 +4987,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			},
 			new JsonParameterInfoValues
 			{
-				Name = "Win",
+				Name = "IsCustomGame",
 				ParameterType = typeof(bool),
 				Position = 2,
 				IsNullable = false,
@@ -4799,9 +4995,17 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			},
 			new JsonParameterInfoValues
 			{
+				Name = "Win",
+				ParameterType = typeof(bool),
+				Position = 3,
+				IsNullable = false,
+				IsMemberInitializer = true
+			},
+			new JsonParameterInfoValues
+			{
 				Name = "Seed",
 				ParameterType = typeof(string),
-				Position = 3,
+				Position = 4,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4809,7 +5013,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "StartTime",
 				ParameterType = typeof(long),
-				Position = 4,
+				Position = 5,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4817,7 +5021,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "RunTime",
 				ParameterType = typeof(float),
-				Position = 5,
+				Position = 6,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4825,7 +5029,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "Ascension",
 				ParameterType = typeof(int),
-				Position = 6,
+				Position = 7,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4833,7 +5037,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "BuildId",
 				ParameterType = typeof(string),
-				Position = 7,
+				Position = 8,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4841,7 +5045,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "WasAbandoned",
 				ParameterType = typeof(bool),
-				Position = 8,
+				Position = 9,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4849,7 +5053,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "KilledByEncounter",
 				ParameterType = typeof(ModelId),
-				Position = 9,
+				Position = 10,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4857,7 +5061,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "KilledByEvent",
 				ParameterType = typeof(ModelId),
-				Position = 10,
+				Position = 11,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4865,7 +5069,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "Players",
 				ParameterType = typeof(List<RunHistoryPlayer>),
-				Position = 11,
+				Position = 12,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4873,7 +5077,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "Acts",
 				ParameterType = typeof(List<ModelId>),
-				Position = 12,
+				Position = 13,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4881,7 +5085,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "Modifiers",
 				ParameterType = typeof(List<SerializableModifier>),
-				Position = 13,
+				Position = 14,
 				IsNullable = false,
 				IsMemberInitializer = true
 			},
@@ -4889,7 +5093,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			{
 				Name = "MapPointHistory",
 				ParameterType = typeof(List<List<MapPointHistoryEntry>>),
-				Position = 14,
+				Position = 15,
 				IsNullable = false,
 				IsMemberInitializer = true
 			}
@@ -5692,7 +5896,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] CharacterStatsPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[10];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[20];
 		JsonPropertyInfoValues<ModelId> propertyInfo = new JsonPropertyInfoValues<ModelId>
 		{
 			IsProperty = true,
@@ -5861,7 +6065,217 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("CurrentWinStreak", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(long), Array.Empty<Type>(), null)
 		};
 		array[7] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo8);
-		JsonPropertyInfoValues<long> propertyInfo9 = new JsonPropertyInfoValues<long>
+		JsonPropertyInfoValues<int> propertyInfo9 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestSingleplayerDreadWinStreakThisVersion,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).BestSingleplayerDreadWinStreakThisVersion = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestSingleplayerDreadWinStreakThisVersion",
+			JsonPropertyName = "best_singleplayer_dread_win_streak_this_version",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestSingleplayerDreadWinStreakThisVersion", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[8] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo9);
+		JsonPropertyInfoValues<string> propertyInfo10 = new JsonPropertyInfoValues<string>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestSingleplayerDreadWinStreakThisVersionTag,
+			Setter = delegate(object obj, string? value)
+			{
+				((CharacterStats)obj).BestSingleplayerDreadWinStreakThisVersionTag = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestSingleplayerDreadWinStreakThisVersionTag",
+			JsonPropertyName = "best_singleplayer_dread_win_streak_this_version_tag",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestSingleplayerDreadWinStreakThisVersionTag", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
+		};
+		array[9] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo10);
+		JsonPropertyInfoValues<int> propertyInfo11 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestSingleplayerDreadWinStreakOldVersion,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).BestSingleplayerDreadWinStreakOldVersion = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestSingleplayerDreadWinStreakOldVersion",
+			JsonPropertyName = "best_singleplayer_dread_win_streak_old_version",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestSingleplayerDreadWinStreakOldVersion", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[10] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo11);
+		JsonPropertyInfoValues<string> propertyInfo12 = new JsonPropertyInfoValues<string>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestSingleplayerDreadWinStreakOldVersionTag,
+			Setter = delegate(object obj, string? value)
+			{
+				((CharacterStats)obj).BestSingleplayerDreadWinStreakOldVersionTag = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestSingleplayerDreadWinStreakOldVersionTag",
+			JsonPropertyName = "best_singleplayer_dread_win_streak_old_version_tag",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestSingleplayerDreadWinStreakOldVersionTag", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
+		};
+		array[11] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo12);
+		JsonPropertyInfoValues<int> propertyInfo13 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).CurrentSingleplayerDreadWinStreak,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).CurrentSingleplayerDreadWinStreak = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "CurrentSingleplayerDreadWinStreak",
+			JsonPropertyName = "current_singleplayer_dread_win_streak",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("CurrentSingleplayerDreadWinStreak", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[12] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo13);
+		JsonPropertyInfoValues<int> propertyInfo14 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestMultiplayerDreadWinStreakThisVersion,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).BestMultiplayerDreadWinStreakThisVersion = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestMultiplayerDreadWinStreakThisVersion",
+			JsonPropertyName = "best_multiplayer_dread_win_streak_this_version",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestMultiplayerDreadWinStreakThisVersion", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[13] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo14);
+		JsonPropertyInfoValues<string> propertyInfo15 = new JsonPropertyInfoValues<string>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestMultiplayerDreadWinStreakThisVersionTag,
+			Setter = delegate(object obj, string? value)
+			{
+				((CharacterStats)obj).BestMultiplayerDreadWinStreakThisVersionTag = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestMultiplayerDreadWinStreakThisVersionTag",
+			JsonPropertyName = "best_multiplayer_dread_win_streak_this_version_tag",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestMultiplayerDreadWinStreakThisVersionTag", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
+		};
+		array[14] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo15);
+		JsonPropertyInfoValues<int> propertyInfo16 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestMultiplayerDreadWinStreakOldVersion,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).BestMultiplayerDreadWinStreakOldVersion = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestMultiplayerDreadWinStreakOldVersion",
+			JsonPropertyName = "best_multiplayer_dread_win_streak_old_version",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestMultiplayerDreadWinStreakOldVersion", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[15] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo16);
+		JsonPropertyInfoValues<string> propertyInfo17 = new JsonPropertyInfoValues<string>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).BestMultiplayerDreadWinStreakOldVersionTag,
+			Setter = delegate(object obj, string? value)
+			{
+				((CharacterStats)obj).BestMultiplayerDreadWinStreakOldVersionTag = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "BestMultiplayerDreadWinStreakOldVersionTag",
+			JsonPropertyName = "best_multiplayer_dread_win_streak_old_version_tag",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("BestMultiplayerDreadWinStreakOldVersionTag", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
+		};
+		array[16] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo17);
+		JsonPropertyInfoValues<int> propertyInfo18 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(CharacterStats),
+			Converter = null,
+			Getter = (object obj) => ((CharacterStats)obj).CurrentMultiplayerDreadWinStreak,
+			Setter = delegate(object obj, int value)
+			{
+				((CharacterStats)obj).CurrentMultiplayerDreadWinStreak = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "CurrentMultiplayerDreadWinStreak",
+			JsonPropertyName = "current_multiplayer_dread_win_streak",
+			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("CurrentMultiplayerDreadWinStreak", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[17] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo18);
+		JsonPropertyInfoValues<long> propertyInfo19 = new JsonPropertyInfoValues<long>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -5881,8 +6295,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "playtime",
 			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("Playtime", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(long), Array.Empty<Type>(), null)
 		};
-		array[8] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo9);
-		JsonPropertyInfoValues<List<BadgeStats>> propertyInfo10 = new JsonPropertyInfoValues<List<BadgeStats>>
+		array[18] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo19);
+		JsonPropertyInfoValues<List<BadgeStats>> propertyInfo20 = new JsonPropertyInfoValues<List<BadgeStats>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -5902,9 +6316,9 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "badges",
 			AttributeProviderFactory = () => typeof(CharacterStats).GetProperty("Badges", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(List<BadgeStats>), Array.Empty<Type>(), null)
 		};
-		array[9] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo10);
-		array[9].IsGetNullable = false;
-		array[9].IsSetNullable = false;
+		array[19] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo20);
+		array[19].IsGetNullable = false;
+		array[19].IsSetNullable = false;
 		return array;
 	}
 
@@ -6529,6 +6943,141 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		return new JsonPropertyInfo[0];
 	}
 
+	private JsonTypeInfo<PendingDreadWinStreakResult> Create_PendingDreadWinStreakResult(JsonSerializerOptions options)
+	{
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<PendingDreadWinStreakResult> jsonTypeInfo))
+		{
+			JsonObjectInfoValues<PendingDreadWinStreakResult> objectInfo = new JsonObjectInfoValues<PendingDreadWinStreakResult>
+			{
+				ObjectCreator = () => new PendingDreadWinStreakResult(),
+				ObjectWithParameterizedConstructorCreator = null,
+				PropertyMetadataInitializer = (JsonSerializerContext _) => PendingDreadWinStreakResultPropInit(options),
+				ConstructorParameterMetadataInitializer = null,
+				ConstructorAttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Array.Empty<Type>(), null),
+				SerializeHandler = null
+			};
+			jsonTypeInfo = JsonMetadataServices.CreateObjectInfo(options, objectInfo);
+			jsonTypeInfo.NumberHandling = null;
+		}
+		jsonTypeInfo.OriginatingResolver = this;
+		return jsonTypeInfo;
+	}
+
+	private static JsonPropertyInfo[] PendingDreadWinStreakResultPropInit(JsonSerializerOptions options)
+	{
+		JsonPropertyInfo[] array = new JsonPropertyInfo[5];
+		JsonPropertyInfoValues<ModelId> propertyInfo = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PendingDreadWinStreakResult),
+			Converter = null,
+			Getter = (object obj) => ((PendingDreadWinStreakResult)obj).CharacterId,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((PendingDreadWinStreakResult)obj).CharacterId = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "CharacterId",
+			JsonPropertyName = "character_id",
+			AttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetProperty("CharacterId", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[0] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo);
+		array[0].IsGetNullable = false;
+		array[0].IsSetNullable = false;
+		JsonPropertyInfoValues<bool> propertyInfo2 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PendingDreadWinStreakResult),
+			Converter = null,
+			Getter = (object obj) => ((PendingDreadWinStreakResult)obj).WasReset,
+			Setter = delegate(object obj, bool value)
+			{
+				((PendingDreadWinStreakResult)obj).WasReset = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "WasReset",
+			JsonPropertyName = "was_reset",
+			AttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetProperty("WasReset", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[1] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo2);
+		JsonPropertyInfoValues<int> propertyInfo3 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PendingDreadWinStreakResult),
+			Converter = null,
+			Getter = (object obj) => ((PendingDreadWinStreakResult)obj).WinStreakBeforeReset,
+			Setter = delegate(object obj, int value)
+			{
+				((PendingDreadWinStreakResult)obj).WinStreakBeforeReset = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "WinStreakBeforeReset",
+			JsonPropertyName = "win_streak_before_reset",
+			AttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetProperty("WinStreakBeforeReset", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[2] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo3);
+		JsonPropertyInfoValues<ModelId> propertyInfo4 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PendingDreadWinStreakResult),
+			Converter = null,
+			Getter = (object obj) => ((PendingDreadWinStreakResult)obj).InitialRotatingCharacterBeforeReset,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((PendingDreadWinStreakResult)obj).InitialRotatingCharacterBeforeReset = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "InitialRotatingCharacterBeforeReset",
+			JsonPropertyName = "initial_rotating_character_before_reset",
+			AttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetProperty("InitialRotatingCharacterBeforeReset", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[3] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo4);
+		array[3].IsGetNullable = false;
+		array[3].IsSetNullable = false;
+		JsonPropertyInfoValues<int> propertyInfo5 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PendingDreadWinStreakResult),
+			Converter = null,
+			Getter = (object obj) => ((PendingDreadWinStreakResult)obj).WinStreakIncrease,
+			Setter = delegate(object obj, int value)
+			{
+				((PendingDreadWinStreakResult)obj).WinStreakIncrease = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "WinStreakIncrease",
+			JsonPropertyName = "win_streak_increase",
+			AttributeProviderFactory = () => typeof(PendingDreadWinStreakResult).GetProperty("WinStreakIncrease", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[4] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo5);
+		return array;
+	}
+
 	private JsonTypeInfo<PrefsSave> Create_PrefsSave(JsonSerializerOptions options)
 	{
 		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<PrefsSave> jsonTypeInfo))
@@ -6551,7 +7100,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] PrefsSavePropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[11];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[13];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -6783,6 +7332,48 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(PrefsSave).GetProperty("ShowMultiplayerDrawings", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
 		array[10] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo11);
+		JsonPropertyInfoValues<bool> propertyInfo12 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PrefsSave),
+			Converter = null,
+			Getter = (object obj) => ((PrefsSave)obj).IsBestiaryActionsPreferred,
+			Setter = delegate(object obj, bool value)
+			{
+				((PrefsSave)obj).IsBestiaryActionsPreferred = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "IsBestiaryActionsPreferred",
+			JsonPropertyName = "bestiary_actions_preferred",
+			AttributeProviderFactory = () => typeof(PrefsSave).GetProperty("IsBestiaryActionsPreferred", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[11] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo12);
+		JsonPropertyInfoValues<bool> propertyInfo13 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(PrefsSave),
+			Converter = null,
+			Getter = (object obj) => ((PrefsSave)obj).KeyboardMode,
+			Setter = delegate(object obj, bool value)
+			{
+				((PrefsSave)obj).KeyboardMode = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "KeyboardMode",
+			JsonPropertyName = "keyboard_mode",
+			AttributeProviderFactory = () => typeof(PrefsSave).GetProperty("KeyboardMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[12] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo13);
 		return array;
 	}
 
@@ -8144,7 +8735,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] SerializableExtraRunFieldsPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[3];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[4];
 		JsonPropertyInfoValues<bool> propertyInfo = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
@@ -8208,6 +8799,27 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(SerializableExtraRunFields).GetProperty("FreedRepy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
 		array[2] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo3);
+		JsonPropertyInfoValues<bool> propertyInfo4 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableExtraRunFields),
+			Converter = null,
+			Getter = (object obj) => ((SerializableExtraRunFields)obj).UsedDebugCommand,
+			Setter = delegate(object obj, bool value)
+			{
+				((SerializableExtraRunFields)obj).UsedDebugCommand = value;
+			},
+			IgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "UsedDebugCommand",
+			JsonPropertyName = "used_debug_command",
+			AttributeProviderFactory = () => typeof(SerializableExtraRunFields).GetProperty("UsedDebugCommand", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[3] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo4);
 		return array;
 	}
 
@@ -10013,25 +10625,25 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(SerializableRunRngSet).GetProperty("Seed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(string), Array.Empty<Type>(), null)
 		};
 		array[0] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo);
-		JsonPropertyInfoValues<Dictionary<RunRngType, int>> propertyInfo2 = new JsonPropertyInfoValues<Dictionary<RunRngType, int>>
+		JsonPropertyInfoValues<Dictionary<RunRngType, SerializableRng>> propertyInfo2 = new JsonPropertyInfoValues<Dictionary<RunRngType, SerializableRng>>
 		{
 			IsProperty = true,
 			IsPublic = true,
 			IsVirtual = false,
 			DeclaringType = typeof(SerializableRunRngSet),
 			Converter = null,
-			Getter = (object obj) => ((SerializableRunRngSet)obj).Counters,
-			Setter = delegate(object obj, Dictionary<RunRngType, int>? value)
+			Getter = (object obj) => ((SerializableRunRngSet)obj).Rngs,
+			Setter = delegate(object obj, Dictionary<RunRngType, SerializableRng>? value)
 			{
-				((SerializableRunRngSet)obj).Counters = value;
+				((SerializableRunRngSet)obj).Rngs = value;
 			},
 			IgnoreCondition = null,
 			HasJsonInclude = false,
 			IsExtensionData = false,
 			NumberHandling = null,
-			PropertyName = "Counters",
-			JsonPropertyName = "counters",
-			AttributeProviderFactory = () => typeof(SerializableRunRngSet).GetProperty("Counters", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<RunRngType, int>), Array.Empty<Type>(), null)
+			PropertyName = "Rngs",
+			JsonPropertyName = "rngs",
+			AttributeProviderFactory = () => typeof(SerializableRunRngSet).GetProperty("Rngs", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<RunRngType, SerializableRng>), Array.Empty<Type>(), null)
 		};
 		array[1] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo2);
 		array[1].IsGetNullable = false;
@@ -10177,7 +10789,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] SerializableExtraPlayerFieldsPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[5];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[6];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -10283,6 +10895,27 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(SerializableExtraPlayerFields).GetProperty("DebuffsApplied", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
 		array[4] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo5);
+		JsonPropertyInfoValues<bool> propertyInfo6 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableExtraPlayerFields),
+			Converter = null,
+			Getter = (object obj) => ((SerializableExtraPlayerFields)obj).IsPlayingRotatingCharacter,
+			Setter = delegate(object obj, bool value)
+			{
+				((SerializableExtraPlayerFields)obj).IsPlayingRotatingCharacter = value;
+			},
+			IgnoreCondition = JsonIgnoreCondition.WhenWritingDefault,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "IsPlayingRotatingCharacter",
+			JsonPropertyName = "is_playing_rotating_character",
+			AttributeProviderFactory = () => typeof(SerializableExtraPlayerFields).GetProperty("IsPlayingRotatingCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[5] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo6);
 		return array;
 	}
 
@@ -10309,7 +10942,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 	private static JsonPropertyInfo[] SerializablePlayerRngSetPropInit(JsonSerializerOptions options)
 	{
 		JsonPropertyInfo[] array = new JsonPropertyInfo[2];
-		JsonPropertyInfoValues<uint> propertyInfo = new JsonPropertyInfoValues<uint>
+		JsonPropertyInfoValues<ulong> propertyInfo = new JsonPropertyInfoValues<ulong>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -10317,7 +10950,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			DeclaringType = typeof(SerializablePlayerRngSet),
 			Converter = null,
 			Getter = (object obj) => ((SerializablePlayerRngSet)obj).Seed,
-			Setter = delegate(object obj, uint value)
+			Setter = delegate(object obj, ulong value)
 			{
 				((SerializablePlayerRngSet)obj).Seed = value;
 			},
@@ -10327,28 +10960,28 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			NumberHandling = null,
 			PropertyName = "Seed",
 			JsonPropertyName = "seed",
-			AttributeProviderFactory = () => typeof(SerializablePlayerRngSet).GetProperty("Seed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(uint), Array.Empty<Type>(), null)
+			AttributeProviderFactory = () => typeof(SerializablePlayerRngSet).GetProperty("Seed", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ulong), Array.Empty<Type>(), null)
 		};
 		array[0] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo);
-		JsonPropertyInfoValues<Dictionary<PlayerRngType, int>> propertyInfo2 = new JsonPropertyInfoValues<Dictionary<PlayerRngType, int>>
+		JsonPropertyInfoValues<Dictionary<PlayerRngType, SerializableRng>> propertyInfo2 = new JsonPropertyInfoValues<Dictionary<PlayerRngType, SerializableRng>>
 		{
 			IsProperty = true,
 			IsPublic = true,
 			IsVirtual = false,
 			DeclaringType = typeof(SerializablePlayerRngSet),
 			Converter = null,
-			Getter = (object obj) => ((SerializablePlayerRngSet)obj).Counters,
-			Setter = delegate(object obj, Dictionary<PlayerRngType, int>? value)
+			Getter = (object obj) => ((SerializablePlayerRngSet)obj).Rngs,
+			Setter = delegate(object obj, Dictionary<PlayerRngType, SerializableRng>? value)
 			{
-				((SerializablePlayerRngSet)obj).Counters = value;
+				((SerializablePlayerRngSet)obj).Rngs = value;
 			},
 			IgnoreCondition = null,
 			HasJsonInclude = false,
 			IsExtensionData = false,
 			NumberHandling = null,
-			PropertyName = "Counters",
-			JsonPropertyName = "counters",
-			AttributeProviderFactory = () => typeof(SerializablePlayerRngSet).GetProperty("Counters", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<PlayerRngType, int>), Array.Empty<Type>(), null)
+			PropertyName = "Rngs",
+			JsonPropertyName = "rngs",
+			AttributeProviderFactory = () => typeof(SerializablePlayerRngSet).GetProperty("Rngs", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<PlayerRngType, SerializableRng>), Array.Empty<Type>(), null)
 		};
 		array[1] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo2);
 		array[1].IsGetNullable = false;
@@ -10381,7 +11014,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] SerializableProgressPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[31];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[45];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -10921,6 +11554,48 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			IsVirtual = false,
 			DeclaringType = typeof(SerializableProgress),
 			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredBlitzAscension,
+			Setter = delegate(object obj, int value)
+			{
+				((SerializableProgress)obj).PreferredBlitzAscension = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredBlitzAscension",
+			JsonPropertyName = "preferred_blitz_ascension",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredBlitzAscension", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[24] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo25);
+		JsonPropertyInfoValues<int> propertyInfo26 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).MaxBlitzAscension,
+			Setter = delegate(object obj, int value)
+			{
+				((SerializableProgress)obj).MaxBlitzAscension = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "MaxBlitzAscension",
+			JsonPropertyName = "max_blitz_ascension",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("MaxBlitzAscension", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
+		};
+		array[25] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo26);
+		JsonPropertyInfoValues<int> propertyInfo27 = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
 			Getter = (object obj) => ((SerializableProgress)obj).TestSubjectKills,
 			Setter = delegate(object obj, int value)
 			{
@@ -10934,8 +11609,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "test_subject_kills",
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("TestSubjectKills", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[24] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo25);
-		JsonPropertyInfoValues<ModelId> propertyInfo26 = new JsonPropertyInfoValues<ModelId>
+		array[26] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo27);
+		JsonPropertyInfoValues<ModelId> propertyInfo28 = new JsonPropertyInfoValues<ModelId>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -10955,10 +11630,278 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "pending_character_unlock",
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PendingCharacterUnlock", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
 		};
-		array[25] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo26);
-		array[25].IsGetNullable = false;
-		array[25].IsSetNullable = false;
-		JsonPropertyInfoValues<int> propertyInfo27 = new JsonPropertyInfoValues<int>
+		array[27] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo28);
+		array[27].IsGetNullable = false;
+		array[27].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo29 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredStandardCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredStandardCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredStandardCharacter",
+			JsonPropertyName = "preferred_standard_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredStandardCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[28] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo29);
+		array[28].IsGetNullable = false;
+		array[28].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo30 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredMultiplayerStandardCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredMultiplayerStandardCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredMultiplayerStandardCharacter",
+			JsonPropertyName = "preferred_multiplayer_standard_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredMultiplayerStandardCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[29] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo30);
+		array[29].IsGetNullable = false;
+		array[29].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo31 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredBlitzCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredBlitzCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredBlitzCharacter",
+			JsonPropertyName = "preferred_blitz_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredBlitzCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[30] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo31);
+		array[30].IsGetNullable = false;
+		array[30].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo32 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredMultiplayerBlitzCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredMultiplayerBlitzCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredMultiplayerBlitzCharacter",
+			JsonPropertyName = "preferred_multiplayer_blitz_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredMultiplayerBlitzCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[31] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo32);
+		array[31].IsGetNullable = false;
+		array[31].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo33 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredDreadCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredDreadCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredDreadCharacter",
+			JsonPropertyName = "preferred_dread_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredDreadCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[32] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo33);
+		array[32].IsGetNullable = false;
+		array[32].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo34 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredMultiplayerDreadCharacter,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).PreferredMultiplayerDreadCharacter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredMultiplayerDreadCharacter",
+			JsonPropertyName = "preferred_multiplayer_dread_character",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredMultiplayerDreadCharacter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[33] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo34);
+		array[33].IsGetNullable = false;
+		array[33].IsSetNullable = false;
+		JsonPropertyInfoValues<bool> propertyInfo35 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredDreadRotatingTickboxOnSingleplayer,
+			Setter = delegate(object obj, bool value)
+			{
+				((SerializableProgress)obj).PreferredDreadRotatingTickboxOnSingleplayer = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredDreadRotatingTickboxOnSingleplayer",
+			JsonPropertyName = "preferred_dread_rotating_tickbox_on_singleplayer",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredDreadRotatingTickboxOnSingleplayer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[34] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo35);
+		JsonPropertyInfoValues<bool> propertyInfo36 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PreferredDreadRotatingTickboxOnMultiplayer,
+			Setter = delegate(object obj, bool value)
+			{
+				((SerializableProgress)obj).PreferredDreadRotatingTickboxOnMultiplayer = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PreferredDreadRotatingTickboxOnMultiplayer",
+			JsonPropertyName = "preferred_dread_rotating_tickbox_on_multiplayer",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PreferredDreadRotatingTickboxOnMultiplayer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[35] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo36);
+		JsonPropertyInfoValues<ModelId> propertyInfo37 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).CurrentSingleplayerDreadStartingCharacterForRotation,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).CurrentSingleplayerDreadStartingCharacterForRotation = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "CurrentSingleplayerDreadStartingCharacterForRotation",
+			JsonPropertyName = "current_singleplayer_dread_starting_character_for_rotation",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("CurrentSingleplayerDreadStartingCharacterForRotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[36] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo37);
+		array[36].IsGetNullable = false;
+		array[36].IsSetNullable = false;
+		JsonPropertyInfoValues<ModelId> propertyInfo38 = new JsonPropertyInfoValues<ModelId>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).CurrentMultiplayerDreadStartingCharacterForRotation,
+			Setter = delegate(object obj, ModelId? value)
+			{
+				((SerializableProgress)obj).CurrentMultiplayerDreadStartingCharacterForRotation = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "CurrentMultiplayerDreadStartingCharacterForRotation",
+			JsonPropertyName = "current_multiplayer_dread_starting_character_for_rotation",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("CurrentMultiplayerDreadStartingCharacterForRotation", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ModelId), Array.Empty<Type>(), null)
+		};
+		array[37] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo38);
+		array[37].IsGetNullable = false;
+		array[37].IsSetNullable = false;
+		JsonPropertyInfoValues<PendingDreadWinStreakResult> propertyInfo39 = new JsonPropertyInfoValues<PendingDreadWinStreakResult>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PendingSingleplayerDreadWinStreakResult,
+			Setter = delegate(object obj, PendingDreadWinStreakResult? value)
+			{
+				((SerializableProgress)obj).PendingSingleplayerDreadWinStreakResult = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PendingSingleplayerDreadWinStreakResult",
+			JsonPropertyName = "pending_singleplayer_dread_win_streak_result",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PendingSingleplayerDreadWinStreakResult", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(PendingDreadWinStreakResult), Array.Empty<Type>(), null)
+		};
+		array[38] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo39);
+		JsonPropertyInfoValues<PendingDreadWinStreakResult> propertyInfo40 = new JsonPropertyInfoValues<PendingDreadWinStreakResult>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableProgress),
+			Converter = null,
+			Getter = (object obj) => ((SerializableProgress)obj).PendingMultiplayerDreadWinStreakResult,
+			Setter = delegate(object obj, PendingDreadWinStreakResult? value)
+			{
+				((SerializableProgress)obj).PendingMultiplayerDreadWinStreakResult = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "PendingMultiplayerDreadWinStreakResult",
+			JsonPropertyName = "pending_multiplayer_dread_win_streak_result",
+			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("PendingMultiplayerDreadWinStreakResult", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(PendingDreadWinStreakResult), Array.Empty<Type>(), null)
+		};
+		array[39] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo40);
+		JsonPropertyInfoValues<int> propertyInfo41 = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -10975,8 +11918,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("Wins", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[26] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo27);
-		JsonPropertyInfoValues<int> propertyInfo28 = new JsonPropertyInfoValues<int>
+		array[40] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo41);
+		JsonPropertyInfoValues<int> propertyInfo42 = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -10993,8 +11936,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("Losses", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[27] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo28);
-		JsonPropertyInfoValues<long> propertyInfo29 = new JsonPropertyInfoValues<long>
+		array[41] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo42);
+		JsonPropertyInfoValues<long> propertyInfo43 = new JsonPropertyInfoValues<long>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -11011,8 +11954,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("FastestVictory", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(long), Array.Empty<Type>(), null)
 		};
-		array[28] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo29);
-		JsonPropertyInfoValues<long> propertyInfo30 = new JsonPropertyInfoValues<long>
+		array[42] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo43);
+		JsonPropertyInfoValues<long> propertyInfo44 = new JsonPropertyInfoValues<long>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -11029,8 +11972,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("BestWinStreak", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(long), Array.Empty<Type>(), null)
 		};
-		array[29] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo30);
-		JsonPropertyInfoValues<int> propertyInfo31 = new JsonPropertyInfoValues<int>
+		array[43] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo44);
+		JsonPropertyInfoValues<int> propertyInfo45 = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -11047,7 +11990,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableProgress).GetProperty("NumberOfRuns", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[30] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo31);
+		array[44] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo45);
 		return array;
 	}
 
@@ -11064,6 +12007,137 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 				IsMemberInitializer = true
 			}
 		};
+	}
+
+	private JsonTypeInfo<SerializableRng> Create_SerializableRng(JsonSerializerOptions options)
+	{
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<SerializableRng> jsonTypeInfo))
+		{
+			JsonObjectInfoValues<SerializableRng> objectInfo = new JsonObjectInfoValues<SerializableRng>
+			{
+				ObjectCreator = () => new SerializableRng(),
+				ObjectWithParameterizedConstructorCreator = null,
+				PropertyMetadataInitializer = (JsonSerializerContext _) => SerializableRngPropInit(options),
+				ConstructorParameterMetadataInitializer = null,
+				ConstructorAttributeProviderFactory = () => typeof(SerializableRng).GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, Array.Empty<Type>(), null),
+				SerializeHandler = null
+			};
+			jsonTypeInfo = JsonMetadataServices.CreateObjectInfo(options, objectInfo);
+			jsonTypeInfo.NumberHandling = null;
+		}
+		jsonTypeInfo.OriginatingResolver = this;
+		return jsonTypeInfo;
+	}
+
+	private static JsonPropertyInfo[] SerializableRngPropInit(JsonSerializerOptions options)
+	{
+		JsonPropertyInfo[] array = new JsonPropertyInfo[5];
+		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRng),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRng)obj).counter,
+			Setter = delegate(object obj, int value)
+			{
+				((SerializableRng)obj).counter = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "counter",
+			JsonPropertyName = "counter",
+			AttributeProviderFactory = () => typeof(SerializableRng).GetField("counter", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[0] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo);
+		JsonPropertyInfoValues<ulong> propertyInfo2 = new JsonPropertyInfoValues<ulong>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRng),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRng)obj).state0,
+			Setter = delegate(object obj, ulong value)
+			{
+				((SerializableRng)obj).state0 = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "state0",
+			JsonPropertyName = "s0",
+			AttributeProviderFactory = () => typeof(SerializableRng).GetField("state0", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[1] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo2);
+		JsonPropertyInfoValues<ulong> propertyInfo3 = new JsonPropertyInfoValues<ulong>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRng),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRng)obj).state1,
+			Setter = delegate(object obj, ulong value)
+			{
+				((SerializableRng)obj).state1 = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "state1",
+			JsonPropertyName = "s1",
+			AttributeProviderFactory = () => typeof(SerializableRng).GetField("state1", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[2] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo3);
+		JsonPropertyInfoValues<ulong> propertyInfo4 = new JsonPropertyInfoValues<ulong>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRng),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRng)obj).state2,
+			Setter = delegate(object obj, ulong value)
+			{
+				((SerializableRng)obj).state2 = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "state2",
+			JsonPropertyName = "s2",
+			AttributeProviderFactory = () => typeof(SerializableRng).GetField("state2", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[3] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo4);
+		JsonPropertyInfoValues<ulong> propertyInfo5 = new JsonPropertyInfoValues<ulong>
+		{
+			IsProperty = false,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRng),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRng)obj).state3,
+			Setter = delegate(object obj, ulong value)
+			{
+				((SerializableRng)obj).state3 = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "state3",
+			JsonPropertyName = "s3",
+			AttributeProviderFactory = () => typeof(SerializableRng).GetField("state3", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+		};
+		array[4] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo5);
+		return array;
 	}
 
 	private JsonTypeInfo<SerializableRun> Create_SerializableRun(JsonSerializerOptions options)
@@ -11088,7 +12162,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] SerializableRunPropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[24];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[25];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -11592,7 +12666,28 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			AttributeProviderFactory = () => typeof(SerializableRun).GetProperty("GameMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(GameMode), Array.Empty<Type>(), null)
 		};
 		array[22] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo23);
-		JsonPropertyInfoValues<int> propertyInfo24 = new JsonPropertyInfoValues<int>
+		JsonPropertyInfoValues<bool> propertyInfo24 = new JsonPropertyInfoValues<bool>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SerializableRun),
+			Converter = null,
+			Getter = (object obj) => ((SerializableRun)obj).IsCustomGame,
+			Setter = delegate(object obj, bool value)
+			{
+				((SerializableRun)obj).IsCustomGame = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "IsCustomGame",
+			JsonPropertyName = "is_custom_game",
+			AttributeProviderFactory = () => typeof(SerializableRun).GetProperty("IsCustomGame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
+		};
+		array[23] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo24);
+		JsonPropertyInfoValues<int> propertyInfo25 = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -11609,7 +12704,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = null,
 			AttributeProviderFactory = () => typeof(SerializableRun).GetProperty("FloorReached", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(int), Array.Empty<Type>(), null)
 		};
-		array[23] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo24);
+		array[24] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo25);
 		return array;
 	}
 
@@ -11732,7 +12827,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 
 	private static JsonPropertyInfo[] SettingsSavePropInit(JsonSerializerOptions options)
 	{
-		JsonPropertyInfo[] array = new JsonPropertyInfo[23];
+		JsonPropertyInfo[] array = new JsonPropertyInfo[24];
 		JsonPropertyInfoValues<int> propertyInfo = new JsonPropertyInfoValues<int>
 		{
 			IsProperty = true,
@@ -12113,7 +13208,30 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		array[17] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo18);
 		array[17].IsGetNullable = false;
 		array[17].IsSetNullable = false;
-		JsonPropertyInfoValues<ControllerMappingType> propertyInfo19 = new JsonPropertyInfoValues<ControllerMappingType>
+		JsonPropertyInfoValues<Dictionary<string, string>> propertyInfo19 = new JsonPropertyInfoValues<Dictionary<string, string>>
+		{
+			IsProperty = true,
+			IsPublic = true,
+			IsVirtual = false,
+			DeclaringType = typeof(SettingsSave),
+			Converter = null,
+			Getter = (object obj) => ((SettingsSave)obj).KbOnlyMapping,
+			Setter = delegate(object obj, Dictionary<string, string>? value)
+			{
+				((SettingsSave)obj).KbOnlyMapping = value;
+			},
+			IgnoreCondition = null,
+			HasJsonInclude = false,
+			IsExtensionData = false,
+			NumberHandling = null,
+			PropertyName = "KbOnlyMapping",
+			JsonPropertyName = "keyboard_only_mapping",
+			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("KbOnlyMapping", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<string, string>), Array.Empty<Type>(), null)
+		};
+		array[18] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo19);
+		array[18].IsGetNullable = false;
+		array[18].IsSetNullable = false;
+		JsonPropertyInfoValues<ControllerMappingType> propertyInfo20 = new JsonPropertyInfoValues<ControllerMappingType>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -12133,8 +13251,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "controller_mapping_type",
 			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("ControllerMappingType", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(ControllerMappingType), Array.Empty<Type>(), null)
 		};
-		array[18] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo19);
-		JsonPropertyInfoValues<Dictionary<string, string>> propertyInfo20 = new JsonPropertyInfoValues<Dictionary<string, string>>
+		array[19] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo20);
+		JsonPropertyInfoValues<Dictionary<string, string>> propertyInfo21 = new JsonPropertyInfoValues<Dictionary<string, string>>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -12154,10 +13272,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "controller_mapping",
 			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("ControllerMapping", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(Dictionary<string, string>), Array.Empty<Type>(), null)
 		};
-		array[19] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo20);
-		array[19].IsGetNullable = false;
-		array[19].IsSetNullable = false;
-		JsonPropertyInfoValues<bool> propertyInfo21 = new JsonPropertyInfoValues<bool>
+		array[20] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo21);
+		array[20].IsGetNullable = false;
+		array[20].IsSetNullable = false;
+		JsonPropertyInfoValues<bool> propertyInfo22 = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -12177,8 +13295,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "limit_fps_in_background",
 			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("LimitFpsInBackground", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[20] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo21);
-		JsonPropertyInfoValues<bool> propertyInfo22 = new JsonPropertyInfoValues<bool>
+		array[21] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo22);
+		JsonPropertyInfoValues<bool> propertyInfo23 = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -12198,8 +13316,8 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "full_console",
 			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("FullConsole", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[21] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo22);
-		JsonPropertyInfoValues<bool> propertyInfo23 = new JsonPropertyInfoValues<bool>
+		array[22] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo23);
+		JsonPropertyInfoValues<bool> propertyInfo24 = new JsonPropertyInfoValues<bool>
 		{
 			IsProperty = true,
 			IsPublic = true,
@@ -12219,7 +13337,7 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 			JsonPropertyName = "seen_ea_disclaimer",
 			AttributeProviderFactory = () => typeof(SettingsSave).GetProperty("SeenEaDisclaimer", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, typeof(bool), Array.Empty<Type>(), null)
 		};
-		array[22] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo23);
+		array[23] = JsonMetadataServices.CreatePropertyInfo(options, propertyInfo24);
 		return array;
 	}
 
@@ -12362,32 +13480,32 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		return jsonTypeInfo;
 	}
 
-	private JsonTypeInfo<Dictionary<PlayerRngType, int>> Create_DictionaryPlayerRngTypeInt32(JsonSerializerOptions options)
+	private JsonTypeInfo<Dictionary<PlayerRngType, SerializableRng>> Create_DictionaryPlayerRngTypeSerializableRng(JsonSerializerOptions options)
 	{
-		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<Dictionary<PlayerRngType, int>> jsonTypeInfo))
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<Dictionary<PlayerRngType, SerializableRng>> jsonTypeInfo))
 		{
-			JsonCollectionInfoValues<Dictionary<PlayerRngType, int>> collectionInfo = new JsonCollectionInfoValues<Dictionary<PlayerRngType, int>>
+			JsonCollectionInfoValues<Dictionary<PlayerRngType, SerializableRng>> collectionInfo = new JsonCollectionInfoValues<Dictionary<PlayerRngType, SerializableRng>>
 			{
-				ObjectCreator = () => new Dictionary<PlayerRngType, int>(),
+				ObjectCreator = () => new Dictionary<PlayerRngType, SerializableRng>(),
 				SerializeHandler = null
 			};
-			jsonTypeInfo = JsonMetadataServices.CreateDictionaryInfo<Dictionary<PlayerRngType, int>, PlayerRngType, int>(options, collectionInfo);
+			jsonTypeInfo = JsonMetadataServices.CreateDictionaryInfo<Dictionary<PlayerRngType, SerializableRng>, PlayerRngType, SerializableRng>(options, collectionInfo);
 			jsonTypeInfo.NumberHandling = null;
 		}
 		jsonTypeInfo.OriginatingResolver = this;
 		return jsonTypeInfo;
 	}
 
-	private JsonTypeInfo<Dictionary<RunRngType, int>> Create_DictionaryRunRngTypeInt32(JsonSerializerOptions options)
+	private JsonTypeInfo<Dictionary<RunRngType, SerializableRng>> Create_DictionaryRunRngTypeSerializableRng(JsonSerializerOptions options)
 	{
-		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<Dictionary<RunRngType, int>> jsonTypeInfo))
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<Dictionary<RunRngType, SerializableRng>> jsonTypeInfo))
 		{
-			JsonCollectionInfoValues<Dictionary<RunRngType, int>> collectionInfo = new JsonCollectionInfoValues<Dictionary<RunRngType, int>>
+			JsonCollectionInfoValues<Dictionary<RunRngType, SerializableRng>> collectionInfo = new JsonCollectionInfoValues<Dictionary<RunRngType, SerializableRng>>
 			{
-				ObjectCreator = () => new Dictionary<RunRngType, int>(),
+				ObjectCreator = () => new Dictionary<RunRngType, SerializableRng>(),
 				SerializeHandler = null
 			};
-			jsonTypeInfo = JsonMetadataServices.CreateDictionaryInfo<Dictionary<RunRngType, int>, RunRngType, int>(options, collectionInfo);
+			jsonTypeInfo = JsonMetadataServices.CreateDictionaryInfo<Dictionary<RunRngType, SerializableRng>, RunRngType, SerializableRng>(options, collectionInfo);
 			jsonTypeInfo.NumberHandling = null;
 		}
 		jsonTypeInfo.OriginatingResolver = this;
@@ -12644,6 +13762,22 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 				SerializeHandler = null
 			};
 			jsonTypeInfo = JsonMetadataServices.CreateListInfo<List<AncientChoiceHistoryEntry>, AncientChoiceHistoryEntry>(options, collectionInfo);
+			jsonTypeInfo.NumberHandling = null;
+		}
+		jsonTypeInfo.OriginatingResolver = this;
+		return jsonTypeInfo;
+	}
+
+	private JsonTypeInfo<List<BlitzMerchantHistoryEntry>> Create_ListBlitzMerchantHistoryEntry(JsonSerializerOptions options)
+	{
+		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<List<BlitzMerchantHistoryEntry>> jsonTypeInfo))
+		{
+			JsonCollectionInfoValues<List<BlitzMerchantHistoryEntry>> collectionInfo = new JsonCollectionInfoValues<List<BlitzMerchantHistoryEntry>>
+			{
+				ObjectCreator = () => new List<BlitzMerchantHistoryEntry>(),
+				SerializeHandler = null
+			};
+			jsonTypeInfo = JsonMetadataServices.CreateListInfo<List<BlitzMerchantHistoryEntry>, BlitzMerchantHistoryEntry>(options, collectionInfo);
 			jsonTypeInfo.NumberHandling = null;
 		}
 		jsonTypeInfo.OriginatingResolver = this;
@@ -13446,16 +14580,6 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		return jsonTypeInfo;
 	}
 
-	private JsonTypeInfo<uint> Create_UInt32(JsonSerializerOptions options)
-	{
-		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<uint> jsonTypeInfo))
-		{
-			jsonTypeInfo = JsonMetadataServices.CreateValueInfo<uint>(options, JsonMetadataServices.UInt32Converter);
-		}
-		jsonTypeInfo.OriginatingResolver = this;
-		return jsonTypeInfo;
-	}
-
 	private JsonTypeInfo<ulong> Create_UInt64(JsonSerializerOptions options)
 	{
 		if (!TryGetTypeInfoForRuntimeCustomConverter(options, out JsonTypeInfo<ulong> jsonTypeInfo))
@@ -13552,6 +14676,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		if (type == typeof(ControllerMappingType))
 		{
 			return Create_ControllerMappingType(options);
+		}
+		if (type == typeof(BlitzMerchantEntryType))
+		{
+			return Create_BlitzMerchantEntryType(options);
 		}
 		if (type == typeof(RelicRarity))
 		{
@@ -13653,6 +14781,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		{
 			return Create_AncientChoiceHistoryEntry(options);
 		}
+		if (type == typeof(BlitzMerchantHistoryEntry))
+		{
+			return Create_BlitzMerchantHistoryEntry(options);
+		}
 		if (type == typeof(CardChoiceHistoryEntry))
 		{
 			return Create_CardChoiceHistoryEntry(options);
@@ -13744,6 +14876,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		if (type == typeof(MigratingData))
 		{
 			return Create_MigratingData(options);
+		}
+		if (type == typeof(PendingDreadWinStreakResult))
+		{
+			return Create_PendingDreadWinStreakResult(options);
 		}
 		if (type == typeof(PrefsSave))
 		{
@@ -13877,6 +15013,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		{
 			return Create_SerializableProgress(options);
 		}
+		if (type == typeof(SerializableRng))
+		{
+			return Create_SerializableRng(options);
+		}
 		if (type == typeof(SerializableRun))
 		{
 			return Create_SerializableRun(options);
@@ -13909,13 +15049,13 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		{
 			return Create_DictionaryRelicRarityListModelId(options);
 		}
-		if (type == typeof(Dictionary<PlayerRngType, int>))
+		if (type == typeof(Dictionary<PlayerRngType, SerializableRng>))
 		{
-			return Create_DictionaryPlayerRngTypeInt32(options);
+			return Create_DictionaryPlayerRngTypeSerializableRng(options);
 		}
-		if (type == typeof(Dictionary<RunRngType, int>))
+		if (type == typeof(Dictionary<RunRngType, SerializableRng>))
 		{
-			return Create_DictionaryRunRngTypeInt32(options);
+			return Create_DictionaryRunRngTypeSerializableRng(options);
 		}
 		if (type == typeof(Dictionary<string, object>))
 		{
@@ -13980,6 +15120,10 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		if (type == typeof(List<AncientChoiceHistoryEntry>))
 		{
 			return Create_ListAncientChoiceHistoryEntry(options);
+		}
+		if (type == typeof(List<BlitzMerchantHistoryEntry>))
+		{
+			return Create_ListBlitzMerchantHistoryEntry(options);
 		}
 		if (type == typeof(List<CardChoiceHistoryEntry>))
 		{
@@ -14192,10 +15336,6 @@ internal class MegaCritSerializerContext : JsonSerializerContext, IJsonTypeInfoR
 		if (type == typeof(string))
 		{
 			return Create_String(options);
-		}
-		if (type == typeof(uint))
-		{
-			return Create_UInt32(options);
 		}
 		if (type == typeof(ulong))
 		{

@@ -14,6 +14,8 @@ public class NetSingleplayerGameService : INetGameService
 
 	private bool _isLoading;
 
+	public PeerVersionInfo LocalVersion { get; } = PeerVersionInfo.LocalDefault();
+
 	public bool IsConnected => true;
 
 	public bool IsGameLoading => _isLoading;

@@ -32,6 +32,7 @@ public class CombatStateTracker
 	{
 		_combatManager = combatManager;
 		_combatManager.History.Changed += OnCombatHistoryChanged;
+		_combatManager.CombatBegan += OnCombatBegan;
 		_combatManager.CreaturesChanged += OnCreaturesChanged;
 		_combatManager.TurnStarted += OnTurnStarted;
 		_combatManager.TurnEnded += OnTurnEnded;
@@ -40,6 +41,7 @@ public class CombatStateTracker
 	~CombatStateTracker()
 	{
 		_combatManager.History.Changed -= OnCombatHistoryChanged;
+		_combatManager.CombatBegan -= OnCombatBegan;
 		_combatManager.CreaturesChanged -= OnCreaturesChanged;
 		_combatManager.TurnStarted -= OnTurnStarted;
 		_combatManager.TurnEnded -= OnTurnEnded;
@@ -122,6 +124,11 @@ public class CombatStateTracker
 		combatState.EnergyChanged -= OnPlayerCombatStateValueChanged;
 		combatState.PlayerTurnPhaseChanged -= OnPlayerStateChanged;
 		combatState.StarsChanged -= OnPlayerCombatStateValueChanged;
+	}
+
+	private void OnCombatBegan(CombatState _)
+	{
+		NotifyCombatStateChanged("OnCombatBegan");
 	}
 
 	private void OnCardPileContentsChanged()

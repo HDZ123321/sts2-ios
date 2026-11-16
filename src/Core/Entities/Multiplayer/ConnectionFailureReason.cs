@@ -27,5 +27,9 @@ public enum ConnectionFailureReason
 	/// <summary>
 	/// Either the host has mods that we don't have, or we have mods that the host doesn't have.
 	/// </summary>
-	ModMismatch
+	ModMismatch,
+	/// <summary>
+	/// The version handshake timed out.
+	/// </summary>
+	HandshakeTimeout
 }

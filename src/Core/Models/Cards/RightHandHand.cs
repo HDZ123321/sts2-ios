@@ -35,7 +35,7 @@ public sealed class RightHandHand : CardModel
 		ArgumentNullException.ThrowIfNull(cardPlay.Target, "cardPlay.Target");
 		if (!Osty.CheckMissingWithAnim(base.Owner))
 		{
-			await DamageCmd.Attack(base.DynamicVars.OstyDamage.BaseValue).FromOsty(base.Owner.Osty, this).Targeting(cardPlay.Target)
+			await DamageCmd.Attack(base.DynamicVars.OstyDamage.BaseValue).FromOsty(base.Owner.Osty, this, cardPlay).Targeting(cardPlay.Target)
 				.WithHitFx("vfx/vfx_attack_blunt", null, "blunt_attack.mp3")
 				.Execute(choiceContext);
 		}

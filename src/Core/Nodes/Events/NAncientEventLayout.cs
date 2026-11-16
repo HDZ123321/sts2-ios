@@ -265,7 +265,7 @@ public class NAncientEventLayout : NEventLayout
 	/// </summary>
 	private Control _fakeNextButton;
 
-	private TextureRect _fakeNextButtonControllerIcon;
+	private NHotkeyIcon _fakeNextButtonControllerIcon;
 
 	private MegaLabel _fakeNextButtonLabel;
 
@@ -304,7 +304,7 @@ public class NAncientEventLayout : NEventLayout
 		_fakeNextButtonContainer = GetNode<Control>("%FakeNextButtonContainer");
 		_fakeNextButton = _fakeNextButtonContainer.GetNode<Control>("FakeNextButton");
 		_fakeNextButtonLabel = _fakeNextButton.GetNode<MegaLabel>("Label");
-		_fakeNextButtonControllerIcon = _fakeNextButton.GetNode<TextureRect>("ControllerIcon");
+		_fakeNextButtonControllerIcon = _fakeNextButton.GetNode<NHotkeyIcon>("%HotkeyIcon");
 		_originalContentContainerHeight = _contentContainer.Size.Y;
 		_contentContainer.Size = new Vector2(_contentContainer.Size.X, _fakeNextButtonContainer.GlobalPosition.Y - _contentContainer.GlobalPosition.Y);
 		UpdateHotkeyDisplay();
@@ -349,7 +349,9 @@ public class NAncientEventLayout : NEventLayout
 		{
 			_ancientBgContainer.RemoveChildSafely(child);
 		}
-		_ancientBgContainer.AddChildSafely(_ancientEvent.CreateBackgroundScene().Instantiate<Control>(PackedScene.GenEditState.Disabled));
+		Control control = _ancientEvent.CreateBackgroundScene().Instantiate<Control>(PackedScene.GenEditState.Disabled);
+		_ancientEvent.ConfigureBackgroundScene(control);
+		_ancientBgContainer.AddChildSafely(control);
 		if (_ancientEvent.HasAmbientBgm)
 		{
 			SfxCmd.PlayLoop(_ancientEvent.AmbientBgm);
@@ -581,11 +583,15 @@ public class NAncientEventLayout : NEventLayout
 
 	private void UpdateHotkeyDisplay()
 	{
-		_fakeNextButtonControllerIcon.Visible = NControllerManager.Instance.IsUsingController;
+		_fakeNextButtonControllerIcon.Visible = NControllerManager.Instance.IsUsingDirectionalNavigation;
 		string hotkey = _dialogueHitbox.GetHotkey();
 		if (hotkey != null)
 		{
-			_fakeNextButtonControllerIcon.Texture = NInputManager.Instance.GetHotkeyIcon(hotkey);
+			_fakeNextButtonControllerIcon.UpdateInput(hotkey);
+		}
+		else
+		{
+			_fakeNextButtonControllerIcon.Visible = false;
 		}
 	}
 
@@ -875,7 +881,7 @@ public class NAncientEventLayout : NEventLayout
 		}
 		if (name == PropertyName._fakeNextButtonControllerIcon)
 		{
-			_fakeNextButtonControllerIcon = VariantUtils.ConvertTo<TextureRect>(in value);
+			_fakeNextButtonControllerIcon = VariantUtils.ConvertTo<NHotkeyIcon>(in value);
 			return true;
 		}
 		if (name == PropertyName._fakeNextButtonLabel)
@@ -1078,7 +1084,7 @@ public class NAncientEventLayout : NEventLayout
 		}
 		if (info.TryGetProperty(PropertyName._fakeNextButtonControllerIcon, out var value12))
 		{
-			_fakeNextButtonControllerIcon = value12.As<TextureRect>();
+			_fakeNextButtonControllerIcon = value12.As<NHotkeyIcon>();
 		}
 		if (info.TryGetProperty(PropertyName._fakeNextButtonLabel, out var value13))
 		{

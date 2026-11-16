@@ -10,16 +10,25 @@ public readonly struct SpineAnimationAccess(MegaSprite? sprite)
 
 	public bool IsValid => _sprite != null;
 
-	public MegaTrackEntry? SetAnimation(string name, bool loop = true, int track = 0)
+	public void SetAnimation(string name, bool loop = true, int track = 0)
 	{
-		return _sprite?.GetAnimationState().SetAnimation(name, loop, track);
+		_sprite?.GetAnimationState().SetAnimation(name, loop, track);
 	}
 
-	public MegaTrackEntry? AddAnimation(string name, float delay = 0f, bool loop = true, int track = 0)
+	public void AddAnimation(string name, float delay = 0f, bool loop = true, int track = 0)
 	{
-		return _sprite?.GetAnimationState().AddAnimation(name, delay, loop, track);
+		_sprite?.GetAnimationState().AddAnimation(name, delay, loop, track);
 	}
 
+	public MegaSkeleton? GetSkeleton()
+	{
+		return _sprite?.GetSkeleton();
+	}
+
+	/// <summary>
+	/// Current track entry, or null if the sprite is null or no track is active. The returned wrapper is the
+	/// caller's to dispose: wrap it in <c>using</c> so its native release stays on the calling thread.
+	/// </summary>
 	public MegaTrackEntry? GetCurrentTrack(int track = 0)
 	{
 		return _sprite?.GetAnimationState().GetCurrent(track);
