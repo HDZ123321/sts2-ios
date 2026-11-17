@@ -3,6 +3,7 @@ using System.ComponentModel;
 using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
+using MegaCrit.Sts2.Core.Helpers;
 
 namespace MegaCrit.Sts2.Core.Nodes.CommonUi;
 
@@ -285,7 +286,10 @@ public class NCursorManager : Node
 	private void RefreshCursorShown()
 	{
 		bool flag = !_isUsingController && _shouldShowCursor;
-		Input.MouseMode = (Input.MouseModeEnum)(flag ? 0 : 1);
+		if (!MobileDevice.IsTouchOnly)
+		{
+			Input.MouseMode = (Input.MouseModeEnum)(flag ? 0 : 1);
+		}
 		if (!flag)
 		{
 			_lastSetCursor = null;

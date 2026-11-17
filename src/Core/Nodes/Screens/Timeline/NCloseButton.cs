@@ -104,6 +104,7 @@ public class NCloseButton : NButton
 	{
 		ConnectSignals();
 		_closeLabel = GetNode<MegaLabel>("%CloseLabel");
+		NSafeAreaFit.Watch(this);
 	}
 
 	public void SetLabel(string text)

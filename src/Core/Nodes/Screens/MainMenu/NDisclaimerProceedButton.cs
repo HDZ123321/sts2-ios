@@ -80,6 +80,7 @@ public class NDisclaimerProceedButton : NButton
 		ConnectSignals();
 		LocString locString = new LocString("main_menu_ui", "EARLY_ACCESS_DISCLAIMER.proceedButton");
 		GetNode<MegaLabel>("%Label").SetTextAutoSize(locString.GetFormattedText());
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()

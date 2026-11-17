@@ -168,7 +168,10 @@ public class NDropdownScrollbar : NButton
 	{
 		hasControl = true;
 		_train.Modulate = StsColors.gold;
-		Input.MouseMode = Input.MouseModeEnum.Hidden;
+		if (!MobileDevice.IsTouchOnly)
+		{
+			Input.MouseMode = Input.MouseModeEnum.Hidden;
+		}
 	}
 
 	public override void _Input(InputEvent inputEvent)
@@ -177,7 +180,10 @@ public class NDropdownScrollbar : NButton
 		if (hasControl && inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left && inputEventMouseButton.IsReleased())
 		{
 			hasControl = false;
-			Input.MouseMode = Input.MouseModeEnum.Visible;
+			if (!MobileDevice.IsTouchOnly)
+			{
+				Input.MouseMode = Input.MouseModeEnum.Visible;
+			}
 			_train.Modulate = StsColors.quarterTransparentWhite;
 		}
 	}

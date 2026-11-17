@@ -500,13 +500,14 @@ public class LocManager
 				{
 					dictionary4 = dictionary4.ToDictionary((KeyValuePair<string, string> kvp) => kvp.Key, (KeyValuePair<string, string> kvp) => ConvertToW(kvp.Value));
 				}
+				locTable.MergeWith(dictionary4);
 				if (BakedContent.IsBakedLocTable(moddedLocTable))
 				{
+					// The baked pack was authored for a mod loader that prefixes every key with
+					// "WATCHER-", so the vanilla builders (which ask for the bare ModelId entry)
+					// need an unprefixed copy as well. Both forms have to land: the stance models
+					// still query the prefixed one.
 					locTable.MergeWith(BakedContent.WithUnprefixedAliases(dictionary4));
-				}
-				else
-				{
-					locTable.MergeWith(dictionary4);
 				}
 			}
 			dictionary2[fileNameWithoutExtension] = locTable;

@@ -95,6 +95,7 @@ public class NBestiaryModeButton : NButton
 	{
 		ConnectSignals();
 		_modeLabel = GetNode<MegaLabel>("%ModeLabel");
+		NSafeAreaFit.Watch(this);
 	}
 
 	public void SetLabel(string str)

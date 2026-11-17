@@ -119,6 +119,7 @@ public class NModMenuButton : NButton
 		_hsv = (ShaderMaterial)_image.Material;
 		LocString locString = new LocString("gameplay_ui", "PING_BUTTON");
 		_label.SetTextAutoSize(locString.GetFormattedText());
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnRelease()

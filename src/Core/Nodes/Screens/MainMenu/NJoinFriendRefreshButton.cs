@@ -106,6 +106,7 @@ public class NJoinFriendRefreshButton : NButton
 		MegaLabel node = GetNode<MegaLabel>("Label");
 		node.SetTextAutoSize(new LocString("main_menu_ui", "JOIN_FRIENDS_MENU.refresh").GetFormattedText());
 		_hsv = (ShaderMaterial)base.Material;
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnPress()

@@ -84,6 +84,7 @@ public class NDreadInfoButton : NButton
 	{
 		ConnectSignals();
 		_icon = GetNode<Control>("%Icon");
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()

@@ -266,7 +266,7 @@ public class NTargetingArrow : Node2D
 	public void StartDrawingFrom(Vector2 from, bool usingController)
 	{
 		_followMouse = !usingController;
-		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse)
+		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse && !MobileDevice.IsTouchOnly)
 		{
 			Input.MouseMode = Input.MouseModeEnum.Hidden;
 		}
@@ -295,7 +295,10 @@ public class NTargetingArrow : Node2D
 		}
 		else
 		{
-			Input.MouseMode = Input.MouseModeEnum.Hidden;
+			if (!MobileDevice.IsTouchOnly)
+			{
+				Input.MouseMode = Input.MouseModeEnum.Hidden;
+			}
 			_currentArrowPos = null;
 		}
 		base.Visible = !NCombatUi.IsDebugHideTargetingUi;
@@ -303,7 +306,7 @@ public class NTargetingArrow : Node2D
 
 	public void StopDrawing()
 	{
-		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse)
+		if (!NControllerManager.Instance.IsUsingDirectionalNavigation && _followMouse && !MobileDevice.IsTouchOnly)
 		{
 			Input.MouseMode = Input.MouseModeEnum.Visible;
 		}
@@ -315,7 +318,7 @@ public class NTargetingArrow : Node2D
 
 	public override void _ExitTree()
 	{
-		if (_followMouse)
+		if (_followMouse && !MobileDevice.IsTouchOnly)
 		{
 			Input.MouseMode = Input.MouseModeEnum.Visible;
 		}

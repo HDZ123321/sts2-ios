@@ -206,7 +206,15 @@ public class NBackButton : NButton
 
 	private void OnWindowChange()
 	{
-		_showPos = new Vector2(0f, GetWindow().ContentScaleSize.Y) - _posOffset;
+		// This used to read GetWindow().ContentScaleSize.Y as if it were the screen height. It is
+		// not: with canvas_items stretching on a phone the visible canvas is wider than the design
+		// size, and on an aspect ratio that does not match 16:9 the bottom of the screen sits below
+		// ContentScaleSize.Y, so the button was parked past the edge and could not be tapped. The
+		// back button is anchored to the bottom left corner, so it has to hang off the safe area's
+		// bottom left, exactly like NConfirmButton hangs off the bottom right.
+		NGame game = NGame.Instance;
+		Vector2 anchor = ((game != null) ? new Vector2(game.SafeAreaRect.Position.X, game.SafeAreaEnd.Y) : new Vector2(0f, GetWindow().ContentScaleSize.Y));
+		_showPos = anchor - _posOffset;
 		_hidePos = _showPos + _hideOffset;
 		base.Position = (_isEnabled ? _showPos : _hidePos);
 	}

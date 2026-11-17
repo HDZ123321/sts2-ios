@@ -91,6 +91,7 @@ public class NDreadDisclaimerConfirmButton : NButton
 		GetNode<MegaLabel>("%Label").SetTextAutoSize(locString.GetFormattedText());
 		_tween = CreateTween().SetParallel();
 		_tween.TweenProperty(this, "scale", Vector2.One * 1.05f, 0.05);
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()

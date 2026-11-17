@@ -90,6 +90,7 @@ public class NAcknowledgeButton : NButton
 		ConnectSignals();
 		_label = GetNode<MegaLabel>("%Label");
 		_label.SetTextAutoSize(new LocString("timeline", "ACKNOWLEDGE_BUTTON").GetRawText());
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()

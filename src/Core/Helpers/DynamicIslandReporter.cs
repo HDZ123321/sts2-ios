@@ -90,6 +90,10 @@ public static class DynamicIslandReporter
 
 	private static void Publish()
 	{
+		// Build stamps a fresh sequence number every call, so the text always differs and the file
+		// is rewritten once a second. That write is also the heartbeat the Swift side watches: a
+		// state file whose modification date has stopped moving means this process is gone, and the
+		// activity it left behind has to be dropped.
 		Build();
 		string text = Payload.ToString();
 		if (text == _lastPayload)
@@ -98,6 +102,39 @@ public static class DynamicIslandReporter
 		}
 		File.WriteAllText(StatePath(), text);
 		_lastPayload = text;
+	}
+
+	/// <summary>
+	/// Writes an inactive state right now, bypassing the change detection in <see cref="Publish"/>.
+	/// <para>
+	/// iOS suspends the process when the app goes to the background, and a process that gets killed
+	/// from the app switcher never runs another frame, so the poll above cannot report the end of a
+	/// run. That left the Live Activity on screen until the system's own eight hour timeout. This is
+	/// the last chance to say "not reporting any more", so it is called straight from the pause
+	/// notification and from <c>NGame.Quit</c>.
+	/// </para>
+	/// </summary>
+	public static void PublishInactive()
+	{
+		if (_disabled)
+		{
+			return;
+		}
+		try
+		{
+			_sequence++;
+			Payload.Clear();
+			Payload.Append("{\"seq\":").Append(_sequence).Append(",\"active\":false}");
+			string text = Payload.ToString();
+			File.WriteAllText(StatePath(), text);
+			_lastPayload = text;
+			Log.Info("[Island] reported inactive");
+		}
+		catch (Exception ex)
+		{
+			_disabled = true;
+			Log.Error($"[Island] failed to report inactive: {ex}");
+		}
 	}
 
 	/// <summary>

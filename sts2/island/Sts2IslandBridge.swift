@@ -4,6 +4,10 @@ import Foundation
 import ActivityKit
 #endif
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 // The app-side half of the Dynamic Island bridge.
 //
 // ActivityKit has no C or Objective-C entry point, so this has to be Swift. Rather than export a
@@ -29,6 +33,10 @@ private let islandStatusLimit = 8000
 /// envelope fits; this is the hard ceiling we refuse to cross even if the file says otherwise.
 private let islandAvatarLimit = 3 * 1024
 
+/// The reporter advances the beat file once a second. If it has not moved for this long the app is
+/// gone - backgrounded, force quit, or crashed - and any activity still on screen is dropped.
+private let islandStaleSeconds: TimeInterval = 5.0
+
 private final class Sts2IslandPoller {
 	static let shared = Sts2IslandPoller()
 
@@ -40,6 +48,10 @@ private final class Sts2IslandPoller {
 	private var lastPayloadHash: Int = 0
 	private var lastActiveRunId: String?
 	private var avatarCache: (name: String, stamp: String, data: Data?) = ("", "", nil)
+	/// When the activity currently on screen was requested. A freshly requested activity must not be
+	/// judged stale before the reporter has had a chance to tick, otherwise resuming from the
+	/// background would drop the island the moment it comes back.
+	private var lastActivityAt: Date = .distantPast
 
 	func start() {
 		queue.async { [self] in
@@ -50,6 +62,43 @@ private final class Sts2IslandPoller {
 			source.setEventHandler { [weak self] in self?.tick() }
 			source.resume()
 			timer = source
+			#if canImport(UIKit)
+			// A Live Activity outlives the process that started it, and ActivityKit has no "the app
+			// died" callback: applicationWillTerminate is not called when the user swipes the app
+			// away, and the poller above dies with the process, so nothing is left to notice that the
+			// run is over. That is why the island used to hang around for the system's full eight
+			// hour timeout after the game was cleared from the app switcher.
+			//
+			// Going to the background is the last reliable moment this process still runs, and for a
+			// game it is also the honest answer: a backgrounded run is not progressing, so there is
+			// nothing worth showing. End the activity right there instead of waiting for a file the
+			// next tick will never read.
+			NotificationCenter.default.addObserver(
+				forName: UIApplication.didEnterBackgroundNotification,
+				object: nil,
+				queue: nil) { [weak self] _ in
+					guard let self else { return }
+					self.queue.async { [self] in
+						status("app went to background, ending the activity")
+						if #available(iOS 16.1, *) {
+							endActivity()
+						}
+					}
+				}
+			// Coming back has to re-read the state file even when the reporter never got to write a
+			// fresh line: a backgrounded process is suspended before its next publish, so the file
+			// can still hold the same active payload this poller already consumed. Clearing the hash
+			// makes the next tick apply it again and put the island back.
+			NotificationCenter.default.addObserver(
+				forName: UIApplication.willEnterForegroundNotification,
+				object: nil,
+				queue: nil) { [weak self] _ in
+					guard let self else { return }
+					self.queue.async { [self] in
+						self.lastPayloadHash = 0
+					}
+				}
+			#endif
 			status("poller started")
 		}
 	}
@@ -61,10 +110,12 @@ private final class Sts2IslandPoller {
 		let stateURL = dir.appendingPathComponent(islandStateFileName)
 		guard let data = try? Data(contentsOf: stateURL) else {
 			// The reporter has not written anything yet, or the file vanished after the app died.
-			// Either way there is nothing to show; leave any existing activity alone until the
-			// staleness check below decides otherwise.
+			// Either way there is nothing to show. Still run the staleness check so an activity
+			// from a previous run cannot be left behind.
+			dropStaleActivity(stateURL)
 			return
 		}
+		dropStaleActivity(stateURL)
 		let hash = data.hashValue
 		guard hash != lastPayloadHash else { return }
 		lastPayloadHash = hash
@@ -74,6 +125,34 @@ private final class Sts2IslandPoller {
 		}
 		if #available(iOS 16.1, *) {
 			apply(snapshot, dir: dir)
+		}
+	}
+
+	/// Drops any activity still on screen once the reporter's heartbeat file has gone quiet.
+	///
+	/// The reporter bumps a sequence number on every poll and writes only when the text changed, so
+	/// the file's modification date advances once a second for as long as the game is running. A
+	/// quiet file therefore means the process is gone: force quit from the app switcher, killed by
+	/// the system for memory, or crashed. None of those get to write a final inactive state, and
+	/// without this the Live Activity stayed up until the system's own eight hour timeout.
+	private func dropStaleActivity(_ stateURL: URL) {
+		if #available(iOS 16.1, *) {
+			guard !Activity<Sts2RunActivityAttributes>.activities.isEmpty else { return }
+			// Give a just-requested activity a full window before judging it, and re-arm the clock
+			// whenever the reporter proves it is alive, so only a genuinely dead process trips this.
+			guard Date().timeIntervalSince(lastActivityAt) >= islandStaleSeconds else { return }
+			let stamp: Date
+			if let attributes = try? FileManager.default.attributesOfItem(atPath: stateURL.path),
+			   let modified = attributes[.modificationDate] as? Date {
+				stamp = modified
+			} else {
+				stamp = .distantPast
+			}
+			let quiet = Date().timeIntervalSince(stamp)
+			guard quiet >= islandStaleSeconds else { return }
+			lastActivityAt = Date()
+			status("heartbeat quiet for \(Int(quiet))s, dropping the activity")
+			endActivity()
 		}
 	}
 
@@ -111,6 +190,7 @@ private final class Sts2IslandPoller {
 					contentState: makeState(snapshot, avatar: attempt),
 					pushType: nil)
 				lastActiveRunId = runId
+				lastActivityAt = Date()
 				status("activity started \(runId)\(attempt == nil ? " (no avatar)" : "")")
 				if attempt == nil {
 					// Remember the failure so the next run does not pay for the encode again.

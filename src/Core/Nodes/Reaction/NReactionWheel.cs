@@ -5,6 +5,7 @@ using Godot;
 using Godot.Bridge;
 using Godot.NativeInterop;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -244,7 +245,10 @@ public class NReactionWheel : Control
 			_centerPosition = GetViewport().GetMousePosition();
 			_marker.Position = (base.Size - _marker.Size) * 0.5f;
 			base.GlobalPosition = _centerPosition - base.Size * base.Scale * 0.5f;
-			Input.MouseMode = Input.MouseModeEnum.Hidden;
+			if (!MobileDevice.IsTouchOnly)
+			{
+				Input.MouseMode = Input.MouseModeEnum.Hidden;
+			}
 		}
 		else if (inputEvent.IsActionReleased(_reactWheel) && base.Visible)
 		{
@@ -260,7 +264,10 @@ public class NReactionWheel : Control
 
 	private void HideWheel()
 	{
-		Input.MouseMode = Input.MouseModeEnum.Visible;
+		if (!MobileDevice.IsTouchOnly)
+		{
+			Input.MouseMode = Input.MouseModeEnum.Visible;
+		}
 		WarpMouseBackToOriginalPosition();
 		base.Visible = false;
 	}

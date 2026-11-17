@@ -683,6 +683,7 @@ public class NGame : Control
 			SafeAreaRect = new Rect2(safeMin, safeMax - safeMin);
 		}
 		Log.Info($"[SafeArea] window={windowSize} visible={visibleRect} reported={safeArea} -> {SafeAreaRect}");
+		NSafeAreaFit.FitAll();
 	}
 
 	/// <summary>
@@ -1160,9 +1161,21 @@ public class NGame : Control
 	/// </summary>
 	public override void _Notification(int what)
 	{
-		if ((long)what == 1006)
+		long num = what;
+		if (num == 1006)
 		{
 			Quit();
+		}
+		else if (num == 2015)
+		{
+			// NotificationApplicationPaused. iOS fires this from applicationDidEnterBackground, and
+			// the process gets suspended right afterwards, so this is the last frame the island
+			// reporter will ever see. Without it the Live Activity outlives the app: the Swift
+			// poller stops reading the state file once the process is gone, and the activity sits
+			// there until the system's eight hour timeout. Only the paused notification is used
+			// here, not the focus out one - pulling down control centre also blurs the window, and
+			// that must not dismiss the island.
+			DynamicIslandReporter.PublishInactive();
 		}
 	}
 
@@ -1188,6 +1201,7 @@ public class NGame : Control
 		MegaLabel.DisposeCachedParagraph();
 		MegaRichTextLabel.DisposeCachedParagraph();
 		FontManager.ClearCache();
+		DynamicIslandReporter.PublishInactive();
 		GetTree().Quit();
 	}
 

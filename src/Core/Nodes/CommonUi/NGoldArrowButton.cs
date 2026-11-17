@@ -112,6 +112,7 @@ public class NGoldArrowButton : NButton
 		_icon = GetNode<TextureRect>("TextureRect");
 		_hsv = (ShaderMaterial)_icon.Material;
 		_hsv.SetShaderParameter(_v, _valueDefault);
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()

@@ -584,6 +584,7 @@ public static class CardPileCmd
 				continue;
 			}
 			NCard nCard = NCard.FindOnTable(cardAdded, pileType2);
+			bool createdNow = false;
 			int num;
 			if (result.targetPile == PileType.Hand)
 			{
@@ -639,23 +640,38 @@ public static class CardPileCmd
 			else if (flag3)
 			{
 				nCard = CreateCardNodeAndUpdateVisuals(cardAdded, pileType2, pileType.Value, flag);
+				createdNow = true;
 			}
-			if (pileType.HasValue && (pileType2 != PileType.Play || pileType == PileType.Hand || cardAdded.IsDupe))
+			// CreateCardNodeAndUpdateVisuals already ran UpdateVisuals for the pile it was created
+			// for. Running it again here redoes the whole portrait, cost badge, dynamic var preview
+			// and description refit for no visual gain, and a hand draw paid it twice per card.
+			if (!createdNow && nCard != null && pileType.HasValue && (pileType2 != PileType.Play || pileType == PileType.Hand || cardAdded.IsDupe))
 			{
-				nCard?.UpdateVisuals(pileType.Value, CardPreviewMode.Normal);
+				nCard.UpdateVisuals(pileType.Value, CardPreviewMode.Normal);
 			}
+			createdNow = false;
 			if (nCard != null)
 			{
 				list.Add(nCard);
 			}
 		}
-		IEnumerable<PileType?> second = list.Select((NCard c) => results.First((CardPileAddResult r) => r.cardAdded == c.Model).oldPile?.Type);
+		// results.First(...) inside the two loops below made this quadratic in the number of cards
+		// moving at once. One pass into a dictionary keeps the same semantics.
+		Dictionary<CardModel, CardPile?> oldPileByCard = new Dictionary<CardModel, CardPile?>(list.Count + list2.Count);
+		foreach (CardPileAddResult result2 in results)
+		{
+			if (result2.success)
+			{
+				oldPileByCard[result2.cardAdded] = result2.oldPile;
+			}
+		}
+		IEnumerable<PileType?> second = list.Select((NCard c) => (oldPileByCard.TryGetValue(c.Model, out CardPile oldPileOfCard) ? oldPileOfCard : null)?.Type);
 		Tween tweenForCardsChangingPiles = GetTweenForCardsChangingPiles(list.Zip(second));
 		if (list2.Count != 0)
 		{
 			foreach (CardModel card in list2)
 			{
-				CardPile oldPile = results.First((CardPileAddResult r) => r.cardAdded == card).oldPile;
+				CardPile oldPile = oldPileByCard.TryGetValue(card, out CardPile oldPileOfCard) ? oldPileOfCard : null;
 				CardPile targetPile = card.Pile;
 				string trailPath = card.Owner.Character.TrailPath;
 				Node vfxContainer = ((targetPile.Type != PileType.Deck) ? card.Owner.Creature.GetVfxContainer() : NRun.Instance.GlobalUi.TopBar.TrailContainer);
@@ -1020,6 +1036,7 @@ public static class CardPileCmd
 		}
 		ICombatState combatState = player.Creature.CombatState;
 		List<CardModel> result = new List<CardModel>();
+		List<CardPileAddResult> addResults = new List<CardPileAddResult>();
 		CardPile hand = PileType.Hand.GetPile(player);
 		CardPile drawPile = PileType.Draw.GetPile(player);
 		int drawsRequested = ((count > 0m) ? ((int)Math.Ceiling(count)) : 0);
@@ -1058,12 +1075,27 @@ public static class CardPileCmd
 				break;
 			}
 			result.Add(card);
-			await Add(card, hand);
+			// Silent add: the pile bookkeeping happens per card (so every draw hook still fires in
+			// order), but the animation is collected and played once for the whole batch below.
+			// Adding with visuals per card awaited one tween per card, and a five card hand draw
+			// paid five full tween durations back to back - that was the 1.3 to 2.4 second stall in
+			// the turn setup log.
+			CardPileAddResult addResult = await Add(card, hand, CardPilePosition.Bottom, null, skipVisuals: true);
+			addResults.Add(addResult);
 			CombatManager.Instance.History.CardDrawn(combatState, card, fromHandDraw);
 			await Hook.AfterCardDrawn(combatState, choiceContext, card, fromHandDraw);
 			card.InvokeDrawn();
 			NDebugAudioManager.Instance?.Play("card_deal.mp3", 0.25f, PitchVariance.Small);
 			num = Math.Max(0, CardPile.MaxCardsInHand - hand.Cards.Count);
+		}
+		if (addResults.Count > 0)
+		{
+			var (drawTween, _) = GetTweenForCardsChangingPiles(addResults, fromSilentAdd: true);
+			if (drawTween != null)
+			{
+				drawTween.Play();
+				await drawTween.AwaitFinished(NCombatRoom.Instance);
+			}
 		}
 		return result;
 	}

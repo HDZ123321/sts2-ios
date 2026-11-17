@@ -73,6 +73,7 @@ public class NPatchNotesButton : NButton
 		ConnectSignals();
 		_icon = GetNode<TextureRect>("Icon");
 		_hsv = (ShaderMaterial)_icon.Material;
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()
