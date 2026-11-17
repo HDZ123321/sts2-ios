@@ -158,7 +158,11 @@ public class NCardFlyShuffleVfx : Control
 		_controlPointOffset = Rng.Chaotic.NextFloat(-300f, 400f);
 		_speed = Rng.Chaotic.NextFloat(1.1f, 1.25f);
 		_accel = Rng.Chaotic.NextFloat(2f, 2.5f);
-		_arcDir = ((_endPos.Y < 540f) ? (-500f) : (500f + _controlPointOffset));
+		// 540 is half the 1080 design height, which only matches the screen on 16:9. A 4:3
+		// tablet runs a taller canvas, so the arc has to be split on the real midline or the
+		// shuffle animation curves the wrong way for cards in the lower half of the screen.
+		float midline = GetViewport()?.GetVisibleRect().GetCenter().Y ?? 540f;
+		_arcDir = ((_endPos.Y < midline) ? (-500f) : (500f + _controlPointOffset));
 		_duration = Rng.Chaotic.NextFloat(1f, 1.75f);
 		_vfx = NCardTrailVfx.Create(this, _trailPath);
 		if (_vfx != null)

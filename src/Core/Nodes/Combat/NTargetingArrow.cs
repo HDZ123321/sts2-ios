@@ -14,6 +14,25 @@ namespace MegaCrit.Sts2.Core.Nodes.Combat;
 public class NTargetingArrow : Node2D
 {
 	/// <summary>
+	/// Y coordinate that splits the screen into the half where the bezier control point
+	/// goes below the arrow head and the half where it goes above. This used to be the
+	/// literal 540, which is half of the 1080 design height and therefore only right on a
+	/// 16:9 canvas; a 4:3 tablet runs a 1920x1440 canvas, where the real midline is 720.
+	/// </summary>
+	private float MidlineY
+	{
+		get
+		{
+			Viewport viewport = GetViewport();
+			if (viewport == null)
+			{
+				return 540f;
+			}
+			return viewport.GetVisibleRect().GetCenter().Y;
+		}
+	}
+
+	/// <summary>
 	/// Cached StringNames for the methods contained in this class, for fast lookup.
 	/// </summary>
 	public new class MethodName : Node2D.MethodName
@@ -218,7 +237,7 @@ public class NTargetingArrow : Node2D
 		Vector2 finalPos = targetPos + new Vector2(0f, 40f).Rotated(_arrowHead.Rotation);
 		Vector2 zero = Vector2.Zero;
 		zero.X = From.X - (_arrowHead.Position.X - From.X) * 0.25f;
-		if (From.Y > 540f)
+		if (From.Y > MidlineY)
 		{
 			zero.Y = _arrowHead.Position.Y + (_arrowHead.Position.Y - From.Y) * 0.5f;
 		}
@@ -253,7 +272,7 @@ public class NTargetingArrow : Node2D
 			_segments[i].Position = MathHelper.BezierCurve(initialPos, finalPos, controlPoint, (float)i / 20f);
 			if (i == 0)
 			{
-				_segments[i].Rotation = ((_segments[i].GlobalPosition.Y > 540f) ? 0f : ((float)Math.PI));
+				_segments[i].Rotation = ((_segments[i].GlobalPosition.Y > MidlineY) ? 0f : ((float)Math.PI));
 			}
 			else
 			{

@@ -573,6 +573,7 @@ public class NPlayerHand : Control
 		_selectedHandCardContainer.Hand = this;
 		_selectModeConfirmButton.Connect(NClickableControl.SignalName.Released, Callable.From<NButton>(OnSelectModeConfirmButtonPressed));
 		_selectModeConfirmButton.Disable();
+		_selectModeBackstop.GuiInput += OnSelectModeBackstopInput;
 		_selectedHandCardContainer.Connect(Node.SignalName.ChildExitingTree, Callable.From<Node>(OnCardDeselected));
 		_selectedHandCardContainer.Connect(Node.SignalName.ChildEnteredTree, Callable.From<Node>(OnCardSelected));
 		PeekButton = GetNode<NPeekButton>("%PeekButton");
@@ -1258,6 +1259,42 @@ public class NPlayerHand : Control
 		}
 	}
 
+	/// <summary>
+	/// Tapping anywhere outside the hand while a card choice is open backs out of it.
+	/// <para>
+	/// The backstop is the full screen dimmer behind the cards, and until now it was purely visual:
+	/// it swallowed pointer input but did nothing with it. With the deck selection screen you can
+	/// always press its close button, but the hand selection mode had no way out at all short of
+	/// playing the run into the ground, which is why picking a card felt like a one way door.
+	/// </para>
+	/// </summary>
+	private void OnSelectModeBackstopInput(InputEvent inputEvent)
+	{
+		if (!IsInCardSelection || PeekButton.IsPeeking)
+		{
+			return;
+		}
+		if (inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left && inputEventMouseButton.IsPressed())
+		{
+			CancelCardSelection();
+			GetViewport()?.SetInputAsHandled();
+		}
+	}
+
+	/// <summary>
+	/// Leaves card selection mode without picking anything, handing the caller an empty list. This
+	/// mirrors what the deck selection screen's close button returns, so callers that already handle
+	/// "nothing was chosen" keep working unchanged.
+	/// </summary>
+	public void CancelCardSelection()
+	{
+		if (!IsInCardSelection || _selectionCompletionSource == null)
+		{
+			return;
+		}
+		_selectionCompletionSource.TrySetResult(Array.Empty<CardModel>());
+	}
+
 	private void OnSelectModeConfirmButtonPressed(NButton _)
 	{
 		_selectionCompletionSource.SetResult(_selectedCards.ToList());
@@ -1438,6 +1475,14 @@ public class NPlayerHand : Control
 	{
 		if (NControllerManager.Instance.InputType == InputType.Controller || !ActiveScreenContext.Instance.IsCurrent(NCombatRoom.Instance) || CombatManager.Instance.IsOverOrEnding)
 		{
+			return;
+		}
+		if (IsInCardSelection && input.IsActionPressed(MegaInput.cancel))
+		{
+			// The two finger tap in TouchInputAdapter lands here as ui_cancel, and so does the
+			// keyboard escape on desktop. Neither used to do anything while choosing cards.
+			CancelCardSelection();
+			GetViewport()?.SetInputAsHandled();
 			return;
 		}
 		List<NHandCardHolder> list = new List<NHandCardHolder>();

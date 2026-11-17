@@ -19,7 +19,12 @@ public partial class TouchInputAdapter : Node
 {
 	private const float LongPressSeconds = 0.55f;
 	private const float LongPressMoveTolerance = 14.0f;
-	private const float TwoFingerTapSeconds = 0.26f;
+	// Two fingers tapping the screen is the only gesture that reaches ui_cancel on iOS, and
+	// 0.26s measured from the first finger landing is a keyboard player's reaction time, not a
+	// thumb's. Holding two fingers for a beat and then lifting is what people actually do, so
+	// the window is wide enough to accept that while still being far shorter than the long
+	// press that opens the card details.
+	private const float TwoFingerTapSeconds = 0.60f;
 
 	private readonly Dictionary<int, TouchPoint> _points = new Dictionary<int, TouchPoint>();
 

@@ -414,12 +414,40 @@ public class NClickableControl : Control
 	}
 
 	/// <summary>
-	/// Called when we start pressing down on the mouse button
+	/// Whether this control should react to a pointer press at all.
+	/// <para>
+	/// On a touch screen there is no hover phase and no separate focus step: the finger lands and
+	/// that is the whole interaction. The engine still synthesises mouse motion from the touch, but
+	/// it does not always deliver the matching <c>MouseEntered</c> before the press, so requiring
+	/// <see cref="P:Godot.Control.FocusMode" /> focus here made fast taps silently do nothing. Touch
+	/// builds therefore only require that the control is enabled and on screen.
+	/// </para>
 	/// </summary>
-	/// <param name="inputEvent"></param>
+	private bool CanAcceptPointer()
+	{
+		if (!_isEnabled || !IsVisibleInTree())
+		{
+			return false;
+		}
+		if (IsFocused)
+		{
+			return true;
+		}
+		return _usesTouchTargets;
+	}
+
 	private void HandleMousePress(InputEvent inputEvent)
 	{
-		if (_isEnabled && IsVisibleInTree() && IsFocused && inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left)
+		if (_usesTouchTargets && !_isHovered && IsVisibleInTree())
+		{
+			// A finger press implies the pointer is over the control, so promote it to hovered
+			// before the focus refresh below. Everything downstream (card holders in particular)
+			// gates its release handling on the hover state, and without this a tap that arrives
+			// before the synthesised mouse motion is dropped on the floor.
+			_isHovered = true;
+			RefreshFocus();
+		}
+		if (CanAcceptPointer() && inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left)
 		{
 			_isControllerFocused = false;
 			_beginDragPosition = inputEventMouseButton.GlobalPosition;
@@ -433,7 +461,7 @@ public class NClickableControl : Control
 	/// <param name="inputEvent"></param>
 	private void HandleMouseRelease(InputEvent inputEvent)
 	{
-		if (_isEnabled && IsVisibleInTree() && IsFocused && inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left)
+		if (CanAcceptPointer() && inputEvent is InputEventMouseButton inputEventMouseButton && inputEventMouseButton.ButtonIndex == MouseButton.Left)
 		{
 			OnReleaseHandler();
 		}

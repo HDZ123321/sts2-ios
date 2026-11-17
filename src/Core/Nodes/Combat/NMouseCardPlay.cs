@@ -139,7 +139,14 @@ public class NMouseCardPlay : NCardPlay
 
 	private const float _playZoneScreenProportion = 0.75f;
 
-	private const float _cancelZoneScreenProportion = 0.95f;
+	/// <summary>
+	/// How far down the playable area counts as the cancel zone. A mouse can thread a five percent
+	/// band along the bottom edge, but a thumb cannot: the finger itself covers most of that strip,
+	/// and the card is dragged from the hand which already sits near the bottom of the screen. On a
+	/// touch screen the band is widened to the bottom fifteen percent, which is still well below the
+	/// play zone so a deliberate downward drag is the only way to reach it.
+	/// </summary>
+	private static readonly float _cancelZoneScreenProportion = (MobileDevice.IsTouchOnly ? 0.85f : 0.95f);
 
 	private bool _hasLeftCardCancelZoneOnce;
 

@@ -74,6 +74,14 @@ public class SettingsSaveManager
 				settings.FpsLimit = 60;
 				settings.Msaa = 2;
 			}
+			else if (MobileDevice.IsTablet)
+			{
+				// A tablet panel refreshes at 120Hz and the GPU has room for it, so the phone budget
+				// would leave half the screen's smoothness on the table. MSAA stays off: the game is
+				// 2D, where multisampling costs bandwidth and buys nothing.
+				settings.FpsLimit = MobileGraphicsProfile.TabletMaxFrameRate;
+				settings.Msaa = 0;
+			}
 		}
 	}
 }

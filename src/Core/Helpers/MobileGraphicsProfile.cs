@@ -44,6 +44,12 @@ public static class MobileGraphicsProfile
 	/// <summary>Frame rate a touch build is allowed to aim for.</summary>
 	public const int MaxFrameRate = 60;
 
+	/// <summary>
+	/// Frame rate ceiling for tablets. An iPad panel runs at 120Hz and has the thermal headroom for
+	/// it, so the phone ceiling does not apply there.
+	/// </summary>
+	public const int TabletMaxFrameRate = 120;
+
 	/// <summary>Frame rate below which the saved value is raised back up - the game is not playable slower.</summary>
 	public const int MinFrameRate = 30;
 
@@ -119,9 +125,10 @@ public static class MobileGraphicsProfile
 		{
 			return frameRate;
 		}
-		if (frameRate <= 0 || frameRate > MaxFrameRate)
+		int maxFrameRate = (MobileDevice.IsTablet ? TabletMaxFrameRate : MaxFrameRate);
+		if (frameRate <= 0 || frameRate > maxFrameRate)
 		{
-			return MaxFrameRate;
+			return maxFrameRate;
 		}
 		if (frameRate < MinFrameRate)
 		{

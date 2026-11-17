@@ -708,7 +708,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		{
 			AddCreature(item);
 		}
-		PositionPlayersAndPets(_creatureNodes.Where((NCreature c) => allies.Contains(c.Entity)).ToList(), _visuals.Encounter.GetCameraScaling(), _visuals.Encounter.FullyCenterPlayers);
+		PositionPlayersAndPets(_creatureNodes.Where((NCreature c) => allies.Contains(c.Entity)).ToList(), _visuals.Encounter.GetCameraScaling(), _visuals.Encounter.FullyCenterPlayers, SceneContainer.Size.X);
 	}
 
 	private void CreateEnemyNodes()
@@ -720,7 +720,14 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 		if (EncounterSlots != null)
 		{
 			_enemyContainer.AddChildSafely(EncounterSlots);
-			EncounterSlots.Position -= new Vector2(1920f, 1080f) * 0.5f;
+			// Encounter slot scenes are authored against the 1920x1080 design canvas with their
+			// origin in the top left, and the enemy container is anchored at the centre of the
+			// scene. Subtracting half the design canvas only lines the two up while the visible
+			// canvas really is 1920x1080. With canvas_items stretching plus the expand aspect a
+			// 4:3 tablet gets a 1920x1440 canvas, so the hardcoded half height left every
+			// encounter sitting 180px below where it belongs. Half the container is the correct
+			// offset on every aspect ratio and is identical to the old value on 16:9.
+			EncounterSlots.Position -= SceneContainer.Size * 0.5f;
 		}
 		List<Creature> enemies = _visuals.Enemies.ToList();
 		foreach (Creature item in enemies)
@@ -750,7 +757,12 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 
 	private void PositionEnemies(List<NCreature> creatures, float scaling)
 	{
-		float num = 960f / scaling;
+		// Half the visible canvas, not half of the 1920 design width. The enemies are laid
+		// out around the centre of the scene, and with canvas_items stretching plus the expand
+		// aspect a wide phone gets a 2346 pixel canvas while a 4:3 tablet gets 1920. Using the
+		// literal 960 pushed the whole row off centre on the phone and matched the tablet by
+		// accident only.
+		float num = SceneContainer.Size.X * 0.5f / scaling;
 		float num2 = 70f;
 		float num3 = creatures.Sum((NCreature n) => n.Visuals.Bounds.Size.X);
 		float num4 = num3 + (float)(creatures.Count - 1) * num2;
@@ -794,7 +806,12 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 	/// Usually false (to leave enough padding in the center for card plays), but true in certain situations like
 	/// "surrounded" combats.
 	/// </param>
-	public static void PositionPlayersAndPets(List<NCreature> creatureNodes, float scaling, bool fullyCenterPlayers)
+	/// <param name="canvasWidth">Width of the visible canvas in pixels. The grid is laid out around the
+	/// horizontal centre, so this has to be the real canvas width rather than the 1920 design width:
+	/// with canvas_items stretching plus the expand aspect a wide phone runs a 2346 pixel canvas and a
+	/// 4:3 tablet runs 1920. Defaults to the design width so existing mod callers keep compiling.
+	/// </param>
+	public static void PositionPlayersAndPets(List<NCreature> creatureNodes, float scaling, bool fullyCenterPlayers, float canvasWidth = 1920f)
 	{
 		List<PlayerAndPets> list = new List<PlayerAndPets>();
 		foreach (NCreature creatureNode in creatureNodes)
@@ -823,7 +840,7 @@ public class NCombatRoom : Control, IScreenContext, IRoomWithProceedButton
 				list.First((PlayerAndPets p) => p.player.Entity.Player == creature.Entity.PetOwner).pets.Add(creature);
 			}
 		}
-		float num = 960f / scaling;
+		float num = canvasWidth * 0.5f / scaling;
 		float num2 = 70f;
 		int num3 = (int)Math.Ceiling(Math.Sqrt(list.Count));
 		int num4 = (int)Math.Ceiling((double)list.Count / (double)num3);
