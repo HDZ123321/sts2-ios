@@ -4,7 +4,9 @@ using Godot;
 using Godot.Bridge;
 using Godot.Collections;
 using Godot.NativeInterop;
+using MegaCrit.Sts2.Core.Assets;
 using MegaCrit.Sts2.Core.Helpers;
+using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.TestSupport;
 
 namespace MegaCrit.Sts2.Core.Nodes.Audio;
@@ -127,6 +129,17 @@ public class NAudioManager : Node
 
 	private Node _audioNode;
 
+	/// <summary>
+	/// Players used for the handful of sound effects that ship as a Godot resource instead of an
+	/// FMOD event. Everything the game itself plays is an <c>event:/</c> path handed to FMOD, but the
+	/// mod content points at <c>res://...ogg</c> files, and FMOD has no bank entry for those, so it
+	/// answers "cannot find sfx path" and stays silent. Those paths are loaded through the asset cache
+	/// and played here instead.
+	/// </summary>
+	private readonly List<AudioStreamPlayer> _streamPlayers = new List<AudioStreamPlayer>();
+
+	private const int MaxStreamPlayers = 8;
+
 	public static NAudioManager? Instance => NGame.Instance?.AudioManager;
 
 	public override void _EnterTree()
@@ -182,6 +195,10 @@ public class NAudioManager : Node
 		{
 			return;
 		}
+		if (PlayGodotStream(path, volume))
+		{
+			return;
+		}
 		Dictionary dictionary = new Dictionary();
 		foreach (KeyValuePair<string, float> parameter in parameters)
 		{
@@ -196,6 +213,61 @@ public class NAudioManager : Node
 		{
 			PlayOneShot(path, new System.Collections.Generic.Dictionary<string, float>(), volume);
 		}
+	}
+
+	/// <summary>
+	/// Plays a <c>res://</c> audio resource on a Godot player, which is the only way mod content can
+	/// make a sound: FMOD only knows its own bank events, so a resource path would be dropped there.
+	/// Returns false for anything that is not a resource path, leaving FMOD to handle it as before.
+	/// </summary>
+	private bool PlayGodotStream(string path, float volume)
+	{
+		if (path == null || !path.StartsWith("res://", System.StringComparison.Ordinal))
+		{
+			return false;
+		}
+		if (!ResourceLoader.Exists(path))
+		{
+			Log.Warn("[Audio] missing audio resource: " + path);
+			return true;
+		}
+		AudioStream asset = PreloadManager.Cache.GetAsset<AudioStream>(path);
+		if (asset == null)
+		{
+			Log.Warn("[Audio] could not load audio resource: " + path);
+			return true;
+		}
+		AudioStreamPlayer audioStreamPlayer = null;
+		for (int i = _streamPlayers.Count - 1; i >= 0; i--)
+		{
+			AudioStreamPlayer audioStreamPlayer2 = _streamPlayers[i];
+			if (!GodotObject.IsInstanceValid(audioStreamPlayer2))
+			{
+				_streamPlayers.RemoveAt(i);
+				continue;
+			}
+			if (!audioStreamPlayer2.Playing)
+			{
+				audioStreamPlayer = audioStreamPlayer2;
+				break;
+			}
+		}
+		if (audioStreamPlayer == null)
+		{
+			if (_streamPlayers.Count >= MaxStreamPlayers)
+			{
+				Log.Warn("[Audio] all resource players are busy, dropping " + path);
+				return true;
+			}
+			audioStreamPlayer = new AudioStreamPlayer();
+			audioStreamPlayer.Bus = new StringName("SFX");
+			this.AddChildSafely(audioStreamPlayer);
+			_streamPlayers.Add(audioStreamPlayer);
+		}
+		audioStreamPlayer.Stream = asset;
+		audioStreamPlayer.VolumeLinear = volume;
+		audioStreamPlayer.Play();
+		return true;
 	}
 
 	public void PlayMusic(string music)
