@@ -16,6 +16,7 @@ using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
+using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using MegaCrit.Sts2.Core.Nodes.Screens.ScreenContext;
 using MegaCrit.Sts2.Core.Nodes.Vfx;
@@ -300,6 +301,11 @@ public class NCombatUi : Control
 		PlayQueue = GetNode<NCardPlayQueue>("%PlayQueue");
 		CardPreviewContainer = GetNode<Control>("%CardPreviewContainer");
 		MessyCardPreviewContainer = GetNode<NMessyCardPreviewContainer>("%MessyCardPreviewContainer");
+		// The energy orb is anchored 100px from the left edge, which is correct on a desktop
+		// window and inside the rounded corner on a phone: an iPhone in landscape reports a
+		// 62pt inset on both short edges. Registering the container lets NGame nudge it back
+		// inside whenever the safe area is recomputed.
+		NSafeAreaFit.Watch(EnergyCounterContainer);
 		if (!_isDebugHidden)
 		{
 			return;
@@ -333,6 +339,8 @@ public class NCombatUi : Control
 		{
 			EnergyCounterContainer.SetPosition(new Vector2(100f, 806f), keepOffsets: true);
 		}
+		// Re-fit after the authored position above, otherwise the orb lands back under the inset.
+		NSafeAreaFit.Fit(EnergyCounterContainer);
 		_energyCounter = NEnergyCounter.Create(me);
 		EnergyCounterContainer.AddChildSafely(_energyCounter);
 		_starCounter.Reparent(_energyCounter);
