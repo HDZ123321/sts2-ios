@@ -153,6 +153,19 @@ jobs:
           OBJ_DLL=".godot/mono/temp/obj/Release/ios-arm64/sts2.dll"
           test -f "$OBJ_DLL" || { echo "::error::ILC input assembly not found at $OBJ_DLL"; exit 1; }
           dotnet tools/TypeFlags/bin/Release/net9.0/TypeFlags.dll "$OBJ_DLL" bfi_types.txt
+          # Roslyn emits a precise (non-beforefieldinit) type initializer whenever the
+          # decompiled source declares an explicit `static Foo()`. ModelDb.Init builds
+          # types in AllAbstractModelSubtypes order, so a precise cctor that reads a
+          # model which sits later in that array throws KeyNotFoundException on startup
+          # (v0.113.1 hit this with BlitzRunModel -> ENCHANTMENT.SHARP). Assert the list
+          # still covers every type whose cctor has to stay deferred.
+          BFI_LINE=$(dotnet tools/TypeFlags/bin/Release/net9.0/TypeFlags.dll "$OBJ_DLL" | head -1)
+          echo "$BFI_LINE"
+          BFI_COUNT=$(echo "$BFI_LINE" | sed -n 's/.*bfi[+]cctor=\([0-9]*\).*/\1/p')
+          if [ -z "$BFI_COUNT" ] || [ "$BFI_COUNT" -lt 2568 ]; then
+            echo "::error::deferred type initializers dropped to '$BFI_COUNT' (expected at least 2568); a precise cctor will throw KeyNotFoundException on startup"
+            exit 1
+          fi
           echo "--- for reference, the bin/ copy ---"
           dotnet tools/TypeFlags/bin/Release/net9.0/TypeFlags.dll \
             .godot/mono/temp/bin/Release/ios-arm64/sts2.dll bfi_types.txt

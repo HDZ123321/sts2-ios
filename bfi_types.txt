@@ -5,3 +5,4 @@ MegaCrit.Sts2.Core.Models.Events.Darv
 MegaCrit.Sts2.Core.Models.Events.JungleMazeAdventure
 MegaCrit.Sts2.Core.Multiplayer.Serialization.ModelIdSerializationCache
 MegaCrit.Sts2.Core.Nodes.Screens.Timeline.NEraColumn
+MegaCrit.Sts2.Core.Models.Blitz.BlitzRunModel
