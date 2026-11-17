@@ -55,6 +55,8 @@ public class NDailyRunScoreWarning : NClickableControl
 	public override void _Ready()
 	{
 		ConnectSignals();
+		// Authored 22px from the top right corner, which sits under the rounded corner on a phone.
+		NSafeAreaFit.Watch(this);
 	}
 
 	protected override void OnFocus()
