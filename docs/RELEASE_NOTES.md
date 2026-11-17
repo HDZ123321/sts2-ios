@@ -17,7 +17,7 @@
 | 签名 | **未签名**，需要自己签 |
 | 游戏版本 | 0.113.1 |
 | 源码 commit | `{{COMMIT}}` |
-| 构建 | GitHub Actions run `{{RUN}}`（macos-14） |
+| 构建 | GitHub Actions run `{{RUN}}`（macos-15） |
 | 下载 | {{DOWNLOAD_URL}} |
 
 ## 包内结构
@@ -240,7 +240,7 @@ IPA 拖进去 → 填 Apple ID → Start → 手机上信任证书。比 AltStor
 
 ## 构建来源
 
-- 游戏本体 `.github/workflows/ios.yml`（macos-14）：`dotnet publish -r ios-arm64`（NativeAOT）→ 验 `beforefieldinit` → `xcodebuild -create-xcframework` → 注入 pbxproj（含 Swift 源与 `ActivityKit` 弱链接）→ `xcodebuild archive`（无签名）→ `tools/build_island_extension.py` 组 `.appex` → 打 Payload → zip → 发布
+- 游戏本体 `.github/workflows/ios.yml`（macos-15）：`dotnet publish -r ios-arm64`（NativeAOT）→ 验 `beforefieldinit` → `xcodebuild -create-xcframework` → 注入 pbxproj（含 Swift 源与 `ActivityKit` 弱链接）→ `xcodebuild archive`（无签名）→ `tools/build_island_extension.py` 组 `.appex` → 打 Payload → zip → 发布
 - Spine 扩展 `.github/workflows/spine-ios.yml`：`spine-runtimes@4.2` + `godot-cpp@4.5` + `scons platform=ios target=template_release arch=arm64`，二进制发布在 tag `spine-godot-ios`
 
 仓库：https://github.com/HDZ123321/sts2-ios
