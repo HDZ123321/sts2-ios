@@ -98,10 +98,35 @@ jobs:
           import struct
           with open('sts2.pck', 'rb') as f:
               head = f.read(112)
-          assert head[:4] == b'GDPC', 'sts2.pck 不是 Godot PCK: %r' % head[:4]
-          file_base = struct.unpack_from('<Q', head, 24)[0]
-          dir_off = struct.unpack_from('<Q', head, 32)[0]
-          print('PCK ok: file_base=%d dir_off=%d' % (file_base, dir_off))
+              assert head[:4] == b'GDPC', 'sts2.pck 不是 Godot PCK: %r' % head[:4]
+              file_base = struct.unpack_from('<Q', head, 24)[0]
+              dir_off = struct.unpack_from('<Q', head, 32)[0]
+              print('PCK ok: file_base=%d dir_off=%d' % (file_base, dir_off))
+
+              # Godot treats any .xcframework path as a static library, so an upstream
+              # fmod.gdextension would leave the extension unloaded at runtime and the
+              # game would start silent. The port ships .framework paths instead; fail
+              # here rather than discovering it on a device.
+              f.seek(dir_off)
+              count = struct.unpack('<I', f.read(4))[0]
+              entry = None
+              for _ in range(count):
+                  plen = struct.unpack('<I', f.read(4))[0]
+                  path = f.read(plen).rstrip(b'\x00').decode('utf-8')
+                  off, size = struct.unpack('<QQ', f.read(16))
+                  f.read(16)
+                  f.read(4)
+                  if path == 'addons/fmod/fmod.gdextension':
+                      entry = (off, size)
+              assert entry is not None, 'PCK 里没有 addons/fmod/fmod.gdextension'
+              f.seek(file_base + entry[0])
+              text = f.read(entry[1]).decode('utf-8')
+          ios_lines = [ln for ln in text.splitlines() if ln.strip().startswith('ios.')]
+          assert ios_lines, 'fmod.gdextension 缺少 ios 库条目'
+          assert not any('.xcframework' in ln for ln in ios_lines), (
+              'fmod.gdextension 的 ios 条目仍指向 .xcframework，Godot 会当成静态库并让扩展加载失败: %s'
+              % ios_lines)
+          print('fmod ios libraries: %s' % '; '.join(ln.strip() for ln in ios_lines))
           PY
 
       - name: Build BfiPatch tool
