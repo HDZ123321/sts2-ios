@@ -69,6 +69,32 @@ v0.113.1 上同一个坑换了张脸：`BlitzRunModel`（index 26）的 cctor �
 再按 `AbstractModelSubtypes` 的数组序扫所有**精确** cctor 里的 `ModelDb.<T>()` 调用；
 两边都报 `scanned PRECISE cctors: 0` 才算干净。
 
+### 2.3b 构造函数期读后建的模型（同一类坑的第二张脸）
+`ModelDb.Get<T>()` 原本是裸的 `_contentById[GetId<T>()]`。`ModelDb.Init()` 按 `_subtypes`
+顺序构造，所以**任何**构造函数里读一个排在自己后面的模型，都会当场 `KeyNotFoundException`。
+这和 2.3 的 cctor 晚读是两件事：`beforefieldinit` 只管静态构造，管不到实例构造。
+
+v0.113.1 上撞的是移植进来的观者卡：
+
+```
+[ERROR] KeyNotFoundException: The given key 'CARD.WATCHER-BETA' was not present in the dictionary.
+  at ModelDb.Get[T]()
+  at HoverTipFactory.FromCard[T](Boolean upgrade)
+  at HoverTipFactory.FromCardWithCardHoverTips[T](Boolean upgrade)
+  at Watcher.Code.Cards.Rare.Alpha..ctor()
+  at ModelDb.Init(Type[] injectedModelTypes)
+```
+
+`Alpha` 在 index **1867**，它构造函数里要 `Beta`（index **1871**）的悬浮提示，晚 4 位。
+
+**已修**：`Get<T>()` 与非泛型 `Get(Type)` 未命中时回落 `TryResolveMissing`，按需构造。
+`TryResolveMissing` 里 `_resolving.Contains(id)` 挡住自我递归，所以构造中的模型不会被重入；
+彻底找不到仍抛 `ModelNotFoundException`，不是裸字典异常。
+
+要自查同类隐患用 `_ctorcan`（Mono.Cecil）：按 `_subtypes` 数组序走每个类型的**实例构造函数**，
+沿本程序集内的调用递归（默认 4 层）并传播泛型实参，报出所有 `ModelDb.<T>()` 晚读。
+当前构建只剩 `Alpha → Beta` 这一处，已被延迟解析兜住；上游 DLL 是 `problems: 0`。
+
 ### 2.4 纹理格式：PCK 里原本只有 S3TC/BPTC，iOS 用不了
 原版导出给 Windows，纹理只有 `s3tc`/`bptc` 变体。iOS 的 GPU 不支持 BC 格式，
 Godot 会运行时 `image->decompress()` 转 RGBA8 —— 不崩，但 1.86 GB 纹理会膨胀到约 **3.5 GB 显存**。
