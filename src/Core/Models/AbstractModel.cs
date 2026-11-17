@@ -79,7 +79,10 @@ public abstract class AbstractModel : IComparable<AbstractModel>
 	{
 		Type type = GetType();
 		ModelId id = ModelDb.GetId(type);
-		AbstractModel byIdOrNull = ModelDb.GetByIdOrNull<AbstractModel>(id);
+		// Deliberately a lookup that never resolves lazily: ModelDb.GetByIdOrNull falls back to
+		// TryResolveMissing, which constructs the very model that is being constructed here, so
+		// using it as the duplicate guard made every first-time model trip its own exception.
+		AbstractModel byIdOrNull = ModelDb.GetLoadedOrNull<AbstractModel>(id);
 		if (byIdOrNull != null)
 		{
 			string message = $"ModelDb already contains ID {id} mapped to type {byIdOrNull.GetType()}, but you are trying to map it to type {type}. Possible causes:\n - You have called a constructor on an AbstractModel. Use ModelDb instead.\n - There is a conflict in mod content names.";

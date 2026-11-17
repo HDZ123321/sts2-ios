@@ -442,8 +442,16 @@ public static class ModelDb
 				// DuplicateModelException guard in AbstractModel's constructor.
 				continue;
 			}
-			AbstractModel value = (AbstractModel)Activator.CreateInstance(type);
-			_contentById[id] = value;
+			_resolving.Add(id);
+			try
+			{
+				AbstractModel value = (AbstractModel)Activator.CreateInstance(type);
+				_contentById[id] = value;
+			}
+			finally
+			{
+				_resolving.Remove(id);
+			}
 		}
 	}
 
@@ -636,6 +644,22 @@ public static class ModelDb
 		if (TryResolveMissing(id) && _contentById.TryGetValue(id, out AbstractModel value2))
 		{
 			return (T)value2;
+		}
+		return null;
+	}
+
+	/// <summary>
+	/// Looks up an already-built model without ever constructing one.
+	/// <see cref="AbstractModel"/>'s constructor uses this as its duplicate guard: going through
+	/// <see cref="GetByIdOrNull{T}"/> would let <see cref="TryResolveMissing"/> build the model
+	/// that is currently being built, so the first model of every type threw
+	/// <see cref="MegaCrit.Sts2.Core.Models.Exceptions.DuplicateModelException"/> on startup.
+	/// </summary>
+	public static T? GetLoadedOrNull<T>(ModelId id) where T : AbstractModel
+	{
+		if (_contentById.TryGetValue(id, out AbstractModel value))
+		{
+			return (T)value;
 		}
 		return null;
 	}
