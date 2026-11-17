@@ -283,6 +283,24 @@ public class NTopBar : Control
 	private float _shownPositionY;
 
 	/// <summary>
+	/// Authored left offset of <c>LeftAlignedStuff</c>. The safe area push is measured from here so
+	/// repeated calls cannot walk the container further right each time.
+	/// </summary>
+	private float _leftAuthoredX;
+
+	/// <summary>
+	/// Authored right offset of <c>RightAlignedStuff</c>, negative because the container hangs off
+	/// the right edge.
+	/// </summary>
+	private float _rightAuthoredOffset = float.NaN;
+
+	/// <summary>
+	/// Authored left offset of <c>RightAlignedStuff</c>, captured together with the right one so the
+	/// box can be translated instead of resized.
+	/// </summary>
+	private float _rightAuthoredLeft;
+
+	/// <summary>
 	/// Whether the bar is currently tucked off the top of the screen. A resize while hidden must not drag
 	/// it back down, so the safe area handler only snaps the position when the bar is visible.
 	/// </summary>
@@ -350,6 +368,7 @@ public class NTopBar : Control
 		ActiveScreenProxy = GetNode<Control>("%ActiveScreenProxy");
 		LeftContainer = GetNode<Container>("LeftAlignedStuff");
 		RightContainer = GetNode<Container>("RightAlignedStuff");
+		_leftAuthoredX = LeftContainer.Position.X;
 		_achievementLock = GetNode<Control>("%AchievementLock");
 		_ascensionIcon = GetNode<TextureRect>("%AscensionIcon");
 		_ascensionLabel = GetNode<MegaLabel>("%AscensionLabel");
@@ -381,6 +400,7 @@ public class NTopBar : Control
 		Rect2 visible = GetViewport().GetVisibleRect();
 		_safeAreaOffsetY = Mathf.Max(0f, game.SafeAreaRect.Position.Y - visible.Position.Y);
 		_shownPositionY = _safeAreaOffsetY;
+		ApplySafeAreaHorizontal(game.SafeAreaRect, visible);
 		if (_hideTween != null && _hideTween.IsRunning())
 		{
 			return;
@@ -396,6 +416,45 @@ public class NTopBar : Control
 		}
 		position.Y = _shownPositionY;
 		base.Position = position;
+	}
+
+	/// <summary>
+	/// Pushes the two halves of the bar inwards by the left and right safe area insets. On a phone in
+	/// landscape the rounded corners eat a wide strip of the short edges - 62pt on each side of an
+	/// iPhone 17 Pro Max - and the bar is authored flush against those edges, so the portrait, hp and
+	/// gold readouts sit under the corner and the pause and map buttons on the right cannot be tapped.
+	/// </summary>
+	private void ApplySafeAreaHorizontal(Rect2 safe, Rect2 visible)
+	{
+		if (LeftContainer != null)
+		{
+			float num = Mathf.Max(0f, safe.Position.X - visible.Position.X);
+			Vector2 position = LeftContainer.Position;
+			position.X = _leftAuthoredX + num;
+			if (!Mathf.IsEqualApprox(LeftContainer.Position.X, position.X))
+			{
+				LeftContainer.Position = position;
+			}
+		}
+		if (RightContainer != null)
+		{
+			float num2 = Mathf.Max(0f, visible.End.X - safe.End.X);
+			if (float.IsNaN(_rightAuthoredOffset))
+			{
+				_rightAuthoredOffset = RightContainer.OffsetRight;
+				_rightAuthoredLeft = RightContainer.OffsetLeft;
+			}
+			// Translate the whole box instead of only moving its right edge: the children are end
+			// aligned, so shrinking the box would drag them left but also re-wrap anything that
+			// depends on the box width.
+			float num3 = _rightAuthoredOffset - num2;
+			float num4 = _rightAuthoredLeft - num2;
+			if (!Mathf.IsEqualApprox(RightContainer.OffsetRight, num3))
+			{
+				RightContainer.OffsetRight = num3;
+				RightContainer.OffsetLeft = num4;
+			}
+		}
 	}
 
 	/// <summary>
