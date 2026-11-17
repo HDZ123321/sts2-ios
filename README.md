@@ -350,6 +350,50 @@ app 侧因此必须开 Swift：`tools/patch_app_sources.py` 往 `project.pbxproj
 - **帧率**：这块 120 Hz 屏正是 §2.9 那套省电档的目标，`Engine.MaxFps` 被钳在 60，MSAA 关掉。
 - **分辨率**：原生渲染是 3.8 MPx。想要更省电就在 `user://render_scale.txt` 写 `design`（见 §2.9），画面从 1920×1080 放大，布局与触摸目标不动。
 
+### 2.12 iPad Air（4:3 画布）
+
+`TARGETED_DEVICE_FAMILY` 一直是 `"1,2"`，`Info.plist` 里 `UISupportedInterfaceOrientations~ipad` 也一直有，所以 iPad 本来就能装能跑。真正没做的是**按 4:3 布局**——之前所有坐标都假设可见画布是 1920×1080。
+
+`canvas_items` 拉伸 + `expand` 宽高比下，可见画布是「按高度贴合设计高度、宽度按屏幕比例扩展」：
+
+| 设备 | 屏幕 | 可见画布 |
+| --- | --- | --- |
+| iPhone 17 Pro Max | 2868×1320（2.17:1） | 2346×1080 |
+| iPad Air 13" | 2732×2048（4:3） | 1920×1440 |
+| iPad Air 11" | 2360×1640（4:3） | 1920×1440 |
+
+也就是说**手机上宽度比设计画布多 426 px，平板上高度比设计画布多 360 px**。所有拿 1920×1080 当屏幕尺寸用的地方，在这两种设备上都是错的，只是错的方向不同。修的是这几处：
+
+- `NCombatRoom.CreateEnemyNodes()`：`EncounterSlots.Position -= new Vector2(1920f, 1080f) * 0.5f` → `-= SceneContainer.Size * 0.5f`。遭遇战槽位场景是以左上为原点的 1920×1080 布局，容器锚在中心，减半个设计画布只在 16:9 上对得上；4:3 上整组敌人偏低 180 px。
+- `NCombatRoom.PositionEnemies()`：`960f / scaling` → `SceneContainer.Size.X * 0.5f / scaling`。敌人是围绕场景水平中心排的，用字面 960 在宽手机上整排偏左。
+- `NCombatRoom.PositionPlayersAndPets()`：签名加了 `float canvasWidth = 1920f`（默认值保证 mod 调用者不用改），内部 `960f` 换成 `canvasWidth * 0.5f`，唯一调用点传 `SceneContainer.Size.X`。
+- `NTargetingArrow`：两处 `540f`（`From.Y > 540f` 选贝塞尔控制点在箭头上方还是下方、箭头首段朝向）换成 `MidlineY` 属性，取 `GetViewport().GetVisibleRect().GetCenter().Y`。4:3 上真中线是 720。
+- `NCardFlyShuffleVfx._Ready()`：`_arcDir = ((_endPos.Y < 540f) ? ...)` 同理，改用可见矩形中心。
+
+**帧率**：平板 `Engine.MaxFps` 钳到 120 而不是 60（`MobileGraphicsProfile.TabletMaxFrameRate`），设置里的帧率分页器也随之钳到 120。MSAA 在平板上和手机上一样保持关闭——2D 游戏多采样只花带宽不换画质。这两条都写在 `SettingsSaveManager.ApplyPlatformDefaults` 的 `IsTablet` 分支里，只对新存档生效。
+
+**触摸目标**：`MobileDevice.MinimumTouchTarget` 按 44pt 换算成画布像素。4:3 平板上一 pt 对应的画布像素比宽手机少，所以算出来的命中框反而更小——但 `NClickableControl.BuildTouchHitRect` 只放大不缩小（上限 1.5×），不会把本来就够大的按钮改小。
+
+---
+
+### 2.13 取消选取 / 取消出牌
+
+触屏上「选错了想退出来」原来几乎做不到，两条路都是给鼠标设计的。
+
+**手牌选择模式**（`NPlayerHand.SelectCards`，弃牌、消耗、变化、升级都走这条）**原来根本没有退出入口**：`CancelHandSelectionIfNecessary()` 唯一的调用点是 `AnimOut()`，也就是战斗结束。对比之下牌库选择屏（`NDeckCardSelectScreen`）一直有 `_closeButton`，`_prefs.Cancelable` 控制它显不显示。现在手牌屏补了三条：
+
+- 点 `SelectModeBackstop` 那层全屏暗色遮罩即取消（它原本 `MouseFilter = Stop` 只是挡输入，什么都不做）
+- `ui_cancel` 也取消（iOS 上是双指轻点，桌面上是 ESC）
+- 两条都走新增的 `public void CancelCardSelection()`，**`TrySetResult(Array.Empty<CardModel>())` 而不是 `SetCanceled()`** —— `CardSelectCmd.cs:694` 和 `:779` 两个调用点都没有 catch `TaskCanceledException`，走 `SetCanceled()` 会把异常抛进战斗流程。返回空列表的语义与牌库屏的 `CloseSelection` 一致，调用方本来就要处理「一张都没选」。
+
+> `CardSelectorPrefs.Cancelable` 默认 false，而且绝大多数卡牌/事件/遗物调用根本不设这个字段。所以不能拿它当「显不显示取消入口」的判据，否则弃牌、消耗、变化、升级这些牌全都没有取消入口。手牌选择一律允许取消。
+
+**战斗里拖动卡牌**：取消区是「可玩区底部 5%」，`_cancelZoneScreenProportion = 0.95f`。17 Pro Max 上那是 54 画布像素，一根拇指盖住的面积就超过它。触屏上改成底部 15%（`0.85f`），桌面保持 0.95；判定走 `MobileDevice.IsTouchOnly`，是 `static readonly` 字段所以只算一次。取消区仍然远在出牌区（底部 25%）下方，只有刻意往下拖才会进。
+
+**双指轻点**：`TouchInputAdapter.TwoFingerTapSeconds` 从 0.26 s 放宽到 0.60 s。0.26 s 是从第一根手指落下开始算的键盘手反应时间；双指按住一拍再抬起才是人在触摸屏上的实际动作。0.60 s 仍然远短于 0.55 s 长按之外的另一套判定（长按是单指静止 0.55 s，双指时 `_points.Count != 1` 直接跳过），两者不会互相干扰。
+
+**快速点击丢失**：`NClickableControl.HandleMousePress/Release` 原来都要求 `IsFocused`，而 `IsFocused` 由 `_isHovered || _isControllerFocused` 决定，`_isHovered` 只由 `MouseEntered` 维护。触屏上 `MouseEntered` 是引擎从触摸合成出来的，不保证在按下之前到达。手指快速点一下，按下和抬起两个处理器都不跑，什么都不发生。现在触屏构建走新增的 `CanAcceptPointer()`（只要求 `_isEnabled && IsVisibleInTree()`），并且 `HandleMousePress` 开头会把控件提升为 hovered 再刷焦点——下游的 `NCardHolder.OnMouseReleased` 是靠 `_isHovered` 判定的，不补这一步卡片点选仍然会被丢掉。
+
 ---
 
 ## 3. 构建方式 A：本地 Mac
