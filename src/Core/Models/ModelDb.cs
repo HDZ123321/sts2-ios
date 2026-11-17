@@ -677,7 +677,21 @@ public static class ModelDb
 
 	private static T Get<T>() where T : AbstractModel
 	{
-		return (T)_contentById[GetId<T>()];
+		ModelId id = GetId<T>();
+		if (_contentById.TryGetValue(id, out AbstractModel value))
+		{
+			return (T)value;
+		}
+		// A model constructor can ask for a model that ModelDb.Init has not reached yet.
+		// The ported Watcher cards do exactly that: Alpha's constructor builds a hover tip
+		// from Beta, and Beta sits much later in the subtype table. Resolving lazily here is
+		// safe because TryResolveMissing refuses to touch an id that is already being built,
+		// so the model under construction cannot recurse into itself.
+		if (TryResolveMissing(id) && _contentById.TryGetValue(id, out AbstractModel value2))
+		{
+			return (T)value2;
+		}
+		throw new ModelNotFoundException(id);
 	}
 
 	private static AbstractModel Get(Type type)
@@ -690,6 +704,10 @@ public static class ModelDb
 		if (_contentById.TryGetValue(id, out AbstractModel value))
 		{
 			return value;
+		}
+		if (TryResolveMissing(id) && _contentById.TryGetValue(id, out AbstractModel value2))
+		{
+			return value2;
 		}
 		throw new ModelNotFoundException(id);
 	}
