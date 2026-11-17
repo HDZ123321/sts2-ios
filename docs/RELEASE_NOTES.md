@@ -51,7 +51,29 @@ Payload/sts2.app/release_info.json                                 167   构建�
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完；`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）。
 
-## 这一版（v25）：一行账本就说完一句话
+## 这一版（v26）：跟上 v0.113.1，并且把启动崩溃的两个根因拔掉
+
+游戏在 11 月 14 日发了 **v0.113.1**（beta 分支，buildid `26660232`，`main_assembly_hash 358281912`）。这一版把整套移植层重新落到新版本上：
+
+**新内容**：The Fool 全套（`FoolCardPool` / `ArrowCmd` / `MelodyCmd` / 60+ 张卡）、Blitz 与 Dread 双模式（`BlitzRunModel` / `BlitzActMap` / 22 个 Blitz 商人条目）、战斗与输入重构（`CombatId` / `CombatTurnState` / `PendingLossState`）、阿拉伯语 RTL 与繁中字体、Sentry 反馈截图链路。反编译产出从 3425 个 `.cs` 涨到 **3888 个**，subtype 表从 1624 涨到 **1867**（我们的构建是 2002，多出的 135 个是 Watcher）。
+
+**拔掉的两个启动崩溃**：
+
+1. `DuplicateModelException`（自注入死循环）
+   `ModelDb.Init` 里 `Activator.CreateInstance(type)` → `AbstractModel` 构造 → `ModelDb.GetByIdOrNull<AbstractModel>(自己的 id)` 做重复守卫。移植层为了「Watcher 模型不必列进上游 subtype 表也能存在」，给 `GetByIdOrNull` 加了 `TryResolveMissing` 回落，于是守卫把自己递归地又造了一遍，外层回来发现 id 已被占。
+   修法是给守卫一条**只查字典、绝不回落**的通道 `ModelDb.GetLoadedOrNull<T>(id)`，并且 `Init` 期间用 `_resolving` 集合标记正在构造的 id。
+
+2. `KeyNotFoundException: 'ENCHANTMENT.SHARP'`
+   上游的 `BlitzRunModel` 在 IL 里是 `beforefieldinit`（延迟初始化），我们反编译回来变成了显式 `static BlitzRunModel()`，Roslyn 因此生成**精确**类型初始化器。`ModelDb.Init` 按 subtype 数组顺序构造：`BlitzRunModel` 在 **index 26**，它的 cctor 立刻读 `ModelDb.Enchantment<Sharp>()`，而 `Sharp` 在 **index 804**——字典里还没有，直接抛。
+   修法是把 `BlitzRunModel` 加进 `bfi_types.txt`（第 8 个），BfiPatch 给它补回 `beforefieldinit`，让 cctor 延迟到第一次真正读 `shopEnchantmentOptions` 时（`BlitzMerchantCardEnchantEntry.cs:57` / `BlitzMerchantEnchantedCardRewardEntry.cs:39`）才跑。
+
+**顺手修的 FMOD**：游戏原版 `fmod.gdextension` 把 iOS 库写成 `.xcframework`，而 Godot 把 `.a` 和 `.xcframework` 都当静态库，于是走 `open_dynamic_library("")` → `RTLD_SELF` → `dlsym` 找不到符号，整个 FMOD 扩展静默不加载。`pack_pck.py` 现在有一张 `OVERRIDES` 表把仓库里指向 `.framework` 的那份覆盖进 PCK，CI 也会读回这条断言里面不再出现 `.xcframework`。
+
+**纹理全部重烤**：v0.113.1 的 PCK 里一个 ETC2 / ASTC 都没有（BPTC 973 + DXT5 542 + DXT1 58），iOS 上只能运行时解压，1.86 GB 纹理会膨胀到约 3.5 GB 显存。现在 1573 个压缩纹理全部反解重压成 **ASTC 4x4 973 个 + ETC2 600 个**，校验 `ctex=4025 ok=4025 failed=0`。
+
+判据：日志里 `[Perf] model db: Nms` 出现（越过原来崩的那一点）、`FMOD Sound System: Successfully initialized` 在第 4 行、`[AudioProbe] is_extension_loaded(res://addons/fmod/fmod.gdextension) = True`。
+
+## 上一版（v25）：一行账本就说完一句话
 
 `combat entry` 那一行现在自带两个尾巴：
 
@@ -173,6 +195,7 @@ Sts2IslandWidget       →  UIImage(data:) → 圆形 Image
 
 - 需要 **iOS 16.1+**。ActivityKit 是弱链接（`-weak_framework ActivityKit` + `-Xfrontend -disable-autolink-framework`），所以 14/15/16.0 照常启动，只是没有实时活动。
 - 需要在「设置 → 面容 ID 与密码/ App 设置」里允许**实时活动**；被拒绝时原因写在 `user://island_status.txt`。
+- 头像有 **4 KB 硬上限**：ActivityKit 把 attributes + contentState 归档后上限 4096 字节，超了 `Activity.request` 会抛 `attributesTooLarge`，整个实时活动都不出现（v26 之前就是这个症状）。现在编码阶梯是 边 132/112/96/80/64/48 px × JPEG 质量 0.85/0.7/0.55/0.4/0.28，预算 3000 字节，先 JPEG 后 PNG，仍超就不带头像发，不会因为一张头像把整个活动搞没。
 - 扩展是 `swiftc` 手工组装的 `.appex`（`tools/build_island_extension.py`），没加 Xcode target；`MH_APP_EXTENSION` 由脚本在链接后自己打进 Mach-O 头（macos-14 上 Xcode 15.4 的 ld 会忽略 `-application_extension`）。
 
 ### 屏幕与省电
@@ -218,9 +241,10 @@ IPA 拖进去 → 填 Apple ID → Start → 手机上信任证书。比 AltStor
 |---|---|
 | Sentry | 崩溃上报关闭（mobile 上没有原生产物，v3 起主动跳过，避免打断启动） |
 | 模拟器 | 不支持，只有 arm64 真机；模拟器需要 compatibility 渲染器，当前是 forward_plus |
-| 首次启动 | 1.5 GB PCK 解压纹理，A15 约 20–40 秒，之后正常 |
-| 灵动岛 | iOS 16.1+ 且允许实时活动；被拒看 `user://island_status.txt` |
+| 首次启动 | 2.15 GB PCK（17369 条目 / 4025 个 ctex），A19 Pro 约 20–40 秒，之后正常 |
+| 灵动岛 | iOS 16.1+ 且允许实时活动；被拒看 `user://island_status.txt`。头像有 4 KB 硬上限（ActivityKit 归档上限 4096 字节），超了自动降级成无头像 |
 | 音频 | 取决于 `fmod.ios.template_release.framework` 是否签进证书；缺失时静音不崩 |
+| 存档位置 | `user://` 在 iOS 上是 app 沙盒的 `Documents/`（Godot 用 `NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, ...)`），文件 App 里能看到 |
 | 联机 | 没有多人 |
 
 ## 排错
@@ -249,12 +273,14 @@ IPA 拖进去 → 填 Apple ID → Start → 手机上信任证书。比 AltStor
 
 | 版本 | 内容 | 判据 |
 |---|---|---|
+| v26 | 跟进游戏 **v0.113.1**（The Fool / Blitz / Dread）；修 `DuplicateModelException` 自注入死循环与 `BlitzRunModel` 的 `ENCHANTMENT.SHARP` 崩溃；`fmod.gdextension` 覆盖回 `.framework`；1573 个纹理重烤 ASTC/ETC2 | `[Perf] model db:` 出现、`FMOD Sound System: Successfully initialized`、`is_extension_loaded(fmod) = True` |
+| v25 | `combat entry` 账本行自带 `max=` 与 `hitchby=`（前 3 名），`combat_perf.txt` 只留账本行就够 | 账本行末尾能看到 `hitchby=combat.creatures:96ms ...` |
 | v15 | 触屏缺口收尾（面板返回、卡牌详情、拖拽与滑动） | 长按 0.55s = 右键，双指轻点 = ESC |
 | v13–v14 | 加载期优化：Common preload 2.0s→1.1s，房间级 GC 只在托管堆涨了才收 | 日志里 `Preloading 'Common' Complete` 明显变快 |
 | v10 | 声音真的响了：fmod 的 30 个 flat-namespace 符号打 `N_WEAK_REF`（`0x40`→`0x41`），`dlopen(RTLD_NOW)` 不再被无定义的 `_load_all_fmod_plugins` 拖死；旋转改成改 `sts2-Info.plist` 的双方向数组 | 主菜单有 BGM、转 180° 画面跟着翻、`Identifier "FmodServer" not declared` 归零 |
 | v8 | fmod 引用降级为 `LC_LOAD_WEAK_DYLIB`；补 `NSMicrophoneUsageDescription` | 不再「秒退且无日志」 |
 | v7 | 补回 FMOD 的 iOS 二进制（`LC_ID_DYLIB` 重写成 `@rpath` 绝对形式；framework basename 必须等于包内二进制名；12 个 bank 靠 `include_filter` 进 PCK） | 有音效与 BGM |
 | v6 | 自编 spine-godot iOS framework（spine-runtimes 4.2 + godot-cpp 4.5） | 点单人游戏不再崩在 `NBossMapPoint._Ready()` |
-| v5 | 给 7 个类型回填 `beforefieldinit`，且必须打在 ILC 真正读的 `obj/.../sts2.dll` 上 | 不再 `KeyNotFoundException 'RELIC.ASTROLABE'` |
+| v5 | 给 7 个类型回填 `beforefieldinit`，且必须打在 ILC 真正读的 `obj/.../sts2.dll` 上（v26 起扩到 8 个，加了 `Blitz.BlitzRunModel`） | 不再 `KeyNotFoundException 'RELIC.ASTROLABE'` |
 | v4 | `AtlasManager` 换源生成 JSON 契约，修 NativeAOT 下 `Reflection-based serialization` 被禁用 | 日志出现 `AtlasManager: Loaded ui_atlas with 102 sprites` |
 | v3 | `SentryService.Initialize()` 在 mobile 提前返回，修黑屏；补 14 个 `.tpsheet`、785 个 `.import`、Steam 走 Null 平台 | 日志出现 `[Startup] Time to main menu: N,NNNms` |

@@ -9,13 +9,13 @@
 
 | 路径 | 大小 | 说明 |
 |---|---|---|
-| `sts2.pck` | 1.51 GB | 完整资源包，15703 条目。纹理已同时含 **ETC2（539 个）+ ASTC（683 个）**，iOS 直接可用 |
+| `sts2.pck` | 2.15 GB | 完整资源包，17369 条目。纹理已同时含 **ETC2（600 个）+ ASTC（973 个）**，iOS 直接可用 |
 | `sts2.xcframework/` | 355 MB | Godot 引擎本体 `libgodot.a`（arm64 + simulator） |
 | `MoltenVK.xcframework/` | 48 MB | Vulkan → Metal 转译层（Godot 的 Mobile/Forward+ 渲染器走这条） |
 | `sts2.xcodeproj/` | 21 KB | Xcode 工程，已配好 `arm64` / `iOS 14.0` / 横屏 / 内嵌 PCK |
 | `sts2/` | 294 KB | app 外壳：Info.plist、entitlements、启动图、dummy 入口 |
 | `BUILD_MACOS.sh` | 4 KB | 一键构建脚本（6 步） |
-| `.github/workflows/ios.yml` | 6 KB | GitHub Actions `macos-14` 自动出未签名 IPA |
+| `.github/workflows/ios.yml` | 9 KB | GitHub Actions `macos-15` 自动出未签名 IPA |
 | `tools/patch_pbxproj.py` | 4 KB | 把 `sts2_aot.xcframework` 接进 Xcode 工程 |
 
 **没有的东西**：`sts2_aot.xcframework` —— 它是 `dotnet publish -r ios-arm64` 的 NativeAOT 产物，
@@ -53,33 +53,56 @@ ilspy 把「静态字段初始化器」还原成显式 `static Xxx()`，重新�
 `Darv`（index 761）的 cctor 提前触发，而它要求 `Astrolabe`（index 1333）已在字典里 →
 `KeyNotFoundException: 'RELIC.ASTROLABE'`，游戏卡在启动画面。
 
-**已修**：`tools/BfiPatch/`（Mono.Cecil）在编译后把这 7 个类型的标志打回去，
-`sts2.csproj` 里挂成 `AfterTargets="Build;CoreCompile"` + `BeforeTargets="IlcCompile"`，全自动。
-清单在 `bfi_types.txt`。校验方法：`bfi+cctor` 应等于 **2227**（与原版一致）。
+v0.113.1 上同一个坑换了张脸：`BlitzRunModel`（index 26）的 cctor 要 `ModelDb.Enchantment<Sharp>()`，
+而 `Sharp` 在 index 804 —— `KeyNotFoundException: 'ENCHANTMENT.SHARP'`。判据完全一样：
+反编译源码里那个 `static BlitzRunModel()` 是显式的，Roslyn 就生成**精确**类型初始化器。
+
+**已修**：`tools/BfiPatch/`（Mono.Cecil）在编译后把这 8 个类型的标志打回去，
+`sts2.csproj` 里挂成 `AfterTargets="CoreCompile"` + `BeforeTargets="CopyFilesToOutputDirectory;IlcCompile"`，全自动。
+清单在 `bfi_types.txt`。校验方法：`bfi+cctor` 应等于 **2568**。
+
+**CI 会拦这一类回归**：`Verify BeforeFieldInit reached the ILC input` 步骤除了 verify 清单里的 8 个类型，
+还会断言 `bfi+cctor` 计数不低于 2568 —— 以后哪次反编译又冒出一个精确初始化器，构建阶段就 `exit 1`，
+不会等到手机上才炸。
+
+要自查是否还有同类隐患，用 `_bfiscan`（Mono.Cecil）双向比对上游与自建的 `BeforeFieldInit` 位，
+再按 `AbstractModelSubtypes` 的数组序扫所有**精确** cctor 里的 `ModelDb.<T>()` 调用；
+两边都报 `scanned PRECISE cctors: 0` 才算干净。
 
 ### 2.4 纹理格式：PCK 里原本只有 S3TC/BPTC，iOS 用不了
 原版导出给 Windows，纹理只有 `s3tc`/`bptc` 变体。iOS 的 GPU 不支持 BC 格式，
-Godot 会运行时 `image->decompress()` 转 RGBA8 —— 不崩，但 1.86 GP 纹理会膨胀到约 **3.5 GB 显存**。
+Godot 会运行时 `image->decompress()` 转 RGBA8 —— 不崩，但 1.86 GB 纹理会膨胀到约 **3.5 GB 显存**。
 
-**已修**：把 3485 个纹理从 ctex 反解回 PNG（`tex_png/`），重写 `.import` 为标准
-`[params] compress/mode=2` 格式，让 Godot 重新导入，产出四套变体：
+**已修**：把 1573 个压缩纹理（BPTC 973 + DXT5 542 + DXT1 58）从 ctex 反解回 RGBA8，
+再用 Godot 的 `Image.compress()` 重新压成 iOS 能直接采样的格式，手工拼回 `.ctex` 容器：
 
 ```
-high_quality=false → s3tc + etc2
-high_quality=true  → bptc + astc
+原 .bptc 变体 → ASTC 4x4（fmt=35）
+原 .s3tc 变体 → ETC2 RGBA8 / RGB8（fmt=31 / fmt=30）
+原本未压缩的 2452 个 → 原样保留（fmt=5 / fmt=4）
 ```
 
 iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 `editor/export/editor_export_platform_apple_embedded.cpp:51-53`），导出器会按 feature 自动选对的那套。
-现在 PCK 里 ETC2 539 个（220 MB）+ ASTC 683 个（702 MB）。
+现在 PCK 里 **ASTC 973 个（807 MB）+ ETC2 600 个（179 MB）**。重烤脚本是 `texdump/recook.gd`
+（Godot headless 跑，1573 个约 3 分钟，`done=1573 failed=0`）。
+
+`.ctex` 容器格式（`compressed_texture.cpp` 的 `_load_data`）是 36 字节头 + 16 字节 image 头 + 裸 GPU 数据：
+
+```
+"GST2" | u32 version=1 | u32 w | u32 h | u32 df | u32 mipmap_limit | 3 x u32 reserved   (36 B)
+u32 data_format=0 | u16 w | u16 h | u32 mipmaps | u32 format | payload                    (16 B + N)
+```
+
+`data_format=0` 时文件体就是裸的压缩数据，没有额外长度前缀 —— 所以不需要编辑器导入器也能手工拼。
 
 ### 2.5 导出器会丢弃「源文件不存在」的 `.import`
 `.import` / `.remap` 只有在源文件存在时才被打包。原 PCK 剥掉了源图，
-导致 418 个 `.import` 被静默丢弃，连带 367 个 artifact（169 `.spatlas` + 163 `.spskel` + 17 `.fontdata`…，316 MB）。
+导致 **4024 个纹理 `.import`** 被静默丢弃，连带 177 `.spatlas` + 169 `.spskel` + 22 `.fontdata` + 7 image + 1 svg + 1 scene。
 症状是 `Resource file not found: res://fonts/kreon_bold.ttf`。
 
-**已修**：`tools/inject_pck.py` 直接往 PCK 二进制里注入这 785 个条目。
-现在挂载验证：`texture total=3557 ok=3557 bad=0`。
+**已修**：`pack_pck.py` 直接从解包树重建 PCK，把 4465 个 `.import` 与全部 artifact 原样写回，
+只替换纹理变体那 1573 条 remap 目标。挂载验证：`ctex=4025 ok=4025 failed=0 pixels=2021377134`。
 
 ### 2.6 触屏
 `InputEventScreenTouch` 在原代码里 **0 命中**，全靠 Godot 默认的 `emulate_mouse_from_touch`（单指 → 鼠标左键）。
@@ -102,6 +125,19 @@ iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 | **Steam** | 无 iOS SDK | 走 `Platform.Null` 分支，单机可用 |
 
 `N_WEAK_REF` 那条路走不通：dyld4 只认 bind opcode 的弱绑定位，改 Mach-O 符号表没用——这是当时连续几次启动崩溃的根因。
+
+fmod 还有一层只在 PCK 里才会犯的坑：游戏原版 `addons/fmod/fmod.gdextension` 把 iOS 库写成
+`libGodotFmod.ios.template_release.xcframework`，而 Godot 判定静态库的规则是
+`path.ends_with(".a") || path.ends_with(".xcframework")`（`gx_gdextension_library_loader.cpp:364`）。
+`.xcframework` 被当成静态库后走 `open_dynamic_library("")`，iOS 实现在路径为空时直接返回
+`RTLD_SELF`，接着 `dlsym(RTLD_SELF, "fmod_library_init")` 必然失败，日志是
+`GDExtension entry point 'fmod_library_init' not found in library .`（库路径是个空串）。
+症状不是崩，是**整个 FMOD 扩展没加载**：`FmodServer` 等四个类全部 `class_exists = False`，
+`FmodManager.gd` 满屏 `Parse Error: Identifier "FmodServer" not declared`。
+
+所以 `pack_pck.py` 有一张 `OVERRIDES` 表，把仓库里那份指向 `.framework` 的
+`addons/fmod/fmod.gdextension` 覆盖进 PCK；CI 的 `Verify PCK present` 步骤会读回这一条，
+只要里面还出现 `.xcframework` 就直接 `exit 1`。
 
 ### 2.8 卡图替换：两套 Regent 立绘，启动时选一套
 储君（Regent）的卡图有两条上游 mod，都是 Harmony DLL，AOT 里跑不了，所以由工具把美术从它们的 PCK 里抽出来重新烤成两个独立包，跟着 App 一起发：
@@ -251,12 +287,22 @@ Swift Sts2IslandBridge     读文件 → Activity.update() / Activity.request()
 
 ```
 IslandAvatar.Ensure(角色)   角色变了才编码：取 char_select 立绘（回落 top_panel 图标）
-                            → 解压 → 长边缩到 132 px RGBA8 → user://island_avatar.png
+                            → 解压 → 裁正方形 → 长边缩到 132 px → user://island_avatar.jpg
 Swift Bridge                读字节（按 size+mtime 缓存）→ ContentState.avatar
 Widget IslandAvatarView     Image(uiImage:) 圆环裁切；缺失就退回落一个 figure.stand 符号
 ```
 
-132 px 是「44 pt × 3x」；单张 PNG 实测在 10–40 KB 区间，超过 48 KB 会掉到 96 px、再掉到 72 px，还超就不发（图标兜底）—— 因为 content state 每次更新都要归档并投递给扩展进程。展开态左侧、紧凑态前区、极简态、锁屏左侧都用这张图。
+**硬上限是 4 KB，不是 48 KB。** ActivityKit 把 attributes + contentState 归档后有 4096 字节的硬限制，
+超了 `Activity.request` 直接抛 `ActivityAuthorizationError.attributesTooLarge`，整个 Live Activity 根本不出现
+（症状就是「灵动岛一点反应都没有」，日志里连一行都没有）。所以编码走两级阶梯，预算 `BudgetBytes = 3000`：
+
+```
+边 132/112/96/80/64/48 px  ×  JPEG 质量 0.85/0.7/0.55/0.4/0.28
+先 JPEG（小图省得多），全部超预算再退 PNG；仍超就不带头像发
+```
+
+`Sts2IslandBridge` 里还有第二道保险：`for attempt in [avatar, nil]` —— 带头像的 `request` 失败就无头像重试一次，
+成功时把 `avatarCache` 清空，下次不再走同一条死路。展开态左侧、紧凑态前区、极简态、锁屏左侧都用这张图。
 
 **扩展不建 Xcode target。** `tools/build_island_extension.py` 用 `swiftc` 直接编出 `.appex` 塞进 `sts2.app/PlugIns/`，版本号从主 app 的 `Info.plist` 回填。值得记的三件事：
 
@@ -304,12 +350,13 @@ chmod +x BUILD_MACOS.sh
 
 ## 4. 构建方式 B：GitHub Actions（无需自备 Mac）
 
-把 `ci_bundle/` 的内容推到 GitHub 仓库，`.github/workflows/ios.yml` 会在 `macos-14` 上跑完全流程，
+把 `ci_bundle/` 的内容推到 GitHub 仓库，`.github/workflows/ios.yml` 会在 `macos-15` 上跑完全流程，
 产出未签名 IPA 作为 artifact。
 
 ### 4.1 `sts2.pck` 怎么进仓库
-iOS 用的 `sts2.pck` 是 2.15 GB，超过 GitHub 单文件 100 MB 和单 release 资产 2 GiB 两条限制，
-所以 release 上放的是 deflate 过的 `sts2.pck.zip`（约 1.29 GB），CI 下载后 `unzip` 再校验 `GDPC` 头。
+iOS 用的 `sts2.pck` 是 2.15 GB（2,149,457,068 字节 / 17369 条目），超过 GitHub 单文件 100 MB 和
+单 release 资产 2 GiB 两条限制（超了 176 MB），所以 release 上放的是 deflate 过的 `sts2.pck.zip`
+（1,286,223,114 字节，压缩率 0.598），CI 下载后 `unzip` 再校验 `GDPC` 头与 `file_base`。
 workflow 里的 `Fetch sts2.pck from release` 已经这么做了，本地已有 `sts2.pck` 时自动跳过。
 
 **路线 1 — Git LFS**
@@ -372,9 +419,13 @@ workflow 里已经开了 `with: lfs: true`。
 | **付费开发者账号** | 任意 | 证书 1 年有效，可用 `BUILD_MACOS.sh` 直接出签名版 |
 
 **必读**：
-- 游戏是横屏，`UISupportedInterfaceOrientations` 只有 `LandscapeLeft`（iPad 只有 `LandscapeRight`）
+- 游戏是横屏，`UISupportedInterfaceOrientations` 是 `[LandscapeLeft, LandscapeRight]`（两个方向都开，可以翻面玩）；
+  `display/window/handheld/orientation` 在 `project.binary` 里被设成 `4`（Sensor Landscape），否则引擎默认会锁死单方向
 - 首次启动需要几十秒建缓存（要解压 PCK 里的纹理）
-- 存档路径 `user://`，iOS 上在 app 沙盒的 `Library/Application Support/Godot/app_userdata/SlayTheSpire2/`
+- 存档路径 `user://`。Godot 的 Apple 嵌入式实现（`os_ae.mm` 的 `OS_AppleEmbedded::get_user_data_dir`）用的是
+  **`NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, ...)`**，所以真机上是
+  `<app 沙盒>/Documents/`，配合 `UIFileSharingEnabled` + `LSSupportsOpeningDocumentsInPlace`
+  直接在「文件 → 我的 iPhone → sts2」里可见（`combat_perf.txt`、`island_state.json`、`mods/` 都在那儿）
 
 ---
 
@@ -385,12 +436,17 @@ workflow 里已经开了 `with: lfs: true`。
 3. **无多人联机** —— Steam 传输层不可用，单机全功能
 4. **模拟器跑不了** —— 需要 `compatibility` 渲染器；当前工程用默认 `forward_plus`。
    真机 arm64 没问题
-5. **首次加载慢** —— 1.5 GB PCK + 解压纹理，A15 上约 20–40 秒
-6. **`audio_manager_proxy.gd` 报 Parse error** —— `.gdc` 字节码重新加载的问题，
-   该脚本只服务 FMOD，不影响 C# 主流程
+5. **首次加载慢** —— 2.15 GB PCK（17369 条目，4025 个 ctex），A19 Pro 上约 20–40 秒
+6. **`audio_manager_proxy.gd` 报 Parse error** —— 这不是 `.gdc` 的问题，是 FMOD 扩展没加载时
+   `FmodServer` 等类不存在导致的连带报错（见 §2.7）。`fmod.gdextension` 的 `.framework` 覆盖进 PCK 后
+   这些报错全部消失，`FMOD Sound System: Successfully initialized` 会出现在日志第 4 行
 7. **灵动岛要 iOS 16.1+** —— ActivityKit 的下限；旧系统上 App 正常跑（弱链接），
    只是没有实时活动。另外必须在「设置 → 杀戮尖塔 2 → 实时活动」里允许，
-   扩展侧被拒时会在 `user://island_status.txt` 里写明原因
+   扩展侧被拒时会在 `user://island_status.txt` 里写明原因。头像有 **4 KB 硬上限**
+   （ActivityKit 归档上限 4096 字节），超了就自动降级成无头像，不会让整个活动消失
+8. **Steam 初始化在 mobile 上被跳过** —— `NGame.InitializePlatform()` 的条件里带了
+   `OS.HasFeature("mobile")`，否则会卡在一个永不可能成功的 Steam 初始化上。
+   日志里的 `Steam initialization skipped (editor mode)` 是预期行为，不是错误
 
 ---
 
@@ -401,7 +457,8 @@ workflow 里已经开了 `with: lfs: true`。
 | 游戏版本 | v0.113.1 / commit d09d48e5 |
 | 引擎 | Godot 4.5.1-stable mono（MegaDot 定制版） |
 | 运行时 | .NET 9.0.7 → NativeAOT |
-| 反编译 | ilspycmd 10.1.0.8386，3425 个 .cs，无混淆 |
+| 反编译 | ilspycmd 10.1.0.8386，3888 个 .cs，无混淆 |
 | PCK 格式 | packver 3, flags 0x2, file_base 112, 无加密 |
 | 桌面验证 | `Time to main menu: 4,479ms`，`Cannot instantiate = 0` |
-| 纹理校验 | `texture total=3557 ok=3557 bad=0` |
+| CI | run `44020550579`（28 步全绿，`6d619bd`） |
+| 纹理校验 | `ctex=4025 ok=4025 failed=0`（ASTC 973 + ETC2 600 + 未压缩 2452） |

@@ -140,7 +140,7 @@ v7 把 FMOD 的 iOS 二进制补齐了。做法：游戏用的就是 utopia-rise
 
 ## 构建来源
 
-GitHub Actions 在 `macos-14` runner 上完整跑通两条线：
+GitHub Actions 在 `macos-15` runner 上完整跑通两条线：
 
 **游戏本体**（`.github/workflows/ios.yml`）：`dotnet publish -r ios-arm64`（NativeAOT）→ `xcodebuild -create-xcframework` → 注入 pbxproj → `xcodebuild archive`（无签名）→ 手工组 Payload → zip。
 
@@ -297,7 +297,7 @@ _spineSprite = GetNode<Node2D>("%SpineSprite");
 
 - `spine-runtimes` **4.2 分支** —— 游戏 `.spskel` 文件头是 `4.2.03`，与 `spine-cpp/include/spine/Version.h` 的 `SPINE_VERSION_STRING "4.2"` 对齐
 - `godot-cpp` **4.5 分支** —— 与引擎 Godot 4.5.1 对齐
-- `macos-14` runner + `scons platform=ios target=template_release arch=arm64`
+- `macos-15` runner + `scons platform=ios target=template_release arch=arm64`
 - 产物 `libspine_godot.ios.template_release.framework`，1,273,248 字节，`Mach-O 64-bit dynamically linked shared library arm64`，导出 `_spine_godot_library_init`
 
 workflow 在 `.github/workflows/spine-ios.yml`，Release tag `spine-godot-ios` 存二进制。
@@ -374,7 +374,9 @@ System.TypeInitializationException: A type initializer threw an exception.
 
 `ModelDb.Init()` 是按索引顺序 `0..1623` 逐个 `Activator.CreateInstance(type)` 的。`Darv` 在 index 761，`Astrolabe` 在 index 1333 —— 构造 `Darv` 时 `Astrolabe` 还没进 `_contentById`，`Darv` 的静态构造器却要 `ModelDb.Relic<Astrolabe>()`，于是 `KeyNotFoundException`。
 
-修法是给这 7 个类型把 `beforefieldinit` 标志补回去（`Mono.Cecil` 改 `TypeAttributes.BeforeFieldInit`）：
+修法是给这些类型把 `beforefieldinit` 标志补回去（`Mono.Cecil` 改 `TypeAttributes.BeforeFieldInit`）。
+v0.113.1 上清单是 **8 个**，比 v0.107.1 多一个 `MegaCrit.Sts2.Core.Models.Blitz.BlitzRunModel`
+（它的 cctor 读 `ModelDb.Enchantment<Sharp>()`，`Sharp` 在 subtype 数组 index 804，而它在 26）：
 
 ```
 MegaCrit.Sts2.Core.Assets.AssetSets
@@ -384,6 +386,7 @@ MegaCrit.Sts2.Core.Models.Events.Darv
 MegaCrit.Sts2.Core.Models.Events.JungleMazeAdventure
 MegaCrit.Sts2.Core.Multiplayer.Serialization.ModelIdSerializationCache
 MegaCrit.Sts2.Core.Nodes.Screens.Timeline.NEraColumn
+MegaCrit.Sts2.Core.Models.Blitz.BlitzRunModel
 ```
 
 ### v4 为什么没生效
@@ -400,7 +403,8 @@ MegaCrit.Sts2.Core.Nodes.Screens.Timeline.NEraColumn
 - 直接就地改 `obj/` 那份（`bin/` 靠正常的复制步骤拿到已打补丁的字节）
 - 用 `@(IntermediateAssembly->'%(FullPath)')` 取路径
 - 给 Cecil 传第 4 个参数 `libs/`，否则在 `obj/` 旁边解析不到 `Sentry`/`Steamworks` 等引用
-- **新增 CI 断言步骤**：`TypeFlags` 的 verify 模式检查 `obj/Release/ios-arm64/sts2.dll` 里这 7 个类型是否都带 `BeforeFieldInit`，缺一个就 `exit 1`，不让 dylib 出包
+- **新增 CI 断言步骤**：`TypeFlags` 的 verify 模式检查 `obj/Release/ios-arm64/sts2.dll` 里这 8 个类型是否都带 `BeforeFieldInit`，缺一个就 `exit 1`，不让 dylib 出包；
+  同一段还断言 `bfi+cctor` 计数不低于 **2568**，防止以后反编译又冒出一个精确初始化器
 
 ### v5 关键判据
 
