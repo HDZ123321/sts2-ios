@@ -5,16 +5,16 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 1,469,683,877 字节（约 1402 MiB） |
-| SHA256 | `234e90bb29e690c18e395549705953efc89a17431fa6953a6b90e51eabacf4a9` |
-| MD5 | `4f49bd55ea63dcfec25be78784794c93` |
+| 大小 | 1,469,683,834 字节（约 1402 MiB） |
+| SHA256 | `d3680f88aad5d53465a8fd1db971a867f538befa90557fcfe14f4af731cb2ad1` |
+| MD5 | `ee0aede0ee82c0d5dbf0caa5ea9a1553` |
 | Bundle ID | `com.placeholder.sts2` |
 | 最低系统 | iOS 14.0（灵动岛要 16.1+） |
 | 架构 | arm64（真机，模拟器不支持） |
 | 签名 | **未签名**，需要自己签 |
 | 游戏版本 | 0.113.1 |
-| 源码 commit | `d2fe6f418cce06f1a10a1771131222cc4871dee0` |
-| 构建 | GitHub Actions run `44067025128`（macos-15） |
+| 源码 commit | `2edeca0cd35f375dce862490bdd5e2de1232e637` |
+| 构建 | GitHub Actions run `45142585216`（macos-15） |
 | 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.113.1-ios/sts2-unsigned.ipa |
 
 > 上面这几行与 release `v0.113.1-ios` 的资产逐字节一致；CI 每次构建后会跑
@@ -37,7 +37,7 @@ Payload/sts2.app/Watcher.pck                             18,610,100   Watcher �
 Payload/sts2.app/RegentArt.pck                           34,585,560   Regent 动漫立绘
 Payload/sts2.app/RegentFemArt.pck                        62,555,600   Regent 女性立绘
 Payload/sts2.app/release_info.json                              167   构建溯源（版本 / commit / 构建时间）
-Payload/sts2.app/Info.plist                                   1,132
+Payload/sts2.app/Info.plist                                   1,639
 ```
 
 `Watcher.pck` / `RegentArt.pck` / `RegentFemArt.pck` 三个内容包由 CI 从仓库的 `res/`
