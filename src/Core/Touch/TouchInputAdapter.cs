@@ -11,7 +11,7 @@ namespace MegaCrit.Sts2.Core.Touch;
 ///
 /// 手势映射：
 ///   单指长按 550ms（移动 &lt; 14px）→ 右键按下 + 抬起（打开详情面板）
-///   双指轻点（两只手指都在 260ms 内抬起）→ ui_cancel（关闭面板 / 返回）
+///   双指轻点（两只手指都在 600ms 内抬起）→ ui_cancel（关闭面板 / 返回）
 ///   其余 → 不拦截，交给 emulate_mouse_from_touch
 /// </summary>
 [ScriptPath("res://src/Core/Touch/TouchInputAdapter.cs")]
@@ -20,10 +20,11 @@ public partial class TouchInputAdapter : Node
 	private const float LongPressSeconds = 0.55f;
 	private const float LongPressMoveTolerance = 14.0f;
 	// Two fingers tapping the screen is the only gesture that reaches ui_cancel on iOS, and
-	// 0.26s measured from the first finger landing is a keyboard player's reaction time, not a
-	// thumb's. Holding two fingers for a beat and then lifting is what people actually do, so
-	// the window is wide enough to accept that while still being far shorter than the long
-	// press that opens the card details.
+	// 0.60s measured from the first finger landing is what thumbs actually need: they land and
+	// lift far slower than a key press, and anything tighter made the gesture feel like it had
+	// to be aimed. Holding two fingers for a beat and then lifting is what people do, so the
+	// window is wide enough to accept that while still being far shorter than the long press
+	// that opens the card details.
 	private const float TwoFingerTapSeconds = 0.60f;
 
 	private readonly Dictionary<int, TouchPoint> _points = new Dictionary<int, TouchPoint>();

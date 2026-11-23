@@ -44,7 +44,8 @@
     beforefieldinit，导致 ModelDb.Init() 期间 Darv 的 cctor 提前触发、要求
     Astrolabe 已注册，抛 KeyNotFoundException: 'RELIC.ASTROLABE'。
 
-    这里在 ILC 编译之前把 7 个类型的 BeforeFieldInit 标志打回去。
+    这里在 ILC 编译之前把 bfi_types.txt 里列的 8 个类型的 BeforeFieldInit 标志打回去
+    （v0.107 时代是 7 个，v0.113.1 加了 Blitz.BlitzRunModel）。
     iOS 走 NativeAOT，所以必须挂在 IlcCompile 之前；桌面 Debug 构建挂 AfterTargets=Build。
   -->
   <PropertyGroup>

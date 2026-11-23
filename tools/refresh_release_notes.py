@@ -5,6 +5,16 @@
 漂移（v13 那一版就还写着 1,163,703,233 字节的旧包）。CI 在 IPA 落地之后跑一次这里，网页
 上的说明就永远和下面的 ipa 是同一份东西。
 
+INSTALL_IOS.md 里的那套数字同理，所以这个脚本同时负责它：
+
+    # 回填（默认就会写 INSTALL_IOS.md，不想动它加 --no-install）
+    python3 tools/refresh_release_notes.py --ipa build/sts2-unsigned.ipa \
+        --tag v0.113.1-ios --repo HDZ123321/sts2-ios --run 123456789 --sha <commit>
+
+    # 只核对不改：数字与 ipa 不一致时 exit 1，CI 用它当门禁
+    python3 tools/refresh_release_notes.py --verify INSTALL_IOS.md \
+        --ipa build/sts2-unsigned.ipa --tag v0.113.1-ios --repo HDZ123321/sts2-ios
+
 用法：
     GH_TOKEN=xxx python3 tools/refresh_release_notes.py \
         --ipa build/sts2-unsigned.ipa --tag v0.107.1-ios --repo HDZ123321/sts2-ios \
@@ -48,8 +58,19 @@ def member_sizes(ipa: Path) -> dict[str, int]:
     wanted = {
         "sts2": "Payload/sts2.app/sts2",
         "dylib": "Payload/sts2.app/Frameworks/sts2.dylib",
+        "swift": "Payload/sts2.app/Frameworks/libswift_Concurrency.dylib",
+        "spine": "Payload/sts2.app/Frameworks/libspine_godot.ios.template_release.framework/"
+                 "libspine_godot.ios.template_release",
+        "fmod": "Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/"
+                "fmod.ios.template_release",
         "appex": "Payload/sts2.app/PlugIns/Sts2Island.appex/Sts2Island",
+        "appex_plist": "Payload/sts2.app/PlugIns/Sts2Island.appex/Info.plist",
         "pck": "Payload/sts2.app/sts2.pck",
+        "watcher": "Payload/sts2.app/Watcher.pck",
+        "regent_art": "Payload/sts2.app/RegentArt.pck",
+        "regent_fem": "Payload/sts2.app/RegentFemArt.pck",
+        "release_info": "Payload/sts2.app/release_info.json",
+        "plist": "Payload/sts2.app/Info.plist",
     }
     sizes: dict[str, int] = {}
     try:
@@ -61,6 +82,82 @@ def member_sizes(ipa: Path) -> dict[str, int]:
         if name in lookup:
             sizes[key] = lookup[name]
     return sizes
+
+
+# INSTALL_IOS.md 里那些「会随构建变」的位置。每条是 (正则, values 里的 key)，
+# 正则的第 2 组是数字本体，改写时只换这一组，其余排版原样保留。
+INSTALL_HEADER = [
+    (r"^(\|\s*大小\s*\|\s*)([^|\n]+?)(\s*\|\s*)$", "SIZE"),
+    (r"^(\|\s*SHA256\s*\|\s*`)([0-9a-fA-F]{64})(`\s*\|\s*)$", "SHA256"),
+    (r"^(\|\s*MD5\s*\|\s*`)([0-9a-fA-F]{32})(`\s*\|\s*)$", "MD5"),
+    (r"^(\|\s*源码 commit\s*\|\s*`)([0-9a-fA-F]{7,40})(`\s*\|\s*)$", "COMMIT"),
+    (r"^(\|\s*构建\s*\|[^`\n]*`)(\d+)(`[^|\n]*\|\s*)$", "RUN"),
+]
+
+INSTALL_STRUCT = [
+    (r"^(Payload/sts2\.app/sts2\s+)([\d,]+)(\s)", "SIZE_STS2"),
+    (r"^(Payload/sts2\.app/Frameworks/sts2\.dylib\s+)([\d,]+)(\s)", "SIZE_DYLIB"),
+    (r"^(Payload/sts2\.app/Frameworks/libswift_Concurrency\.dylib\s+)([\d,]+)(\s)", "SIZE_SWIFT"),
+    (r"^(  libspine_godot\.ios\.template_release\s+)([\d,]+)(\s)", "SIZE_SPINE"),
+    (r"^(  fmod\.ios\.template_release\s+)([\d,]+)(\s)", "SIZE_FMOD"),
+    (r"^(Payload/sts2\.app/PlugIns/Sts2Island\.appex/Sts2Island\s+)([\d,]+)(\s)", "SIZE_APPEX"),
+    (r"^(Payload/sts2\.app/PlugIns/Sts2Island\.appex/Info\.plist\s+)([\d,]+)(\s)", "SIZE_APPEX_PLIST"),
+    (r"^(Payload/sts2\.app/sts2\.pck\s+)([\d,]+)(\s)", "SIZE_PCK"),
+    (r"^(Payload/sts2\.app/Watcher\.pck\s+)([\d,]+)(\s)", "SIZE_WATCHER"),
+    (r"^(Payload/sts2\.app/RegentArt\.pck\s+)([\d,]+)(\s)", "SIZE_REGENT_ART"),
+    (r"^(Payload/sts2\.app/RegentFemArt\.pck\s+)([\d,]+)(\s)", "SIZE_REGENT_FEM"),
+    (r"^(Payload/sts2\.app/release_info\.json\s+)([\d,]+)(\s)", "SIZE_RELEASE_INFO"),
+    (r"^(Payload/sts2\.app/Info\.plist\s+)([\d,]+)(\s*)$", "SIZE_PLIST"),
+]
+
+
+def rewrite_install(text: str, values: dict[str, str]) -> tuple[str, list[str]]:
+    """把 INSTALL_IOS.md 的数字改成这一次构建的实测值。
+
+    返回 (新文本, 改动列表)。只替换 values 里有供给的 key，缺的保持原样并在改动列表里
+    标成 skipped，这样没打进包的成员不会把文档写成 0。
+    """
+    changes: list[str] = []
+
+    def apply(pattern: str, key: str, body: str) -> str:
+        if key not in values:
+            changes.append("%s: skipped (not in ipa)" % key)
+            return body
+        new = values[key]
+
+        def repl(match: re.Match[str]) -> str:
+            old = match.group(2)
+            if old != new:
+                changes.append("%s: %s -> %s" % (key, old, new))
+            # 结构表是等宽对齐的，数字变短时左侧补空格，别把注释列推歪。
+            padded = new.rjust(len(old)) if len(new) < len(old) else new
+            return match.group(1) + padded + match.group(3)
+
+        return re.sub(pattern, repl, body, flags=re.MULTILINE)
+
+    for pattern, key in INSTALL_HEADER + INSTALL_STRUCT:
+        text = apply(pattern, key, text)
+    return text, changes
+
+
+def verify_install(text: str, values: dict[str, str]) -> list[str]:
+    """只核对：返回与 values 不一致的位置，空列表表示全对。"""
+    bad: list[str] = []
+
+    def check(pattern: str, key: str) -> None:
+        if key not in values:
+            return
+
+        def repl(match: re.Match[str]) -> str:
+            if match.group(2) != values[key]:
+                bad.append("%s: file has %s, ipa has %s" % (key, match.group(2), values[key]))
+            return match.group(0)
+
+        re.sub(pattern, repl, text, flags=re.MULTILINE)
+
+    for pattern, key in INSTALL_HEADER + INSTALL_STRUCT:
+        check(pattern, key)
+    return bad
 
 
 def render(template: str, values: dict[str, str]) -> str:
@@ -113,12 +210,16 @@ def main() -> int:
     parser.add_argument("--sha", default="", help="构建用的 commit")
     parser.add_argument("--token", default=os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "")
     parser.add_argument("--out", default="", help="渲染结果写到这个路径（不发请求）")
+    parser.add_argument("--install", default="INSTALL_IOS.md",
+                        help="INSTALL_IOS.md 路径，随构建回填；给空串或配 --no-install 就不碰")
+    parser.add_argument("--no-install", action="store_true", help="不回填 INSTALL_IOS.md")
+    parser.add_argument("--verify", default="", metavar="INSTALL_PATH",
+                        help="只核对 INSTALL_IOS.md，不一致就 exit 1（CI 门禁用）")
     args = parser.parse_args()
 
     ipa = Path(args.ipa)
     if not ipa.is_file():
         die("ipa not found: %s" % ipa)
-    template = io.open(args.template, encoding="utf-8").read()
 
     sizes = member_sizes(ipa)
     total = ipa.stat().st_size
@@ -131,10 +232,58 @@ def main() -> int:
         "DOWNLOAD_URL": "https://github.com/%s/releases/download/%s/sts2-unsigned.ipa" % (args.repo, args.tag),
         "SIZE_STS2": "{:,}".format(sizes.get("sts2", 0)),
         "SIZE_DYLIB": "{:,}".format(sizes.get("dylib", 0)),
+        "SIZE_SWIFT": "{:,}".format(sizes.get("swift", 0)),
+        "SIZE_SPINE": "{:,}".format(sizes.get("spine", 0)),
+        "SIZE_FMOD": "{:,}".format(sizes.get("fmod", 0)),
         "SIZE_APPEX": "{:,}".format(sizes.get("appex", 0)),
+        "SIZE_APPEX_PLIST": "{:,}".format(sizes.get("appex_plist", 0)),
         "SIZE_PCK": "{:,}".format(sizes.get("pck", 0)),
+        "SIZE_WATCHER": "{:,}".format(sizes.get("watcher", 0)),
+        "SIZE_REGENT_ART": "{:,}".format(sizes.get("regent_art", 0)),
+        "SIZE_REGENT_FEM": "{:,}".format(sizes.get("regent_fem", 0)),
+        "SIZE_RELEASE_INFO": "{:,}".format(sizes.get("release_info", 0)),
+        "SIZE_PLIST": "{:,}".format(sizes.get("plist", 0)),
     }
+
+    # 核对模式：只读 INSTALL_IOS.md，把不一致的条目全列出来再 exit 1。
+    if args.verify:
+        target = Path(args.verify)
+        if not target.is_file():
+            die("install doc not found: %s" % target)
+        text = io.open(target, encoding="utf-8").read()
+        # 没给 --sha / --run 时不要把 (unknown) 当成期望值，否则本地试跑必然报假 stale。
+        expected = dict(values)
+        if not args.sha:
+            expected.pop("COMMIT", None)
+        if not args.run:
+            expected.pop("RUN", None)
+        bad = verify_install(text, expected)
+        if bad:
+            for line in bad:
+                sys.stderr.write("refresh_release_notes: stale %s\n" % line)
+            sys.stderr.write("refresh_release_notes: %s has %d stale value(s); "
+                             "rerun without --verify to refresh it\n" % (target, len(bad)))
+            return 1
+        print("install doc verified: %s" % target)
+        return 0
+
+    template = io.open(args.template, encoding="utf-8").read()
     body = render(template, values)
+
+    if args.install and not args.no_install:
+        target = Path(args.install)
+        if target.is_file():
+            text = io.open(target, encoding="utf-8").read()
+            updated, changes = rewrite_install(text, values)
+            if updated != text:
+                io.open(target, "w", encoding="utf-8", newline="\n").write(updated)
+                print("install doc refreshed: %s" % target)
+                for line in changes:
+                    print("  " + line)
+            else:
+                print("install doc already current: %s" % target)
+        else:
+            print("install doc absent, skipped: %s" % target)
 
     if args.out:
         io.open(args.out, "w", encoding="utf-8", newline="\n").write(body)

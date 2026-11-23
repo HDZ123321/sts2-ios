@@ -8,7 +8,8 @@ name: Build iOS IPA
 #   tools/BfiPatch/  tools/patch_pbxproj.py  bfi_types.txt  nuget.config  nuget_local/
 #   sts2.xcodeproj/  sts2/  PrivacyInfo.xcprivacy  sts2.pck
 #
-# sts2.pck 约 1.5 GB，请用 Git LFS 或 Release 资产挂载（见 README）。
+# sts2.pck 约 2.15 GB（2,149,457,068 字节），超过 GitHub 单文件 100 MB 与单资产 2 GiB 上限，
+# 所以 release 里放的是 deflate 过的 sts2.pck.zip（约 1.2 GB），下面 Fetch 步骤解开用。
 
 on:
   workflow_dispatch:
@@ -32,6 +33,9 @@ jobs:
 
     env:
       BUNDLE_ID: ${{ github.event.inputs.bundle_id || 'com.placeholder.sts2' }}
+      # 内容包跟游戏版本走；引擎 framework 刻意留在 v0.107.1 那一包（Godot 4.5.1 + MoltenVK
+      # 自那版起没变，换 tag 只是白白重传 400 MB）。代价是 v0.107.1-ios 这个 release 不能删，
+      # 删了整条 CI 会在 Fetch engine xcframeworks 那步 404。
       PCK_TAG: v0.113.1-ios
       PCK_ASSET: sts2.pck.zip
       FW_TAG: v0.107.1-ios
@@ -464,13 +468,42 @@ jobs:
         run: |
           set -euo pipefail
           # docs/RELEASE_NOTES.md 里的 {{SIZE}} / {{SHA256}} / {{COMMIT}} 之类由这里回填，
-          # 这样 Release 页不会像 v13 那样还写着旧包的体积和哈希。
+          # 这样 Release 页不会像 v13 那样还写着旧包的体积和哈希。同一个脚本顺手把
+          # INSTALL_IOS.md 里那套数字也改成本次实测值（含包内结构表）。
           python3 tools/refresh_release_notes.py \
             --ipa build/sts2-unsigned.ipa \
             --tag "${PCK_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
             --run "${GITHUB_RUN_ID}" \
             --sha "${GITHUB_SHA}"
+
+      - name: Verify the install doc matches this build
+        run: |
+          set -euo pipefail
+          # 上一步已经回填过，这里再读回来核对一遍：数字没跟上就红，别让文档继续漂。
+          python3 tools/refresh_release_notes.py \
+            --verify INSTALL_IOS.md \
+            --ipa build/sts2-unsigned.ipa \
+            --tag "${PCK_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --run "${GITHUB_RUN_ID}" \
+            --sha "${GITHUB_SHA}"
+
+      - name: Commit the refreshed docs back
+        run: |
+          set -euo pipefail
+          # 回填只改工作区，不推回仓库的话下次构建又得从旧数字开始漂。
+          # [skip ci] 防止这条 commit 再触发一轮构建（workflow 的 paths-ignore 只看 md，
+          # 而这里改的正是 md，双保险）。
+          if git diff --quiet -- INSTALL_IOS.md docs/RELEASE_NOTES.md; then
+            echo "docs already current, nothing to commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add INSTALL_IOS.md docs/RELEASE_NOTES.md
+          git commit -m "docs: sync release numbers with ${GITHUB_SHA::7} [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Upload dSYM
         uses: actions/upload-artifact@v4

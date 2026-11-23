@@ -10,5 +10,7 @@ sts2_aot.xcframework/
 # build leftovers
 tools/**/obj/
 tools/**/bin/
+tools/texdump/_plan.json
+tools/texdump/_verify.json
 __pycache__/
 *.pyc

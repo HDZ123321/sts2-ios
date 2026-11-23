@@ -1,0 +1,7 @@
+; Godot 4.5 project that only exists so the scripts next to it can run headless.
+; Nothing here is exported or shipped; the game project lives in the sts2 pack.
+config_version=5
+
+[application]
+config/name="sts2 texdump"
+config/features=PackedStringArray("4.5")

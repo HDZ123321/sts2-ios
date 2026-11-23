@@ -9,14 +9,32 @@
 
 | 路径 | 大小 | 说明 |
 |---|---|---|
-| `sts2.pck` | 2.15 GB | 完整资源包，17369 条目。纹理已同时含 **ETC2（600 个）+ ASTC（973 个）**，iOS 直接可用 |
-| `sts2.xcframework/` | 355 MB | Godot 引擎本体 `libgodot.a`（arm64 + simulator） |
-| `MoltenVK.xcframework/` | 48 MB | Vulkan → Metal 转译层（Godot 的 Mobile/Forward+ 渲染器走这条） |
+| `sts2.pck` | 2.15 GB | 完整资源包，17369 条目。纹理已同时含 **ETC2（600 个）+ ASTC（973 个）**，iOS 直接可用。**Release 资产，不在仓库里** |
+| `sts2.xcframework/` | 355 MB | Godot 引擎本体 `libgodot.a`（arm64 + simulator）。**Release 资产，不在仓库里** |
+| `MoltenVK.xcframework/` | 48 MB | Vulkan → Metal 转译层（Godot 的 Mobile/Forward+ 渲染器走这条）。**Release 资产，不在仓库里** |
 | `sts2.xcodeproj/` | 21 KB | Xcode 工程，已配好 `arm64` / `iOS 14.0` / 横屏 / 内嵌 PCK |
 | `sts2/` | 294 KB | app 外壳：Info.plist、entitlements、启动图、dummy 入口 |
 | `BUILD_MACOS.sh` | 4 KB | 一键构建脚本（6 步） |
 | `.github/workflows/ios.yml` | 9 KB | GitHub Actions `macos-15` 自动出未签名 IPA |
 | `tools/patch_pbxproj.py` | 4 KB | 把 `sts2_aot.xcframework` 接进 Xcode 工程 |
+
+上表带「Release 资产」的三项都不进 git（合计约 2.5 GB，超过 GitHub 的限制）。本地要跑完整
+构建得先手动取一次：
+
+```bash
+# 内容包（2.15 GB，解压出 sts2.pck）
+curl -fL -o sts2.pck.zip \
+  https://github.com/HDZ123321/sts2-ios/releases/download/v0.113.1-ios/sts2.pck.zip
+unzip sts2.pck.zip -d . && rm sts2.pck.zip
+
+# 引擎 framework（355 MB + 48 MB，解压出两个 xcframework）
+curl -fL -o sts2-frameworks.zip \
+  https://github.com/HDZ123321/sts2-ios/releases/download/v0.107.1-ios/sts2-frameworks.zip
+unzip sts2-frameworks.zip -d . && rm sts2-frameworks.zip
+```
+
+CI 会跳过已存在的文件（`if [ -f sts2.pck ]` / `if [ -d sts2.xcframework ]`），所以放过一次
+之后不用重复下载。
 
 **没有的东西**：`sts2_aot.xcframework` —— 它是 `dotnet publish -r ios-arm64` 的 NativeAOT 产物，
 必须在 macOS 上编译。这正是需要 Mac 的唯一原因。
@@ -65,9 +83,9 @@ v0.113.1 上同一个坑换了张脸：`BlitzRunModel`（index 26）的 cctor �
 还会断言 `bfi+cctor` 计数不低于 2568 —— 以后哪次反编译又冒出一个精确初始化器，构建阶段就 `exit 1`，
 不会等到手机上才炸。
 
-要自查是否还有同类隐患，用 `_bfiscan`（Mono.Cecil）双向比对上游与自建的 `BeforeFieldInit` 位，
+要自查是否还有同类隐患，用 `tools/BfiScan/`（Mono.Cecil）双向比对上游与自建的 `BeforeFieldInit` 位，
 再按 `AbstractModelSubtypes` 的数组序扫所有**精确** cctor 里的 `ModelDb.<T>()` 调用；
-两边都报 `scanned PRECISE cctors: 0` 才算干净。
+两边都报 `scanned PRECISE cctors: 0` 才算干净。用法见 `tools/BfiScan/README.md`。
 
 ### 2.3b 构造函数期读后建的模型（同一类坑的第二张脸）
 `ModelDb.Get<T>()` 原本是裸的 `_contentById[GetId<T>()]`。`ModelDb.Init()` 按 `_subtypes`
@@ -91,9 +109,10 @@ v0.113.1 上撞的是移植进来的观者卡：
 `TryResolveMissing` 里 `_resolving.Contains(id)` 挡住自我递归，所以构造中的模型不会被重入；
 彻底找不到仍抛 `ModelNotFoundException`，不是裸字典异常。
 
-要自查同类隐患用 `_ctorcan`（Mono.Cecil）：按 `_subtypes` 数组序走每个类型的**实例构造函数**，
+要自查同类隐患用 `tools/CtorScan/`（Mono.Cecil）：按 `_subtypes` 数组序走每个类型的**实例构造函数**，
 沿本程序集内的调用递归（默认 4 层）并传播泛型实参，报出所有 `ModelDb.<T>()` 晚读。
 当前构建只剩 `Alpha → Beta` 这一处，已被延迟解析兜住；上游 DLL 是 `problems: 0`。
+用法见 `tools/BfiScan/README.md`（两个扫描器同一份说明）。
 
 ### 2.4 纹理格式：PCK 里原本只有 S3TC/BPTC，iOS 用不了
 原版导出给 Windows，纹理只有 `s3tc`/`bptc` 变体。iOS 的 GPU 不支持 BC 格式，
@@ -110,8 +129,9 @@ Godot 会运行时 `image->decompress()` 转 RGBA8 —— 不崩，但 1.86 GB �
 
 iOS preset 的 feature 集合是 `{etc2, astc, arm64}`（见
 `editor/export/editor_export_platform_apple_embedded.cpp:51-53`），导出器会按 feature 自动选对的那套。
-现在 PCK 里 **ASTC 973 个（807 MB）+ ETC2 600 个（179 MB）**。重烤脚本是 `texdump/recook.gd`
-（Godot headless 跑，1573 个约 3 分钟，`done=1573 failed=0`）。
+现在 PCK 里 **ASTC 973 个（807 MB）+ ETC2 600 个（179 MB）**。重烤工程在 `tools/texdump/`
+（`make_plan.py` 生成工作清单 → `recook.gd` 由 Godot headless 跑，1573 个约 3 分钟，
+`done=1573 failed=0` → `verify.gd` 抽检；用法与 `.ctex` 容器布局见该目录的 README）。
 
 `.ctex` 容器格式（`compressed_texture.cpp` 的 `_load_data`）是 36 字节头 + 16 字节 image 头 + 裸 GPU 数据：
 
@@ -127,7 +147,8 @@ u32 data_format=0 | u16 w | u16 h | u32 mipmaps | u32 format | payload          
 导致 **4024 个纹理 `.import`** 被静默丢弃，连带 177 `.spatlas` + 169 `.spskel` + 22 `.fontdata` + 7 image + 1 svg + 1 scene。
 症状是 `Resource file not found: res://fonts/kreon_bold.ttf`。
 
-**已修**：`pack_pck.py` 直接从解包树重建 PCK，把 4465 个 `.import` 与全部 artifact 原样写回，
+**已修**：`pack_pck.py`（仓库根，直接 `python3 pack_pck.py` 就能跑，路径可用
+`--tree/--tex/--imports/--out` 覆盖）直接从解包树重建 PCK，把 4465 个 `.import` 与全部 artifact 原样写回，
 只替换纹理变体那 1573 条 remap 目标。挂载验证：`ctex=4025 ok=4025 failed=0 pixels=2021377134`。
 
 ### 2.6 触屏
@@ -137,7 +158,7 @@ u32 data_format=0 | u16 w | u16 h | u32 mipmaps | u32 format | payload          
 | 手势 | 映射 |
 |---|---|
 | 单指长按 550ms（位移 < 14px） | 右键按下 + 抬起 → 打开卡牌/遗物详情 |
-| 双指轻点（260ms 内） | `ui_cancel` → 关闭面板 / 返回 |
+| 双指轻点（600ms 内） | `ui_cancel` → 关闭面板 / 返回 |
 | 其余 | 放行，交给引擎的触摸转鼠标 |
 
 已注册为 autoload（`project.godot` 第 35 行）。
@@ -457,20 +478,25 @@ workflow 里已经开了 `with: lfs: true`。
 ├── sts2.csproj          # Godot.NET.Sdk/4.5.1
 ├── sts2.sln
 ├── bfi_types.txt
+├── pack_pck.py          # 从解包树重建 sts2.pck（纹理换 ASTC/ETC2 + fmod.gdextension 覆盖）
 ├── nuget.config
 ├── nuget_local/         # Godot.NET.Sdk / GodotSharp / Godot.SourceGenerators nupkg
-├── libs/                # 12 个引用 DLL（Sentry/Steamworks.NET/0Harmony/SmartFormat/…）
-├── src/                 # 3420 个 .cs（含 src/_synthetic/ 与 src/Core/Touch/）
+├── libs/                # 15 个引用 DLL（Sentry/Steamworks.NET/0Harmony/SmartFormat/MonoMod.*/Vortice.*/…）
+├── src/                 # 4109 个 .cs（含 src/_synthetic/ 与 src/Core/Touch/）
 ├── addons/mega_text/    # 4 个 .cs
 ├── RiderTestRunner/     # 2 个 .cs
 ├── tools/BfiPatch/      # beforefieldinit 回填工具
+├── tools/BfiScan/       # 查静态构造晚读（Mono.Cecil）
+├── tools/CtorScan/      # 查实例构造晚读（Mono.Cecil）
+├── tools/texdump/       # 纹理重烤工程（make_plan.py / recook.gd / verify.gd / pckcheck.gd）
+├── tools/gen/           # 历史一次性源码改写脚本（不是构建链一环）
 ├── tools/patch_pbxproj.py
 ├── tools/patch_app_sources.py          # 把灵动岛的 Swift/ObjC 挂进 app target
 ├── tools/build_island_extension.py     # swiftc 手工组装 .appex
 ├── sts2.xcodeproj/
 ├── sts2/                # 导出模板 + island/（灵动岛源码与扩展 Info.plist）
 ├── PrivacyInfo.xcprivacy
-└── sts2.pck
+└── sts2.pck             # Release 资产，不在仓库里（CI 从 v0.113.1-ios 下载 sts2.pck.zip 解开）
 ```
 
 `libs/` 里的 DLL 来自正版游戏安装目录 `data_sts2_windows_x86_64/`，不随仓库分发。

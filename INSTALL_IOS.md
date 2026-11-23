@@ -5,27 +5,46 @@
 | 项目 | 值 |
 |---|---|
 | 文件名 | `sts2-unsigned.ipa` |
-| 大小 | 1,163,703,233 字节（约 1110 MB） |
-| SHA256 | `b43d93df4f13fbe5c2a82fc364b739f16af16a3f416f19c47e4236d73d3135bc` |
+| 大小 | 1,469,683,877 字节（约 1402 MiB） |
+| SHA256 | `234e90bb29e690c18e395549705953efc89a17431fa6953a6b90e51eabacf4a9` |
+| MD5 | `4f49bd55ea63dcfec25be78784794c93` |
 | Bundle ID | `com.placeholder.sts2` |
-| 最低系统 | iOS 14.0 |
+| 最低系统 | iOS 14.0（灵动岛要 16.1+） |
 | 架构 | arm64（真机，模拟器不支持） |
 | 签名 | **未签名**，需要自己签 |
 | 游戏版本 | 0.113.1 |
+| 源码 commit | `d2fe6f418cce06f1a10a1771131222cc4871dee0` |
+| 构建 | GitHub Actions run `44067025128`（macos-15） |
 | 下载 | https://github.com/HDZ123321/sts2-ios/releases/download/v0.113.1-ios/sts2-unsigned.ipa |
+
+> 上面这几行与 release `v0.113.1-ios` 的资产逐字节一致；CI 每次构建后会跑
+> `tools/refresh_release_notes.py --verify INSTALL_IOS.md` 核对，数字过期会让构建直接失败。
 
 包内结构：
 
 ```
-Payload/sts2.app/sts2                                    68,111,632   主程序（libgodot 链接产物）
-Payload/sts2.app/Frameworks/sts2.dylib                  199,447,816   NativeAOT 产物（游戏逻辑）
+Payload/sts2.app/sts2                                    61,473,048   主程序（libgodot 链接产物）
+Payload/sts2.app/Frameworks/sts2.dylib                  242,552,584   NativeAOT 产物（游戏逻辑）
+Payload/sts2.app/Frameworks/libswift_Concurrency.dylib    7,741,808   Swift 并发运行时（back-deploy）
 Payload/sts2.app/Frameworks/libspine_godot.ios.template_release.framework/
   libspine_godot.ios.template_release                     1,273,248   spine-godot（骨骼动画）
 Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/
   fmod.ios.template_release                               4,287,144   fmod-godot（音频引擎）
-Payload/sts2.app/sts2.pck                             1,899,083,875   全部游戏资源（含 12 个 FMOD bank）
-Payload/sts2.app/Info.plist                                   1,556
+Payload/sts2.app/PlugIns/Sts2Island.appex/Sts2Island        242,744   灵动岛 Live Activity 扩展
+Payload/sts2.app/PlugIns/Sts2Island.appex/Info.plist          1,132   com.placeholder.sts2.island
+Payload/sts2.app/sts2.pck                             2,149,457,068   全部游戏资源（含 13 个 FMOD bank）
+Payload/sts2.app/Watcher.pck                             18,610,100   Watcher 角色资源
+Payload/sts2.app/RegentArt.pck                           34,585,560   Regent 动漫立绘
+Payload/sts2.app/RegentFemArt.pck                        62,555,600   Regent 女性立绘
+Payload/sts2.app/release_info.json                              167   构建溯源（版本 / commit / 构建时间）
+Payload/sts2.app/Info.plist                                   1,132
 ```
+
+`Watcher.pck` / `RegentArt.pck` / `RegentFemArt.pck` 三个内容包由 CI 从仓库的 `res/`
+目录拷进 bundle（`ios.yml` 的 Copy the baked content packs 步骤），`release_info.json`
+由同一 workflow 现场写；`Sts2Island.appex` 是 `tools/build_island_extension.py`
+用 swiftc 手工组出来的。这些都不在 `sts2.pck` 里，缺任何一个都不会启动失败，但对应
+内容会消失（Watcher 角色、Regent 立绘、灵动岛、Mod 溯源）。
 
 三个原生库都在 `LC_LOAD_DYLIB` 里，全部必须签通：
 
@@ -50,6 +69,8 @@ v10 起主程序**不再**在启动时加载 fmod。fmod 的 framework 仍留在
 
 `LC_RPATH` 是 `@executable_path/Frameworks`，所以三个 framework 都在
 `Payload/sts2.app/Frameworks/` 下，`codesign --deep` 能一次签完。
+`PlugIns/Sts2Island.appex` 同样要签，否则灵动岛不显示（游戏本体不受影响）——
+AltStore / Sideloadly 的重签会连 appex 一起处理，手工 `codesign` 时别漏了它。
 
 ## 安装（三条路，按你手头条件选）
 
@@ -91,7 +112,7 @@ Bundle ID 是 `com.placeholder.sts2`，AltStore 会自动重签，不用改。
 |---|---|
 | **Sentry** | 崩溃上报没了（v3 起在 mobile 上主动关闭，避免它把启动流程打断） |
 
-**FMOD 音频从 v7 起已经补回** —— 12 个 bank 全在包里，进游戏就有声音和 BGM。
+**FMOD 音频从 v7 起已经补回** —— 13 个 bank 全在包里，进游戏就有声音和 BGM。
 **Spine 骨骼动画从 v6 起已经补回**。
 
 ## 音频（v7 起可用）
@@ -110,7 +131,8 @@ v7 把 FMOD 的 iOS 二进制补齐了。做法：游戏用的就是 utopia-rise
    `-framework X`，于是 ld 去找 `X.framework/X`。所以整包必须叫
    `fmod.ios.template_release.framework`、里面的可执行文件也必须叫 `fmod.ios.template_release`。
 
-`banks/desktop/` 下 12 个 bank（308 MB）通过 `export_presets.cfg` 的
+`banks/desktop/` 下 13 个 bank（361 MB，实测 PCK 目录表里 13 条 `.bank` 条目、合计
+361,302,970 字节）通过 `export_presets.cfg` 的
 `include_filter="*.tpsheet, *.atlas, *.skel, *.spine, *.bank"` 进 PCK —— 它们没有 importer，
 不在资源依赖图里，不加过滤器会被静默丢掉。
 

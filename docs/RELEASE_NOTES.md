@@ -32,7 +32,7 @@ Payload/sts2.app/Frameworks/fmod.ios.template_release.framework/
   fmod.ios.template_release                                 4,287,144   fmod-godot（音频引擎）
 Payload/sts2.app/PlugIns/Sts2Island.appex/Sts2Island   {{SIZE_APPEX}}   灵动岛 Live Activity 扩展
 Payload/sts2.app/PlugIns/Sts2Island.appex/Info.plist            1,132   com.placeholder.sts2.island
-Payload/sts2.app/sts2.pck                {{SIZE_PCK}}   全部游戏资源（含 12 个 FMOD bank）
+Payload/sts2.app/sts2.pck                {{SIZE_PCK}}   全部游戏资源（含 13 个 FMOD bank）
 Payload/sts2.app/Watcher.pck                                 18,610,100   Watcher 角色资源
 Payload/sts2.app/RegentArt.pck                               34,585,560   Regent 动漫立绘
 Payload/sts2.app/RegentFemArt.pck                            62,555,600   Regent 女性立绘
@@ -67,7 +67,7 @@ Payload/sts2.app/release_info.json                                 167   构建�
    上游的 `BlitzRunModel` 在 IL 里是 `beforefieldinit`（延迟初始化），我们反编译回来变成了显式 `static BlitzRunModel()`，Roslyn 因此生成**精确**类型初始化器。`ModelDb.Init` 按 subtype 数组顺序构造：`BlitzRunModel` 在 **index 26**，它的 cctor 立刻读 `ModelDb.Enchantment<Sharp>()`，而 `Sharp` 在 **index 804**——字典里还没有，直接抛。
    修法是把 `BlitzRunModel` 加进 `bfi_types.txt`（第 8 个），BfiPatch 给它补回 `beforefieldinit`，让 cctor 延迟到第一次真正读 `shopEnchantmentOptions` 时（`BlitzMerchantCardEnchantEntry.cs:57` / `BlitzMerchantEnchantedCardRewardEntry.cs:39`）才跑。
 
-**顺手修的 FMOD**：游戏原版 `fmod.gdextension` 把 iOS 库写成 `.xcframework`，而 Godot 把 `.a` 和 `.xcframework` 都当静态库，于是走 `open_dynamic_library("")` → `RTLD_SELF` → `dlsym` 找不到符号，整个 FMOD 扩展静默不加载。`pack_pck.py` 现在有一张 `OVERRIDES` 表把仓库里指向 `.framework` 的那份覆盖进 PCK，CI 也会读回这条断言里面不再出现 `.xcframework`。
+**顺手修的 FMOD**：游戏原版 `fmod.gdextension` 把 iOS 库写成 `.xcframework`，而 Godot 把 `.a` 和 `.xcframework` 都当静态库，于是走 `open_dynamic_library("")` → `RTLD_SELF` → `dlsym` 找不到符号，整个 FMOD 扩展静默不加载。仓库根的 `pack_pck.py` 有一张 `OVERRIDES` 表把仓库里指向 `.framework` 的那份覆盖进 PCK，CI 也会读回这条断言里面不再出现 `.xcframework`。
 
 **纹理全部重烤**：v0.113.1 的 PCK 里一个 ETC2 / ASTC 都没有（BPTC 973 + DXT5 542 + DXT1 58），iOS 上只能运行时解压，1.86 GB 纹理会膨胀到约 3.5 GB 显存。现在 1573 个压缩纹理全部反解重压成 **ASTC 4x4 973 个 + ETC2 600 个**，校验 `ctex=4025 ok=4025 failed=0`。
 
@@ -279,7 +279,7 @@ IPA 拖进去 → 填 Apple ID → Start → 手机上信任证书。比 AltStor
 | v13–v14 | 加载期优化：Common preload 2.0s→1.1s，房间级 GC 只在托管堆涨了才收 | 日志里 `Preloading 'Common' Complete` 明显变快 |
 | v10 | 声音真的响了：fmod 的 30 个 flat-namespace 符号打 `N_WEAK_REF`（`0x40`→`0x41`），`dlopen(RTLD_NOW)` 不再被无定义的 `_load_all_fmod_plugins` 拖死；旋转改成改 `sts2-Info.plist` 的双方向数组 | 主菜单有 BGM、转 180° 画面跟着翻、`Identifier "FmodServer" not declared` 归零 |
 | v8 | fmod 引用降级为 `LC_LOAD_WEAK_DYLIB`；补 `NSMicrophoneUsageDescription` | 不再「秒退且无日志」 |
-| v7 | 补回 FMOD 的 iOS 二进制（`LC_ID_DYLIB` 重写成 `@rpath` 绝对形式；framework basename 必须等于包内二进制名；12 个 bank 靠 `include_filter` 进 PCK） | 有音效与 BGM |
+| v7 | 补回 FMOD 的 iOS 二进制（`LC_ID_DYLIB` 重写成 `@rpath` 绝对形式；framework basename 必须等于包内二进制名；`banks/desktop/*.bank` 靠 `include_filter` 进 PCK） | 有音效与 BGM |
 | v6 | 自编 spine-godot iOS framework（spine-runtimes 4.2 + godot-cpp 4.5） | 点单人游戏不再崩在 `NBossMapPoint._Ready()` |
 | v5 | 给 7 个类型回填 `beforefieldinit`，且必须打在 ILC 真正读的 `obj/.../sts2.dll` 上（v26 起扩到 8 个，加了 `Blitz.BlitzRunModel`） | 不再 `KeyNotFoundException 'RELIC.ASTROLABE'` |
 | v4 | `AtlasManager` 换源生成 JSON 契约，修 NativeAOT 下 `Reflection-based serialization` 被禁用 | 日志出现 `AtlasManager: Loaded ui_atlas with 102 sprites` |
